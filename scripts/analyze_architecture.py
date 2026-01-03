@@ -28,11 +28,11 @@ class ImportAnalyzer(ast.NodeVisitor):
     def __init__(self):
         self.imports: list[str] = []
 
-    def visit_Import(self, node: ast.Import) -> None:
+    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
             self.imports.append(alias.name.split(".")[0])
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
         if node.module:
             self.imports.append(node.module.split(".")[0])
 
@@ -82,21 +82,20 @@ def calculate_coupling(deps: dict) -> list[dict]:
 
         # Afferent (Ca): modules that depend on this file
         file_module = file.split("/")[0]  # app or services
-        afferent = sum(
-            1 for other_deps in deps.values()
-            if file_module in other_deps
-        )
+        afferent = sum(1 for other_deps in deps.values() if file_module in other_deps)
 
         total = afferent + efferent
         instability = efferent / total if total > 0 else 0
 
-        coupling_data.append({
-            "file": file,
-            "afferent": afferent,
-            "efferent": efferent,
-            "total": total,
-            "instability": round(instability * 100, 1),
-        })
+        coupling_data.append(
+            {
+                "file": file,
+                "afferent": afferent,
+                "efferent": efferent,
+                "total": total,
+                "instability": round(instability * 100, 1),
+            }
+        )
 
     return sorted(coupling_data, key=lambda x: -x["total"])
 

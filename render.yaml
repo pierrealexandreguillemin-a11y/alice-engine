@@ -8,16 +8,16 @@ services:
     runtime: python
     region: frankfurt  # Plus proche de la France
     plan: free  # ou starter pour éviter cold starts
-    
+
     # Build (prod dependencies only - faster)
     buildCommand: pip install -r requirements-prod.txt
-    
+
     # Start
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    
+
     # Health check
     healthCheckPath: /health
-    
+
     # Environment variables (à configurer dans Render Dashboard)
     envVars:
       - key: MONGODB_URI
@@ -28,6 +28,6 @@ services:
         value: INFO
       - key: PYTHON_VERSION
         value: 3.11.0
-    
+
     # Auto-deploy depuis GitHub
     autoDeploy: true

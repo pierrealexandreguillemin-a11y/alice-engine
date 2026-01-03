@@ -10,10 +10,10 @@ Logique metier pure, sans I/O direct (SRP).
 @see ISO 42010 - Service layer
 """
 
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass
-import math
 import logging
+import math
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ class BoardAssignment:
     player_ffe_id: str
     player_name: str
     player_elo: int
-    opponent_ffe_id: Optional[str]
-    opponent_elo: Optional[int]
+    opponent_ffe_id: str | None
+    opponent_elo: int | None
     expected_score: float
     win_probability: float
     draw_probability: float
@@ -38,7 +38,7 @@ class BoardAssignment:
 class CompositionResult:
     """Resultat de l'optimisation."""
 
-    lineup: List[BoardAssignment]
+    lineup: list[BoardAssignment]
     total_expected_score: float
     confidence: float
 
@@ -62,9 +62,9 @@ class ComposerService:
 
     def optimize(
         self,
-        available_players: List[Dict[str, Any]],
-        predicted_opponents: List[Dict[str, Any]],
-        constraints: Optional[Dict[str, Any]] = None,
+        available_players: list[dict[str, Any]],
+        predicted_opponents: list[dict[str, Any]],
+        constraints: dict[str, Any] | None = None,
     ) -> CompositionResult:
         """
         Optimise la composition pour maximiser le score attendu.
@@ -103,19 +103,13 @@ class ComposerService:
 
         for i, player in enumerate(selected):
             board = i + 1
-            opponent = (
-                predicted_opponents[i]
-                if i < len(predicted_opponents)
-                else None
-            )
+            opponent = predicted_opponents[i] if i < len(predicted_opponents) else None
 
             opponent_elo = opponent.get("elo", 1500) if opponent else 1500
             player_elo = player.get("elo", 1500)
 
             # Calculer probabilites
-            win_prob, draw_prob, loss_prob = self.calculate_probabilities(
-                player_elo, opponent_elo
-            )
+            win_prob, draw_prob, loss_prob = self.calculate_probabilities(player_elo, opponent_elo)
             expected = win_prob + (draw_prob * 0.5)
 
             assignment = BoardAssignment(
@@ -144,7 +138,7 @@ class ComposerService:
         self,
         player_elo: int,
         opponent_elo: int,
-    ) -> Tuple[float, float, float]:
+    ) -> tuple[float, float, float]:
         """
         Calcule les probabilites victoire/nulle/defaite via formule Elo.
 
@@ -194,11 +188,11 @@ class ComposerService:
 
     def get_alternatives(
         self,
-        available_players: List[Dict[str, Any]],
-        predicted_opponents: List[Dict[str, Any]],
-        constraints: Optional[Dict[str, Any]] = None,
+        available_players: list[dict[str, Any]],
+        predicted_opponents: list[dict[str, Any]],
+        constraints: dict[str, Any] | None = None,
         count: int = 3,
-    ) -> List[CompositionResult]:
+    ) -> list[CompositionResult]:
         """
         Genere des compositions alternatives.
 

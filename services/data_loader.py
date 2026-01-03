@@ -10,9 +10,9 @@ Seul module autorise a faire des I/O.
 @see ISO 25012 - Qualite des donnees
 """
 
-from typing import List, Dict, Any, Optional
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class DataLoader:
 
     def __init__(
         self,
-        mongodb_uri: Optional[str] = None,
-        dataset_path: Optional[Path] = None,
+        mongodb_uri: str | None = None,
+        dataset_path: Path | None = None,
     ):
         """
         Initialise le data loader.
@@ -72,7 +72,7 @@ class DataLoader:
         self,
         club_id: str,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Recupere l'historique des compositions d'un club.
 
@@ -88,10 +88,14 @@ class DataLoader:
             return []
 
         try:
-            cursor = self.db.compositions.find(
-                {"clubId": club_id},
-                {"_id": 0, "roundNumber": 1, "players": 1, "date": 1},
-            ).sort("date", -1).limit(limit)
+            cursor = (
+                self.db.compositions.find(
+                    {"clubId": club_id},
+                    {"_id": 0, "roundNumber": 1, "players": 1, "date": 1},
+                )
+                .sort("date", -1)
+                .limit(limit)
+            )
 
             return await cursor.to_list(length=limit)
         except Exception as e:
@@ -102,7 +106,7 @@ class DataLoader:
         self,
         club_id: str,
         active_only: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Recupere les joueurs d'un club.
 
@@ -142,7 +146,7 @@ class DataLoader:
 
     def load_training_data(
         self,
-        seasons: Optional[List[int]] = None,
+        seasons: list[int] | None = None,
     ) -> Any:
         """
         Charge les donnees d'entrainement depuis fichiers Parquet.

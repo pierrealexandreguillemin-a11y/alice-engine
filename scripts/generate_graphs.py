@@ -25,7 +25,7 @@ SRC_DIRS = ["app", "services"]
 def run_cmd(cmd: list[str], capture: bool = True) -> tuple[int, str]:
     """Execute commande et retourne code + output."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603, B607
             cmd,
             capture_output=capture,
             text=True,
@@ -63,13 +63,17 @@ def generate_dependency_graph() -> bool:
     output = GRAPHS_DIR / "dependencies.svg"
 
     # Generate for app module
-    code, out = run_cmd([
-        "pydeps", "app",
-        "--cluster",
-        "--max-bacon=2",
-        "--no-show",
-        "-o", str(output),
-    ])
+    code, out = run_cmd(
+        [
+            "pydeps",
+            "app",
+            "--cluster",
+            "--max-bacon=2",
+            "--no-show",
+            "-o",
+            str(output),
+        ]
+    )
 
     if code == 0 and output.exists():
         print(f"  OK {output.relative_to(ROOT)}")
@@ -86,19 +90,23 @@ def generate_imports_graph() -> bool:
     output = GRAPHS_DIR / "imports.svg"
 
     # Try with pydeps on services
-    code, out = run_cmd([
-        "pydeps", "services",
-        "--cluster",
-        "--max-bacon=3",
-        "--no-show",
-        "-o", str(output),
-    ])
+    code, out = run_cmd(
+        [
+            "pydeps",
+            "services",
+            "--cluster",
+            "--max-bacon=3",
+            "--no-show",
+            "-o",
+            str(output),
+        ]
+    )
 
     if code == 0 and output.exists():
         print(f"  OK {output.relative_to(ROOT)}")
         return True
     else:
-        print(f"  ! Echec generation imports graph")
+        print("  ! Echec generation imports graph")
         return False
 
 
@@ -218,12 +226,15 @@ def check_duplication() -> bool:
     output_file = report_dir / "duplicates.txt"
 
     # Use pylint similarities checker
-    code, out = run_cmd([
-        "pylint",
-        "--disable=all",
-        "--enable=duplicate-code",
-        "app", "services",
-    ])
+    code, out = run_cmd(
+        [
+            "pylint",
+            "--disable=all",
+            "--enable=duplicate-code",
+            "app",
+            "services",
+        ]
+    )
 
     output_file.write_text(out)
     print(f"  OK {output_file.relative_to(ROOT)}")
@@ -245,11 +256,14 @@ def check_circular_imports() -> bool:
     output_file = GRAPHS_DIR / "circular-imports.txt"
 
     # Use pydeps to detect cycles
-    code, out = run_cmd([
-        "pydeps", "app",
-        "--show-cycles",
-        "--no-output",
-    ])
+    code, out = run_cmd(
+        [
+            "pydeps",
+            "app",
+            "--show-cycles",
+            "--no-output",
+        ]
+    )
 
     if "No circular" in out or code == 0:
         output_file.write_text("No circular imports detected.\n")

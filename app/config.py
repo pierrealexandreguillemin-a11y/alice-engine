@@ -6,8 +6,8 @@ Toutes les variables d'environnement sont chargees ici.
 Aucun secret hardcode dans le code.
 """
 
-import os
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings
 
 
@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
 
-    # API
-    api_host: str = "0.0.0.0"
+    # API (0.0.0.0 requis pour Render/Docker)
+    api_host: str = "0.0.0.0"  # noqa: S104
     api_port: int = 8000
 
     # MongoDB (lecture seule)
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     Singleton pour la configuration.

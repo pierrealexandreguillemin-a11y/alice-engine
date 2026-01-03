@@ -5,7 +5,6 @@ Tests ComposerService (CE) - ISO 29119
 Tests unitaires pour la logique d'optimisation.
 """
 
-import pytest
 from services.composer import ComposerService
 
 
@@ -50,13 +49,9 @@ class TestComposerService:
         Test: Optimisation retourne le bon nombre de joueurs.
         """
         players = [
-            {"ffe_id": f"A{i:05d}", "name": f"Player {i}", "elo": 1500 + i * 50}
-            for i in range(10)
+            {"ffe_id": f"A{i:05d}", "name": f"Player {i}", "elo": 1500 + i * 50} for i in range(10)
         ]
-        opponents = [
-            {"ffe_id": f"B{i:05d}", "elo": 1600}
-            for i in range(8)
-        ]
+        opponents = [{"ffe_id": f"B{i:05d}", "elo": 1600} for i in range(8)]
 
         result = self.service.optimize(
             players,

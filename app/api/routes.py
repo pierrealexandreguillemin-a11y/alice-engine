@@ -9,16 +9,15 @@ La logique metier est deleguee aux services.
 @see ISO 27034 - Input validation
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Header
-from typing import Optional
+from fastapi import APIRouter, Header, HTTPException
 
 from app.api.schemas import (
+    ErrorResponse,
+    ModelInfoResponse,
     PredictRequest,
     PredictResponse,
-    ModelInfoResponse,
     TrainRequest,
     TrainResponse,
-    ErrorResponse,
 )
 from app.config import settings
 
@@ -101,7 +100,7 @@ async def get_model_info(club_id: str):
 )
 async def trigger_training(
     request: TrainRequest,
-    x_api_key: Optional[str] = Header(None),
+    x_api_key: str | None = Header(None),
 ):
     """
     Declencher un re-entrainement du modele (protege par API key).

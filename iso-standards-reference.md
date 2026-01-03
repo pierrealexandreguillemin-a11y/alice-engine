@@ -81,7 +81,7 @@ feature/
 ```bash
 # Avant chaque commit
 npm run lint          # 0 erreurs
-npm run typecheck     # 0 erreurs  
+npm run typecheck     # 0 erreurs
 npm run test          # 100% pass
 npm audit             # 0 critical/high
 ```

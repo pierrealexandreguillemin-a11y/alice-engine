@@ -1,8 +1,8 @@
 # Cahier des Charges : ALICE
 ## Adversarial Lineup Inference & Composition Engine
 
-**Version** : 1.0.0  
-**Date** : 30 décembre 2025  
+**Version** : 1.0.0
+**Date** : 30 décembre 2025
 **Statut** : Nouveau projet - Phase de création
 
 ---
@@ -19,7 +19,7 @@
 
 ### 1.2 Contexte
 
-Ce module est un **composant satellite** de l'application principale `chess-app`, une solution SaaS de gestion de clubs d'échecs français. 
+Ce module est un **composant satellite** de l'application principale `chess-app`, une solution SaaS de gestion de clubs d'échecs français.
 
 **chess-app** (projet parent) :
 - Application web Next.js/React (frontend) + Express/Fastify (backend)
@@ -167,7 +167,7 @@ alice-engine/
 // Requête
 {
   "clubId": "2976",
-  "opponentClubId": "1234", 
+  "opponentClubId": "1234",
   "competitionId": "N5-2025",
   "roundNumber": 3,
   "availablePlayers": [
@@ -327,11 +327,11 @@ export async function getAlicePrediction(clubId, opponentClubId, roundNumber, av
       }),
       timeout: 35000 // Cold start Render
     });
-    
+
     if (!response.ok) {
       throw new Error(`ALICE error: ${response.status}`);
     }
-    
+
     return await response.json();
   } catch (error) {
     console.error('ALICE service unavailable:', error);

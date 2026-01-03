@@ -1,8 +1,8 @@
 # API Contract : ALICE
 ## Adversarial Lineup Inference & Composition Engine
 
-**Version** : 1.0.0  
-**Base URL** : `https://alice-engine.onrender.com` (production)  
+**Version** : 1.0.0
+**Base URL** : `https://alice-engine.onrender.com` (production)
 **Base URL** : `http://localhost:8000` (développement)
 
 ---
@@ -172,7 +172,7 @@ X-API-Version: 1.0  (optionnel, pour évolution future)
 {
   "success": true,
   "version": "1.0.0",
-  
+
   "predictedOpponentLineup": [
     {
       "board": 1,
@@ -191,7 +191,7 @@ X-API-Version: 1.0  (optionnel, pour évolution future)
       "reasoning": "Usually plays away matches"
     }
   ],
-  
+
   "scenarios": [
     {
       "id": 1,
@@ -202,7 +202,7 @@ X-API-Version: 1.0  (optionnel, pour évolution future)
       ]
     }
   ],
-  
+
   "recommendedLineup": [
     {
       "board": 1,
@@ -220,7 +220,7 @@ X-API-Version: 1.0  (optionnel, pour évolution future)
       }
     }
   ],
-  
+
   "expectedMatchScore": 4.5,
   "scoreRange": {
     "pessimistic": 3.5,
@@ -228,7 +228,7 @@ X-API-Version: 1.0  (optionnel, pour évolution future)
     "optimistic": 5.5
   },
   "confidence": 0.72,
-  
+
   "alternatives": [
     {
       "rank": 2,
@@ -238,14 +238,14 @@ X-API-Version: 1.0  (optionnel, pour évolution future)
       "tradeoff": "Sacrifie échiquier 1 pour sécuriser échiquier 3"
     }
   ],
-  
+
   "warnings": [
     {
       "code": "LOW_DATA",
       "message": "Only 15 historical matches found for opponent"
     }
   ],
-  
+
   "metadata": {
     "processingTimeMs": 245,
     "modelVersion": "global-v1",
@@ -337,7 +337,7 @@ X-API-Version: 1.0  (optionnel, pour évolution future)
   "accuracy": 0.78,
   "features": [
     "elo",
-    "round_number", 
+    "round_number",
     "home_away",
     "recent_form",
     "opponent_strength"

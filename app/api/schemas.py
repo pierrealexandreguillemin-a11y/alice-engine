@@ -10,25 +10,26 @@ Validation stricte des entrees pour eviter injections.
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, field_validator
+from typing import Any
 
+from pydantic import BaseModel, Field, field_validator
 
 # ============================================================
 # SCHEMAS JOUEUR
 # ============================================================
+
 
 class PlayerInput(BaseModel):
     """Joueur disponible pour la composition."""
 
     ffe_id: str = Field(..., description="ID FFE du joueur (ex: A12345)")
     elo: int = Field(..., ge=500, le=3000, description="Classement Elo")
-    name: Optional[str] = Field(None, description="Nom complet")
-    category: Optional[str] = Field(None, description="Categorie (Sen, Vet, Jun...)")
+    name: str | None = Field(None, description="Nom complet")
+    category: str | None = Field(None, description="Categorie (Sen, Vet, Jun...)")
     is_female: bool = Field(False, description="Joueuse")
     is_reserve: bool = Field(False, description="Joueur reserve")
     is_muted: bool = Field(False, description="Joueur mute")
-    matches_played: Optional[int] = Field(None, ge=0, description="Matchs joues")
+    matches_played: int | None = Field(None, ge=0, description="Matchs joues")
 
     @field_validator("ffe_id")
     @classmethod
@@ -45,10 +46,10 @@ class PlayerPrediction(BaseModel):
 
     board: int = Field(..., ge=1, le=8, description="Numero echiquier")
     ffe_id: str
-    name: Optional[str] = None
+    name: str | None = None
     elo: int
     probability: float = Field(..., ge=0, le=1, description="Probabilite presence")
-    reasoning: Optional[str] = Field(None, description="Explication de la prediction")
+    reasoning: str | None = Field(None, description="Explication de la prediction")
 
 
 class PlayerRecommendation(BaseModel):
@@ -56,40 +57,42 @@ class PlayerRecommendation(BaseModel):
 
     board: int = Field(..., ge=1, le=8)
     ffe_id: str
-    name: Optional[str] = None
+    name: str | None = None
     elo: int
     expected_score: float = Field(..., ge=0, le=1, description="Score attendu (0-1)")
-    win_probability: Optional[float] = None
-    draw_probability: Optional[float] = None
-    loss_probability: Optional[float] = None
-    opponent: Optional[Dict[str, Any]] = Field(None, description="Adversaire predit")
+    win_probability: float | None = None
+    draw_probability: float | None = None
+    loss_probability: float | None = None
+    opponent: dict[str, Any] | None = Field(None, description="Adversaire predit")
 
 
 # ============================================================
 # SCHEMAS SCENARIO
 # ============================================================
 
+
 class Scenario(BaseModel):
     """Scenario de composition adverse."""
 
     id: int
     probability: float = Field(..., ge=0, le=1)
-    lineup: List[Dict[str, Any]]
+    lineup: list[dict[str, Any]]
 
 
 class Alternative(BaseModel):
     """Composition alternative recommandee."""
 
     rank: int = Field(..., ge=1)
-    description: Optional[str] = None
-    lineup: List[PlayerRecommendation]
+    description: str | None = None
+    lineup: list[PlayerRecommendation]
     expected_score: float
-    tradeoff: Optional[str] = Field(None, description="Compromis explique")
+    tradeoff: str | None = Field(None, description="Compromis explique")
 
 
 # ============================================================
 # SCHEMAS CONTRAINTES
 # ============================================================
+
 
 class Constraints(BaseModel):
     """Contraintes de composition (regles FFE simplifiees)."""
@@ -97,7 +100,7 @@ class Constraints(BaseModel):
     team_size: int = Field(8, ge=4, le=12, description="Nombre de joueurs")
     elo_descending: bool = Field(True, description="Ordre Elo decroissant")
     min_females: int = Field(0, ge=0, description="Minimum joueuses")
-    max_muted: Optional[int] = Field(None, ge=0, description="Maximum mutes")
+    max_muted: int | None = Field(None, ge=0, description="Maximum mutes")
 
 
 class Options(BaseModel):
@@ -112,18 +115,19 @@ class Options(BaseModel):
 # SCHEMAS REQUETE/REPONSE PREDICT
 # ============================================================
 
+
 class PredictRequest(BaseModel):
     """Requete de prediction - Endpoint POST /predict."""
 
     club_id: str = Field(..., description="ID FFE du club utilisateur")
     opponent_club_id: str = Field(..., description="ID FFE du club adverse")
-    competition_id: Optional[str] = Field(None, description="ID competition")
+    competition_id: str | None = Field(None, description="ID competition")
     round_number: int = Field(..., ge=1, le=20, description="Numero de ronde")
-    available_players: List[PlayerInput] = Field(
+    available_players: list[PlayerInput] = Field(
         ..., min_length=1, description="Joueurs disponibles"
     )
-    constraints: Optional[Constraints] = Field(default_factory=Constraints)
-    options: Optional[Options] = Field(default_factory=Options)
+    constraints: Constraints | None = None
+    options: Options | None = None
 
 
 class PredictResponse(BaseModel):
@@ -131,27 +135,28 @@ class PredictResponse(BaseModel):
 
     success: bool
     version: str
-    warning: Optional[str] = None
+    warning: str | None = None
 
     # ALI - Prediction adverse
-    predicted_opponent_lineup: List[PlayerPrediction]
-    scenarios: List[Scenario] = Field(default_factory=list)
+    predicted_opponent_lineup: list[PlayerPrediction]
+    scenarios: list[Scenario] = Field(default_factory=list)
 
     # CE - Composition optimale
-    recommended_lineup: List[PlayerRecommendation]
+    recommended_lineup: list[PlayerRecommendation]
     expected_match_score: float
-    score_range: Optional[Dict[str, float]] = None
+    score_range: dict[str, float] | None = None
     confidence: float = Field(..., ge=0, le=1)
-    alternatives: List[Alternative] = Field(default_factory=list)
+    alternatives: list[Alternative] = Field(default_factory=list)
 
     # Metadata
-    warnings: List[Dict[str, str]] = Field(default_factory=list)
-    metadata: Dict[str, Any]
+    warnings: list[dict[str, str]] = Field(default_factory=list)
+    metadata: dict[str, Any]
 
 
 # ============================================================
 # SCHEMAS MODELE
 # ============================================================
+
 
 class ModelInfoResponse(BaseModel):
     """Information sur le modele."""
@@ -159,21 +164,22 @@ class ModelInfoResponse(BaseModel):
     club_id: str
     model_type: str  # "club-specific" ou "global-fallback"
     model_version: str
-    last_trained_at: Optional[datetime] = None
-    training_data_points: Optional[int] = None
-    accuracy: Optional[float] = None
-    features: Optional[List[str]] = None
-    reason: Optional[str] = None  # Si fallback
+    last_trained_at: datetime | None = None
+    training_data_points: int | None = None
+    accuracy: float | None = None
+    features: list[str] | None = None
+    reason: str | None = None  # Si fallback
 
 
 # ============================================================
 # SCHEMAS ENTRAINEMENT
 # ============================================================
 
+
 class TrainRequest(BaseModel):
     """Requete d'entrainement."""
 
-    club_id: Optional[str] = Field(None, description="Si absent, modele global")
+    club_id: str | None = Field(None, description="Si absent, modele global")
     force_retrain: bool = Field(False, description="Forcer meme si donnees insuffisantes")
 
 
@@ -183,17 +189,18 @@ class TrainResponse(BaseModel):
     success: bool
     message: str
     job_id: str
-    estimated_duration: Optional[str] = None
+    estimated_duration: str | None = None
 
 
 # ============================================================
 # SCHEMAS ERREUR
 # ============================================================
 
+
 class ErrorDetail(BaseModel):
     """Detail d'une erreur."""
 
-    field: Optional[str] = None
+    field: str | None = None
     error: str
 
 
@@ -201,11 +208,13 @@ class ErrorResponse(BaseModel):
     """Reponse d'erreur standardisee."""
 
     success: bool = False
-    error: Dict[str, Any] = Field(
+    error: dict[str, Any] = Field(
         ...,
-        example={
-            "code": "VALIDATION_ERROR",
-            "message": "Invalid request",
-            "details": [],
-        },
+        examples=[
+            {
+                "code": "VALIDATION_ERROR",
+                "message": "Invalid request",
+                "details": [],
+            }
+        ],
     )

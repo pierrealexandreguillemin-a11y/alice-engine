@@ -18,36 +18,85 @@ DOCS_ISO = ROOT / "docs" / "iso"
 # Modules et leur conformite ISO
 MODULES = [
     # === QUALITE CODE ===
-    {"name": "ruff", "category": "Qualite Code", "iso": "ISO 25010, ISO 5055", "check": "ruff --version"},
-    {"name": "mypy", "category": "Type Safety", "iso": "ISO 25010, ISO 5055", "check": "mypy --version"},
+    {
+        "name": "ruff",
+        "category": "Qualite Code",
+        "iso": "ISO 25010, ISO 5055",
+        "check": "ruff --version",
+    },
+    {
+        "name": "mypy",
+        "category": "Type Safety",
+        "iso": "ISO 25010, ISO 5055",
+        "check": "mypy --version",
+    },
     {"name": "black", "category": "Formatage", "iso": "ISO 25010", "check": "black --version"},
     {"name": "isort", "category": "Formatage", "iso": "ISO 25010", "check": "isort --version"},
-
     # === SECURITE ===
-    {"name": "bandit", "category": "Securite", "iso": "ISO 27001, ISO 27034, OWASP", "check": "bandit --version"},
+    {
+        "name": "bandit",
+        "category": "Securite",
+        "iso": "ISO 27001, ISO 27034, OWASP",
+        "check": "bandit --version",
+    },
     {"name": "safety", "category": "Securite", "iso": "ISO 27001", "check": "safety --version"},
-    {"name": "pip-audit", "category": "Securite", "iso": "ISO 27001", "check": "pip-audit --version"},
-    {"name": "gitleaks", "category": "Secrets", "iso": "ISO 27001 (P0-CRITICAL)", "check": "gitleaks version"},
-
+    {
+        "name": "pip-audit",
+        "category": "Securite",
+        "iso": "ISO 27001",
+        "check": "pip-audit --version",
+    },
+    {
+        "name": "gitleaks",
+        "category": "Secrets",
+        "iso": "ISO 27001 (P0-CRITICAL)",
+        "check": "gitleaks version",
+    },
     # === TESTS ===
     {"name": "pytest", "category": "Tests", "iso": "ISO 29119", "check": "pytest --version"},
-    {"name": "pytest-cov", "category": "Coverage", "iso": "ISO 29119", "check": "pytest --co -q 2>&1 | head -1"},
-    {"name": "pytest-asyncio", "category": "Tests Async", "iso": "ISO 29119", "check": "python -c 'import pytest_asyncio'"},
-
+    {
+        "name": "pytest-cov",
+        "category": "Coverage",
+        "iso": "ISO 29119",
+        "check": "pytest --co -q 2>&1 | head -1",
+    },
+    {
+        "name": "pytest-asyncio",
+        "category": "Tests Async",
+        "iso": "ISO 29119",
+        "check": "python -c 'import pytest_asyncio'",
+    },
     # === COMPLEXITE ===
-    {"name": "radon", "category": "Complexite", "iso": "ISO 25010, ISO 5055", "check": "radon --version"},
+    {
+        "name": "radon",
+        "category": "Complexite",
+        "iso": "ISO 25010, ISO 5055",
+        "check": "radon --version",
+    },
     {"name": "xenon", "category": "Complexite", "iso": "ISO 25010", "check": "xenon --version"},
-
     # === ARCHITECTURE ===
     {"name": "pydeps", "category": "Architecture", "iso": "ISO 42010", "check": "pydeps --version"},
-    {"name": "import-linter", "category": "Architecture", "iso": "ISO 42010", "check": "lint-imports --version"},
-
+    {
+        "name": "import-linter",
+        "category": "Architecture",
+        "iso": "ISO 42010",
+        "check": "lint-imports --version",
+    },
     # === HOOKS ===
-    {"name": "pre-commit", "category": "Git Hooks", "iso": "ISO 12207", "check": "pre-commit --version"},
+    {
+        "name": "pre-commit",
+        "category": "Git Hooks",
+        "iso": "ISO 12207",
+        "check": "pre-commit --version",
+    },
     {"name": "commitizen", "category": "Commits", "iso": "ISO 12207", "check": "cz version"},
-
     # === DOCUMENTATION ===
-    {"name": "mkdocs", "category": "Documentation", "iso": "ISO 26514", "check": "mkdocs --version"},
+    {
+        "name": "mkdocs",
+        "category": "Documentation",
+        "iso": "ISO 26514",
+        "check": "mkdocs --version",
+    },
     {"name": "pdoc", "category": "API Docs", "iso": "ISO 26514", "check": "pdoc --version"},
 ]
 
@@ -55,7 +104,7 @@ MODULES = [
 def check_installed(cmd: str) -> tuple[bool, str]:
     """Check if a tool is installed."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603, B607
             cmd.split(),
             capture_output=True,
             text=True,
@@ -72,7 +121,7 @@ def check_installed(cmd: str) -> tuple[bool, str]:
 def get_test_coverage() -> str:
     """Get current test coverage."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603, B607
             ["pytest", "--cov=app", "--cov=services", "--cov-report=term", "-q", "--tb=no"],
             capture_output=True,
             text=True,
@@ -93,7 +142,7 @@ def get_test_coverage() -> str:
 def get_complexity_avg() -> str:
     """Get average complexity."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603, B607
             ["radon", "cc", "app", "services", "-a"],
             capture_output=True,
             text=True,
@@ -116,11 +165,13 @@ def generate_report() -> str:
     results = []
     for mod in MODULES:
         installed, version = check_installed(mod["check"])
-        results.append({
-            **mod,
-            "installed": installed,
-            "version": version,
-        })
+        results.append(
+            {
+                **mod,
+                "installed": installed,
+                "version": version,
+            }
+        )
 
     # Calculate scores
     total = len(results)
@@ -174,7 +225,7 @@ Couvre: Maintenabilite, Fiabilite, Securite, Performance
             status = "" if r["installed"] else ""
             report += f"| {r['name']} | {status} | {r['version']} |\n"
 
-    report += f"""
+    report += """
 ### ISO 27001 / ISO 27034 - Securite
 Protection OWASP Top 10, Secret scanning
 
@@ -187,7 +238,7 @@ Protection OWASP Top 10, Secret scanning
             status = "" if r["installed"] else ""
             report += f"| {r['name']} | {status} | {r['version']} |\n"
 
-    report += f"""
+    report += """
 ### ISO 29119 - Tests Logiciels
 Pyramide de tests, Coverage enforcement
 
@@ -200,7 +251,7 @@ Pyramide de tests, Coverage enforcement
             status = "" if r["installed"] else ""
             report += f"| {r['name']} | {status} | {r['version']} |\n"
 
-    report += f"""
+    report += """
 ### ISO 42010 - Architecture
 Visualisation dependances, Detection cycles
 
@@ -237,7 +288,7 @@ Visualisation dependances, Detection cycles
         status = "" if r["installed"] else ""
         report += f"| {r['name']} | {r['category']} | {status} | {r['version']} | {r['iso']} |\n"
 
-    report += f"""
+    report += """
 ---
 
 ## MODULES MANQUANTS (actions requises)

@@ -2,7 +2,7 @@
 # Version: 2.0 - ZERO TOLERANCE + GRAPHS + ISO DOCS (ISO 25010 + 5055 + 42010)
 # Usage: pre-commit install && pre-commit install --hook-type commit-msg --hook-type pre-push
 
-default_stages: [commit]
+default_stages: [pre-commit]
 fail_fast: false
 
 repos:
@@ -71,8 +71,9 @@ repos:
       - id: check-merge-conflict
       - id: debug-statements
         name: "Detect debug statements"
-      - id: no-commit-to-branch
-        args: ['--branch', 'main', '--branch', 'master']
+      # Desactive temporairement - on dev sur master pour l'instant
+      # - id: no-commit-to-branch
+      #   args: ['--branch', 'main', '--branch', 'master']
 
   # ============================================
   # 5. COMMIT MESSAGE (Commitizen)

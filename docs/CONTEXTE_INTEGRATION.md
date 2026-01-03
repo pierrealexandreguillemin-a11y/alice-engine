@@ -141,7 +141,7 @@ Ce document décrit comment ALICE (Adversarial Lineup Inference & Composition En
 {
   "success": true,
   "version": "1.0.0",
-  
+
   "predictedOpponentLineup": [
     {
       "board": 1,
@@ -158,7 +158,7 @@ Ce document décrit comment ALICE (Adversarial Lineup Inference & Composition En
       "probability": 0.72
     }
   ],
-  
+
   "recommendedLineup": [
     {
       "board": 1,
@@ -172,10 +172,10 @@ Ce document décrit comment ALICE (Adversarial Lineup Inference & Composition En
       }
     }
   ],
-  
+
   "expectedMatchScore": 4.5,
   "confidence": 0.72,
-  
+
   "alternatives": [
     {
       "rank": 2,
@@ -184,7 +184,7 @@ Ce document décrit comment ALICE (Adversarial Lineup Inference & Composition En
       "expectedScore": 4.3
     }
   ],
-  
+
   "metadata": {
     "processingTimeMs": 245,
     "modelVersion": "global-v1",
@@ -277,9 +277,9 @@ async function askAlice(params) {
       body: JSON.stringify(params),
       signal: AbortSignal.timeout(35000) // Cold start Render
     });
-    
+
     const data = await response.json();
-    
+
     if (!data.success) {
       // Log l'erreur mais ne bloque pas l'utilisateur
       console.warn('Alice prediction failed:', data.error);
@@ -289,9 +289,9 @@ async function askAlice(params) {
         message: 'Alice est indisponible, utilisez le mode manuel'
       };
     }
-    
+
     return data;
-    
+
   } catch (error) {
     // Service inaccessible (cold start trop long, etc.)
     console.error('Alice unreachable:', error);
@@ -321,7 +321,7 @@ DATABASE_NAME = "chess-app"  # Même base que chess-app
 # Collections utilisées (lecture seule)
 COLLECTIONS = {
     "players": "players",
-    "matches": "matches", 
+    "matches": "matches",
     "compositions": "compositions",
     "teams": "teams"
 }
@@ -340,7 +340,7 @@ async def get_opponent_history(db, opponent_club_id: str, limit: int = 50):
         {"clubId": opponent_club_id},
         {"_id": 0, "roundNumber": 1, "players": 1, "date": 1}
     ).sort("date", -1).limit(limit)
-    
+
     return await cursor.to_list(length=limit)
 ```
 
@@ -409,15 +409,15 @@ describe('ALICE Integration', () => {
       roundNumber: 3,
       availablePlayers: mockPlayers
     });
-    
+
     expect(result.success).toBe(true);
     expect(result.recommendedLineup).toHaveLength(8);
   });
-  
+
   it('should handle Alice timeout gracefully', async () => {
     // Simuler timeout
     const result = await askAlice({...}, { timeout: 1 });
-    
+
     expect(result.success).toBe(false);
     expect(result.fallback).toBe(true);
   });

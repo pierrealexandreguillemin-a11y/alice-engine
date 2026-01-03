@@ -8,13 +8,13 @@ Point d'entree FastAPI - ALICE Engine
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
 from app.api.routes import router as api_router
+from app.config import settings
 
 
 @asynccontextmanager
@@ -83,7 +83,7 @@ async def health_check():
     """
     return {
         "status": "healthy",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "version": settings.app_version,
         "checks": {
             "api": "ok",

@@ -10,9 +10,9 @@ Logique metier pure, sans I/O direct (SRP).
 @see ISO 42010 - Service layer
 """
 
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class InferenceService:
         - get_player_probability: Probabilite pour un joueur specifique
     """
 
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(self, model_path: str | None = None):
         """
         Initialise le service d'inference.
 
@@ -77,9 +77,9 @@ class InferenceService:
         self,
         opponent_club_id: str,
         round_number: int,
-        opponent_players: List[Dict[str, Any]],
+        opponent_players: list[dict[str, Any]],
         team_size: int = 8,
-    ) -> List[PlayerProbability]:
+    ) -> list[PlayerProbability]:
         """
         Predit la composition adverse probable.
 
@@ -105,9 +105,9 @@ class InferenceService:
 
     def generate_scenarios(
         self,
-        predictions: List[PlayerProbability],
+        predictions: list[PlayerProbability],
         scenario_count: int = 20,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Genere plusieurs scenarios de composition adverse.
 
@@ -122,9 +122,9 @@ class InferenceService:
 
     def _fallback_prediction(
         self,
-        players: List[Dict[str, Any]],
+        players: list[dict[str, Any]],
         team_size: int,
-    ) -> List[PlayerProbability]:
+    ) -> list[PlayerProbability]:
         """
         Prediction fallback basee sur l'ordre Elo.
 
