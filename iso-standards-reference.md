@@ -1,4 +1,4 @@
-# ISO Standards Reference — Chess App Flat-Six
+# ISO Standards Reference — ALICE Engine
 
 ## Normes Actives
 
@@ -14,8 +14,82 @@
 | **ISO 42010** | Architecture | 🟠 Important |
 | **ISO 12207** | Cycle de vie | 🟡 Utile |
 | **ISO 90003** | Qualité processus | 🟡 Utile |
-| **ISO 26514** | Doc utilisateur | 🟡 Utile |
+| **ISO 15289** | Contenu documentation cycle de vie | 🟠 Important |
+| **ISO 26514** | Information utilisateur logiciel | 🟠 Important |
+| **ISO 26515** | Documentation en environnement agile | 🟡 Utile |
 | **ISO 25065** | UX/Accessibilité | 🟡 Utile |
+
+---
+
+## Documentation (ISO 15289 + ISO 26514)
+
+### Structure docs/ conforme ISO 15289
+
+```
+docs/
+├── architecture/       # ISO 42010 - Architecture Description
+│   ├── ARCHITECTURE.md         # Vue d'ensemble architecture
+│   ├── DATA_MODEL.md           # Modèle de données
+│   └── DECISIONS.md            # ADR (Architecture Decision Records)
+│
+├── api/                # ISO 26514 - Information for Users (API)
+│   └── API_CONTRACT.md         # Contrat API OpenAPI
+│
+├── requirements/       # ISO 15289 - Requirements Specification
+│   ├── CDC_ALICE.md            # Cahier des charges
+│   └── CONTEXTE_*.md           # Contextes métier
+│
+├── operations/         # ISO 15289 - Operations Documentation
+│   ├── DEPLOIEMENT_RENDER.md   # Guide déploiement
+│   └── MAINTENANCE.md          # Procédures maintenance
+│
+├── development/        # ISO 15289 - Development Documentation
+│   ├── CONTRIBUTING.md         # Guide contribution
+│   └── PYTHON-HOOKS-SETUP.md   # Setup développeur
+│
+├── iso/                # ISO 15289 - Quality Records
+│   └── IMPLEMENTATION_STATUS.md # Auto-généré
+│
+└── project/            # ISO 15289 - Project Documentation
+    ├── ANALYSE_INITIALE_ALICE.md # Analyse initiale
+    └── CHANGELOG.md              # Journal des modifications
+```
+
+### Types de documents ISO 15289
+
+| Type | Code | Exemples ALICE |
+|------|------|----------------|
+| **Concept of Operations** | ConOps | CDC_ALICE.md |
+| **System Requirements** | SyRS | CONTEXTE_*.md |
+| **Architecture Description** | AD | ARCHITECTURE.md |
+| **Interface Design** | IDD | API_CONTRACT.md |
+| **Software User Documentation** | SUD | README.md |
+| **Operations Manual** | OpsMan | DEPLOIEMENT_RENDER.md |
+| **Quality Records** | QR | IMPLEMENTATION_STATUS.md |
+
+### Contenu minimal par document (ISO 26514)
+
+Chaque document technique doit contenir :
+
+1. **En-tête**
+   - Titre
+   - Version
+   - Date dernière mise à jour
+   - Auteur/Responsable
+
+2. **Introduction**
+   - Objectif du document
+   - Audience cible
+   - Prérequis
+
+3. **Corps**
+   - Contenu structuré avec titres hiérarchiques
+   - Exemples de code si applicable
+   - Schémas/diagrammes si nécessaire
+
+4. **Références**
+   - Documents liés
+   - Normes applicables
 
 ---
 
