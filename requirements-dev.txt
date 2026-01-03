@@ -1,0 +1,44 @@
+# Development dependencies - Alice-Engine
+# Equivalent Python complet des outils Husky/lint-staged de chess-app
+# Version: 2.0 - ZERO TOLERANCE + GRAPHS + ISO DOCS
+
+# === HOOKS & QUALITY ===
+pre-commit>=3.7.0
+
+# === LINTING & FORMATTING ===
+ruff>=0.5.0
+
+# === TYPE CHECKING ===
+mypy>=1.10.0
+types-requests>=2.32.0
+
+# === TESTING ===
+pytest>=8.2.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0
+pytest-xdist>=3.6.0
+httpx>=0.27.0  # Pour tester FastAPI
+
+# === SECURITY ===
+bandit[toml]>=1.7.8
+pip-audit>=2.7.0
+
+# === COMMIT STANDARDS ===
+commitizen>=3.27.0
+
+# === COMPLEXITY & METRICS (ISO 25010 + 5055) ===
+radon>=6.0.0
+xenon>=0.9.0
+
+# === ARCHITECTURE & GRAPHS (ISO 42010) ===
+pydeps>=1.12.0
+pylint>=3.2.0  # Pour detection duplication
+
+# === DOCUMENTATION ===
+# pdoc>=14.0.0  # API docs (optionnel)
+# mkdocs>=1.6.0  # Site docs (optionnel)
+
+# Note: Graphviz doit etre installe separement
+# Windows: choco install graphviz
+# Mac: brew install graphviz
+# Linux: apt install graphviz

@@ -1,0 +1,174 @@
+# Pre-commit hooks - Equivalent Husky + lint-staged (chess-app)
+# Version: 2.0 - ZERO TOLERANCE + GRAPHS + ISO DOCS (ISO 25010 + 5055 + 42010)
+# Usage: pre-commit install && pre-commit install --hook-type commit-msg --hook-type pre-push
+
+default_stages: [commit]
+fail_fast: false
+
+repos:
+  # ============================================
+  # 0. SECRET SCANNING (P0-CRITICAL)
+  # ============================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: "Secret scanning (Gitleaks)"
+
+  # ============================================
+  # 1. FORMATAGE & LINT (Ruff)
+  # ============================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.0
+    hooks:
+      - id: ruff
+        name: "Lint Python (Ruff)"
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: "Format Python (Ruff)"
+        types_or: [python, pyi]
+
+  # ============================================
+  # 2. TYPE CHECKING (MyPy)
+  # ============================================
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        name: "Type check (MyPy)"
+        additional_dependencies:
+          - types-requests
+          - pydantic
+        args: [--ignore-missing-imports]
+        exclude: ^tests/
+
+  # ============================================
+  # 3. SECURITY SCANNING (Bandit)
+  # ============================================
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        name: "Security scan (Bandit)"
+        args: [-c, pyproject.toml, -r, app/, services/]
+        additional_dependencies: ["bandit[toml]"]
+
+  # ============================================
+  # 4. BASIC CHECKS
+  # ============================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: debug-statements
+        name: "Detect debug statements"
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+
+  # ============================================
+  # 5. COMMIT MESSAGE (Commitizen)
+  # ============================================
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.27.0
+    hooks:
+      - id: commitizen
+        name: "Validate commit message"
+        stages: [commit-msg]
+
+  # ============================================
+  # 6. TESTS & COVERAGE (Pre-push)
+  # ============================================
+  - repo: local
+    hooks:
+      - id: pytest
+        name: "Run tests (pytest)"
+        entry: pytest
+        args: [tests/, -v, --tb=short]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
+
+      - id: pytest-cov
+        name: "Coverage threshold (80%)"
+        entry: pytest
+        args: [--cov=app, --cov=services, --cov-fail-under=80, -q]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ============================================
+  # 7. COMPLEXITY CHECK (Pre-push) - ISO 25010
+  # ============================================
+  - repo: local
+    hooks:
+      - id: xenon
+        name: "Complexity threshold (Xenon)"
+        entry: xenon
+        args: [--max-absolute=B, --max-modules=B, --max-average=A, app/, services/]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ============================================
+  # 8. SECURITY AUDIT (Pre-push) - ISO 27001
+  # ============================================
+  - repo: local
+    hooks:
+      - id: pip-audit
+        name: "Dependency audit (pip-audit)"
+        entry: pip-audit
+        args: [--strict]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ============================================
+  # 9. ARCHITECTURE ANALYSIS (Pre-push) - ISO 42010
+  # ============================================
+  - repo: local
+    hooks:
+      - id: architecture-health
+        name: "Architecture health check"
+        entry: python
+        args: [scripts/analyze_architecture.py]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ============================================
+  # 10. GRAPH GENERATION (Pre-push) - ISO 42010
+  # ============================================
+  - repo: local
+    hooks:
+      - id: generate-graphs
+        name: "Generate architecture graphs"
+        entry: python
+        args: [scripts/generate_graphs.py]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
+
+  # ============================================
+  # 11. ISO DOCUMENTATION UPDATE (Pre-push)
+  # ============================================
+  - repo: local
+    hooks:
+      - id: update-iso-docs
+        name: "Update ISO documentation"
+        entry: python
+        args: [scripts/update_iso_docs.py]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
