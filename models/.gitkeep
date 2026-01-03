@@ -1,0 +1,2 @@
+# Ce fichier permet de versionner le dossier models/ vide
+# Les modeles .joblib/.cbm sont dans .gitignore (trop gros)

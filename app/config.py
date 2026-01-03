@@ -1,0 +1,66 @@
+# app/config.py
+"""
+Configuration centralisee - ISO 27001 (secrets en env vars)
+
+Toutes les variables d'environnement sont chargees ici.
+Aucun secret hardcode dans le code.
+"""
+
+import os
+from functools import lru_cache
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    """
+    Configuration de l'application.
+
+    Les valeurs sont chargees depuis les variables d'environnement
+    ou le fichier .env (jamais committes).
+
+    @see ISO 27001 - Gestion des secrets
+    @see ISO 27034 - CWE-798 (pas de hardcoded secrets)
+    """
+
+    # Application
+    app_name: str = "ALICE"
+    app_version: str = "0.1.0"
+    debug: bool = False
+    log_level: str = "INFO"
+
+    # API
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+
+    # MongoDB (lecture seule)
+    mongodb_uri: str = ""
+    mongodb_database: str = "chess-app"
+
+    # Securite
+    api_key: str = ""  # Pour endpoint /train
+
+    # Modeles ML
+    model_path: str = "./models"
+    default_scenario_count: int = 20
+
+    # Render (production)
+    render_external_url: str = ""
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """
+    Singleton pour la configuration.
+
+    Utilise lru_cache pour ne charger qu'une fois.
+    """
+    return Settings()
+
+
+# Export pour import facile
+settings = get_settings()

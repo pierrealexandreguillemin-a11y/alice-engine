@@ -1,0 +1,33 @@
+# ALICE - Adversarial Lineup Inference & Composition Engine
+# Render Configuration
+# https://render.com/docs/yaml-spec
+
+services:
+  - type: web
+    name: alice-engine
+    runtime: python
+    region: frankfurt  # Plus proche de la France
+    plan: free  # ou starter pour éviter cold starts
+    
+    # Build
+    buildCommand: pip install -r requirements.txt
+    
+    # Start
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    
+    # Health check
+    healthCheckPath: /health
+    
+    # Environment variables (à configurer dans Render Dashboard)
+    envVars:
+      - key: MONGODB_URI
+        sync: false  # Configurer manuellement dans Dashboard
+      - key: API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    
+    # Auto-deploy depuis GitHub
+    autoDeploy: true

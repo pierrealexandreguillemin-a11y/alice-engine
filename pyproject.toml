@@ -1,0 +1,85 @@
+# pyproject.toml
+# Configuration projet Python - ISO 5055 (Qualite code)
+
+[project]
+name = "alice-engine"
+version = "0.1.0"
+description = "Adversarial Lineup Inference & Composition Engine"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "Pierre-Alexandre"}
+]
+keywords = ["chess", "prediction", "machine-learning", "xgboost", "catboost"]
+
+[project.urls]
+Documentation = "https://alice-engine.onrender.com/docs"
+Repository = "https://github.com/xxx/alice-engine"
+
+# ============================================
+# RUFF - Linting rapide (remplace flake8, isort, etc.)
+# ============================================
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "S",      # flake8-bandit (securite)
+    "N",      # pep8-naming
+]
+ignore = [
+    "E501",   # line too long (gere par line-length)
+    "S101",   # assert (ok pour tests)
+    "B008",   # function call in default arg (ok pour FastAPI Depends)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]  # Autoriser assert dans tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "services"]
+
+# ============================================
+# MYPY - Type checking
+# ============================================
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = false  # Progressive adoption
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ============================================
+# PYTEST
+# ============================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+# ============================================
+# COVERAGE
+# ============================================
+[tool.coverage.run]
+source = ["app", "services"]
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

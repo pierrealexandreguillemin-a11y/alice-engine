@@ -1,0 +1,90 @@
+# ALICE - Adversarial Lineup Inference & Composition Engine
+# .gitignore
+
+# ============================================
+# Python
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ============================================
+# Virtual Environment
+# ============================================
+venv/
+ENV/
+env/
+.venv/
+
+# ============================================
+# IDE
+# ============================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ============================================
+# Environment Variables
+# ============================================
+.env
+.env.local
+.env.*.local
+
+# ============================================
+# Logs
+# ============================================
+*.log
+logs/
+
+# ============================================
+# Models (les gros fichiers)
+# ============================================
+models/*.joblib
+models/*.pkl
+models/*.cbm
+models/*.json
+!models/.gitkeep
+
+# ============================================
+# Dataset (lien symbolique vers 2.4 GB)
+# ============================================
+dataset_alice/
+exports/
+*.parquet
+*.csv
+
+# ============================================
+# Tests
+# ============================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ============================================
+# Misc
+# ============================================
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp

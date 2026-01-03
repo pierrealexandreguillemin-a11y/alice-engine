@@ -1,0 +1,86 @@
+# ALICE - Adversarial Lineup Inference & Composition Engine
+# Python Dependencies
+# Version: 0.1.0
+# Date: 3 Janvier 2026
+# ISO 5055 - Dependances a jour
+
+# ============================================
+# Framework API
+# ============================================
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# ============================================
+# Machine Learning - Choix CatBoost (benchmarks 2025)
+# @see docs/ANALYSE_INITIALE_ALICE.md
+# ============================================
+catboost>=1.2.7            # 1er choix - categories natives
+xgboost>=2.1.0             # 2eme choix - backup
+# lightgbm>=4.0            # 3eme choix si RAM limitee
+
+scikit-learn>=1.4.0
+pandas>=2.1.0
+numpy>=1.26.0
+pyarrow>=14.0.0            # Parquet (plus rapide que CSV)
+
+# ============================================
+# Optimisation lineup (CE)
+# OR-Tools > PuLP pour assignment problems
+# ============================================
+ortools>=9.8
+
+# ============================================
+# Validation (ISO 25012)
+# ============================================
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# ============================================
+# MongoDB (async, lecture seule)
+# ============================================
+motor>=3.3.0
+
+# ============================================
+# Parsing HTML (dataset FFE)
+# ============================================
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# ============================================
+# Persistance modeles
+# ============================================
+joblib>=1.3.0
+
+# ============================================
+# HTTP client (pour tests)
+# ============================================
+httpx>=0.26.0
+
+# ============================================
+# Utilitaires
+# ============================================
+python-dotenv>=1.0.0
+tqdm>=4.66.0               # Progress bars
+
+# ============================================
+# Tests (ISO 29119)
+# ============================================
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0          # Coverage
+
+# ============================================
+# Qualite code (ISO 5055)
+# ============================================
+ruff>=0.1.0                # Linting rapide
+mypy>=1.8.0                # Type checking
+
+# ============================================
+# Securite (ISO 27034)
+# ============================================
+pip-audit>=2.6.0           # Audit dependances
+
+# ============================================
+# Logs et monitoring (optionnel)
+# ============================================
+# sentry-sdk[fastapi]>=1.39.0
