@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "name": "alice-engine",
+  "builds": [
+    {
+      "src": "app/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "app/main.py"
+    }
+  ],
+  "env": {
+    "MONGODB_URI": "@mongodb_uri",
+    "API_KEY": "@api_key",
+    "LOG_LEVEL": "INFO"
+  },
+  "regions": ["cdg1"]
+}

@@ -9,8 +9,8 @@ services:
     region: frankfurt  # Plus proche de la France
     plan: free  # ou starter pour éviter cold starts
     
-    # Build
-    buildCommand: pip install -r requirements.txt
+    # Build (prod dependencies only - faster)
+    buildCommand: pip install -r requirements-prod.txt
     
     # Start
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
