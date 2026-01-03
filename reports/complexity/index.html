@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Rapport Complexite - Alice Engine</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 20px; background: #f5f5f5; }
+        h1 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .card { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        pre { background: #f8f9fa; padding: 15px; overflow-x: auto; border-radius: 4px; }
+        .metric { display: inline-block; background: #007bff; color: white; padding: 5px 15px; border-radius: 20px; margin: 5px; }
+        .legend { background: #e9ecef; padding: 10px; border-radius: 4px; margin-top: 10px; }
+        .legend span { margin-right: 15px; }
+        .A { color: #28a745; } .B { color: #20c997; } .C { color: #ffc107; } .D { color: #fd7e14; } .E { color: #dc3545; } .F { color: #6c757d; }
+    </style>
+</head>
+<body>
+    <h1>Rapport Complexite - Alice Engine</h1>
+    <p>Genere le: 2026-01-03 19:15</p>
+
+    <div class="card">
+        <h2>Complexite Cyclomatique (Radon CC)</h2>
+        <div class="legend">
+            <span class="A">A (1-5)</span>
+            <span class="B">B (6-10)</span>
+            <span class="C">C (11-20)</span>
+            <span class="D">D (21-30)</span>
+            <span class="E">E (31-40)</span>
+            <span class="F">F (41+)</span>
+        </div>
+        <pre>app\config.py
+    F 57:0 get_settings - A (1)
+    C 14:0 Settings - A (1)
+app\main.py
+    F 21:0 lifespan - A (1)
+    F 64:0 root - A (1)
+    F 78:0 health_check - A (1)
+app\api\routes.py
+    F 101:0 trigger_training - A (4)
+    F 40:0 predict_lineup - A (1)
+    F 78:0 get_model_info - A (1)
+app\api\schemas.py
+    C 22:0 PlayerInput - A (5)
+    M 36:4 PlayerInput.validate_ffe_id - A (4)
+    C 44:0 PlayerPrediction - A (1)
+    C 55:0 PlayerRecommendation - A (1)
+    C 74:0 Scenario - A (1)
+    C 82:0 Alternative - A (1)
+    C 97:0 Constraints - A (1)
+    C 106:0 Options - A (1)
+    C 119:0 PredictRequest - A (1)
+    C 133:0 PredictResponse - A (1)
+    C 161:0 ModelInfoResponse - A (1)
+    C 179:0 TrainRequest - A (1)
+    C 186:0 TrainResponse - A (1)
+    C 200:0 ErrorDetail - A (1)
+    C 207:0 ErrorResponse - A (1)
+services\composer.py
+    M 63:4 ComposerService.optimize - B (8)
+    C 46:0 ComposerService - A (4)
+    M 137:4 ComposerService.calculate_probabilities - A (2)
+    C 22:0 BoardAssignment - A (1)
+    C 38:0 CompositionResult - A (1)
+    M 176:4 ComposerService.calculate_expected_score - A (1)
+    M 189:4 ComposerService.get_alternatives - A (1)
+services\data_loader.py
+    M 147:4 DataLoader.load_training_data - A (5)
+    C 20:0 DataLoader - A (4)
+    M 105:4 DataLoader.get_club_players - A (4)
+    M 48:4 DataLoader.connect - A (3)
+    M 71:4 DataLoader.get_opponent_history - A (3)
+    M 33:4 DataLoader.__init__ - A (1)
+services\inference.py
+    C 32:0 InferenceService - A (3)
+    M 54:4 InferenceService.load_model - A (3)
+    M 76:4 InferenceService.predict_lineup - A (2)
+    M 123:4 InferenceService._fallback_prediction - A (2)
+    C 21:0 PlayerProbability - A (1)
+    M 44:4 InferenceService.__init__ - A (1)
+    M 106:4 InferenceService.generate_scenarios - A (1)
+
+43 blocks (classes, functions, methods) analyzed.
+Average complexity: A (1.9534883720930232)
+</pre>
+    </div>
+
+    <div class="card">
+        <h2>Indice de Maintenabilite (Radon MI)</h2>
+        <div class="legend">
+            <span class="A">A (20+) Excellent</span>
+            <span class="B">B (10-19) Bon</span>
+            <span class="C">C (0-9) Moyen</span>
+        </div>
+        <pre>app\config.py - A (100.00)
+app\main.py - A (100.00)
+app\__init__.py - A (100.00)
+app\api\routes.py - A (88.09)
+app\api\schemas.py - A (58.18)
+app\api\__init__.py - A (100.00)
+services\composer.py - A (66.17)
+services\data_loader.py - A (73.73)
+services\inference.py - A (79.41)
+services\__init__.py - A (100.00)
+</pre>
+    </div>
+
+    <div class="card">
+        <h2>Conformite ISO</h2>
+        <ul>
+            <li><strong>ISO 25010</strong> - Maintenabilite: Analysabilite, Modifiabilite</li>
+            <li><strong>ISO 5055</strong> - Qualite code: Complexite cognitive</li>
+        </ul>
+    </div>
+</body>
+</html>

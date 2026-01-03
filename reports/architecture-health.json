@@ -1,0 +1,86 @@
+{
+  "date": "2026-01-03T19:15:41.673630",
+  "score": 100,
+  "metrics": {
+    "files": 10,
+    "totalDeps": 7,
+    "avgDeps": 0.7,
+    "maxDeps": 3,
+    "circular": 0,
+    "highCoupling": 0
+  },
+  "topCoupled": [
+    {
+      "file": "services\\__init__.py",
+      "afferent": 0,
+      "efferent": 3,
+      "total": 3,
+      "instability": 100.0
+    },
+    {
+      "file": "app\\main.py",
+      "afferent": 0,
+      "efferent": 2,
+      "total": 2,
+      "instability": 100.0
+    },
+    {
+      "file": "app\\api\\routes.py",
+      "afferent": 0,
+      "efferent": 2,
+      "total": 2,
+      "instability": 100.0
+    },
+    {
+      "file": "app\\config.py",
+      "afferent": 0,
+      "efferent": 0,
+      "total": 0,
+      "instability": 0
+    },
+    {
+      "file": "app\\__init__.py",
+      "afferent": 0,
+      "efferent": 0,
+      "total": 0,
+      "instability": 0
+    },
+    {
+      "file": "app\\api\\schemas.py",
+      "afferent": 0,
+      "efferent": 0,
+      "total": 0,
+      "instability": 0
+    },
+    {
+      "file": "app\\api\\__init__.py",
+      "afferent": 0,
+      "efferent": 0,
+      "total": 0,
+      "instability": 0
+    },
+    {
+      "file": "services\\composer.py",
+      "afferent": 0,
+      "efferent": 0,
+      "total": 0,
+      "instability": 0
+    },
+    {
+      "file": "services\\data_loader.py",
+      "afferent": 0,
+      "efferent": 0,
+      "total": 0,
+      "instability": 0
+    },
+    {
+      "file": "services\\inference.py",
+      "afferent": 0,
+      "efferent": 0,
+      "total": 0,
+      "instability": 0
+    }
+  ],
+  "issues": [],
+  "circularDeps": []
+}

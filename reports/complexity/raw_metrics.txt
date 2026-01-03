@@ -1,0 +1,132 @@
+app\config.py
+    LOC: 67
+    LLOC: 39
+    SLOC: 24
+    Comments: 11
+    Single comments: 8
+    Multi: 16
+    Blank: 19
+    - Comment Stats
+        (C % L): 16%
+        (C % S): 46%
+        (C + M % L): 40%
+app\main.py
+    LOC: 93
+    LLOC: 27
+    SLOC: 50
+    Comments: 10
+    Single comments: 7
+    Multi: 18
+    Blank: 18
+    - Comment Stats
+        (C % L): 11%
+        (C % S): 20%
+        (C + M % L): 30%
+app\__init__.py
+    LOC: 9
+    LLOC: 3
+    SLOC: 2
+    Comments: 1
+    Single comments: 1
+    Multi: 4
+    Blank: 2
+    - Comment Stats
+        (C % L): 11%
+        (C % S): 50%
+        (C + M % L): 56%
+app\api\routes.py
+    LOC: 129
+    LLOC: 23
+    SLOC: 72
+    Comments: 11
+    Single comments: 11
+    Multi: 26
+    Blank: 20
+    - Comment Stats
+        (C % L): 9%
+        (C % S): 15%
+        (C + M % L): 29%
+app\api\schemas.py
+    LOC: 220
+    LLOC: 190
+    SLOC: 110
+    Comments: 27
+    Single comments: 40
+    Multi: 7
+    Blank: 63
+    - Comment Stats
+        (C % L): 12%
+        (C % S): 25%
+        (C + M % L): 15%
+app\api\__init__.py
+    LOC: 7
+    LLOC: 1
+    SLOC: 0
+    Comments: 1
+    Single comments: 1
+    Multi: 5
+    Blank: 1
+    - Comment Stats
+        (C % L): 14%
+        (C % S): 100%
+        (C + M % L): 86%
+services\composer.py
+    LOC: 207
+    LLOC: 92
+    SLOC: 105
+    Comments: 20
+    Single comments: 19
+    Multi: 41
+    Blank: 42
+    - Comment Stats
+        (C % L): 10%
+        (C % S): 19%
+        (C + M % L): 29%
+services\data_loader.py
+    LOC: 182
+    LLOC: 73
+    SLOC: 97
+    Comments: 2
+    Single comments: 2
+    Multi: 46
+    Blank: 37
+    - Comment Stats
+        (C % L): 1%
+        (C % S): 2%
+        (C + M % L): 26%
+services\inference.py
+    LOC: 154
+    LLOC: 56
+    SLOC: 68
+    Comments: 13
+    Single comments: 13
+    Multi: 44
+    Blank: 29
+    - Comment Stats
+        (C % L): 8%
+        (C % S): 19%
+        (C + M % L): 37%
+services\__init__.py
+    LOC: 15
+    LLOC: 5
+    SLOC: 4
+    Comments: 1
+    Single comments: 1
+    Multi: 6
+    Blank: 4
+    - Comment Stats
+        (C % L): 7%
+        (C % S): 25%
+        (C + M % L): 47%
+** Total **
+    LOC: 1083
+    LLOC: 509
+    SLOC: 532
+    Comments: 97
+    Single comments: 103
+    Multi: 213
+    Blank: 235
+    - Comment Stats
+        (C % L): 9%
+        (C % S): 18%
+        (C + M % L): 29%

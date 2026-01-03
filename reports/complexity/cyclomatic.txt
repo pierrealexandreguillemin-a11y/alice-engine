@@ -1,0 +1,53 @@
+app\config.py
+    F 57:0 get_settings - A (1)
+    C 14:0 Settings - A (1)
+app\main.py
+    F 21:0 lifespan - A (1)
+    F 64:0 root - A (1)
+    F 78:0 health_check - A (1)
+app\api\routes.py
+    F 101:0 trigger_training - A (4)
+    F 40:0 predict_lineup - A (1)
+    F 78:0 get_model_info - A (1)
+app\api\schemas.py
+    C 22:0 PlayerInput - A (5)
+    M 36:4 PlayerInput.validate_ffe_id - A (4)
+    C 44:0 PlayerPrediction - A (1)
+    C 55:0 PlayerRecommendation - A (1)
+    C 74:0 Scenario - A (1)
+    C 82:0 Alternative - A (1)
+    C 97:0 Constraints - A (1)
+    C 106:0 Options - A (1)
+    C 119:0 PredictRequest - A (1)
+    C 133:0 PredictResponse - A (1)
+    C 161:0 ModelInfoResponse - A (1)
+    C 179:0 TrainRequest - A (1)
+    C 186:0 TrainResponse - A (1)
+    C 200:0 ErrorDetail - A (1)
+    C 207:0 ErrorResponse - A (1)
+services\composer.py
+    M 63:4 ComposerService.optimize - B (8)
+    C 46:0 ComposerService - A (4)
+    M 137:4 ComposerService.calculate_probabilities - A (2)
+    C 22:0 BoardAssignment - A (1)
+    C 38:0 CompositionResult - A (1)
+    M 176:4 ComposerService.calculate_expected_score - A (1)
+    M 189:4 ComposerService.get_alternatives - A (1)
+services\data_loader.py
+    M 147:4 DataLoader.load_training_data - A (5)
+    C 20:0 DataLoader - A (4)
+    M 105:4 DataLoader.get_club_players - A (4)
+    M 48:4 DataLoader.connect - A (3)
+    M 71:4 DataLoader.get_opponent_history - A (3)
+    M 33:4 DataLoader.__init__ - A (1)
+services\inference.py
+    C 32:0 InferenceService - A (3)
+    M 54:4 InferenceService.load_model - A (3)
+    M 76:4 InferenceService.predict_lineup - A (2)
+    M 123:4 InferenceService._fallback_prediction - A (2)
+    C 21:0 PlayerProbability - A (1)
+    M 44:4 InferenceService.__init__ - A (1)
+    M 106:4 InferenceService.generate_scenarios - A (1)
+
+43 blocks (classes, functions, methods) analyzed.
+Average complexity: A (1.9534883720930232)

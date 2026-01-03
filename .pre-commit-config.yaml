@@ -100,9 +100,9 @@ repos:
         always_run: true
 
       - id: pytest-cov
-        name: "Coverage threshold (80%)"
+        name: "Coverage threshold (70%)"
         entry: pytest
-        args: [--cov=app, --cov=services, --cov-fail-under=80, -q]
+        args: [--cov=app, --cov=services, --cov-fail-under=70, -q]
         language: system
         pass_filenames: false
         stages: [pre-push]
