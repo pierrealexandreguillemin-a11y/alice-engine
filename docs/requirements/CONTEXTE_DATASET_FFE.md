@@ -1,7 +1,7 @@
 # Contexte Dataset FFE - Resume pour Prochaines Taches
 
 > **Objectif** : Resume des infos essentielles pour le parsing et l'entrainement ALICE
-> **Source** : Scraping FFE 1er-2 Janvier 2026
+> **Source** : Scraping FFE 1er-4 Janvier 2026
 
 ---
 
@@ -10,7 +10,7 @@
 | Metrique | Valeur |
 |----------|--------|
 | **Emplacement** | `C:/Dev/Alice-Engine/dataset_alice/` (lien vers `ffe_data_backup`) |
-| **Taille totale** | **2.4 GB** |
+| **Taille totale** | **2.5 GB** |
 | **Format** | HTML brut (a parser) |
 | **Periode** | 2002-2026 (25 saisons) |
 
@@ -19,8 +19,9 @@
 | Type | Quantite | Taille |
 |------|----------|--------|
 | Compositions (calendrier + rondes) | 84,789 | ~2.1 GB |
-| Joueurs FFE | 883 pages | ~49 MB |
-| **Total** | **85,672** | **~2.4 GB** |
+| Joueurs FFE v2 (COMPLET) | 2,159 pages (992 clubs) | ~120 MB |
+| Index clubs | 1 (JSON) | ~200 KB |
+| **Total** | **86,949** | **~2.5 GB** |
 
 ### Estimations apres parsing
 
@@ -28,7 +29,7 @@
 |---------|------------|
 | Matchs | ~110,000 |
 | Echiquiers/Parties | ~750,000 |
-| Joueurs uniques | ~55,000 |
+| Joueurs licencies | 66,208 |
 
 ---
 
@@ -38,13 +39,20 @@
 
 ```
 dataset_alice/
-├── players/                    # 883 pages joueurs
-│   └── page_XXXX.html
+├── clubs/
+│   └── clubs_index.json        # Index 992 clubs (ref, nom, dept, licences)
 │
-└── {saison}/                   # 2002-2026
-    └── {competition}/          # Interclubs, Coupe_de_France, Ligue_XXX
-        └── {division}/         # Nationale_1, Regionale_2...
-            └── {groupe}/       # Groupe_A, Poule_1...
+├── players_v2/                  # COMPLET - 66,208 joueurs
+│   └── club_{ref}/              # 992 dossiers clubs
+│       └── page_XX.html         # ~40 joueurs/page, tous licencies
+│
+├── players/                     # OBSOLETE - FIDE only (35,320 joueurs)
+│   └── page_XXXX.html           # 883 pages
+│
+└── {saison}/                    # 2002-2026
+    └── {competition}/           # Interclubs, Coupe_de_France, Ligue_XXX
+        └── {division}/          # Nationale_1, Regionale_2...
+            └── {groupe}/        # Groupe_A, Poule_1...
                 ├── calendrier.html   # Dates, lieux, scores
                 └── ronde_N.html      # Compositions detaillees
 ```
@@ -91,18 +99,36 @@ dataset_alice/
 | `type_resultat` | Categorise | `nulle` |
 | `diff_elo` | Ecart Elo | `+168` |
 
-### page_XXXX.html (joueurs)
+### players_v2/club_XXX/page_XX.html (joueurs - NOUVEAU FORMAT)
 
 | Champ | Description | Exemple |
 |-------|-------------|---------|
 | `nr_ffe` | ID FFE | `K59857` |
-| `nom` | Nom complet | `AALIOULI Karim` |
+| `nom_complet` | Nom et prenom | `AALIOULI Karim` |
+| `affiliation` | Type licence | `A` (complete) ou `B` (partielle) |
 | `elo` | Classement standard | `1567` |
+| `elo_type` | Type Elo | `F` (FIDE), `N` (National), `E` (Estime) |
 | `rapide` | Classement rapide | `1500` |
+| `rapide_type` | Type Elo rapide | `F`, `N`, `E` |
 | `blitz` | Classement blitz | `1500` |
-| `categorie` | Age | `Sen` |
-| `sexe` | Genre | `M` |
+| `blitz_type` | Type Elo blitz | `F`, `N`, `E` |
+| `categorie` | Categorie legacy | `PpoM`, `PouF`, `SenM`, `VetF` |
+| `mute` | Transfere d'un club | `M` ou vide |
 | `club` | Club | `Echiquier de Bigorre` |
+
+### Distribution des Joueurs (66,208 total)
+
+| Categorie | Count | % | Type Elo |
+|-----------|-------|---|----------|
+| Jeunes U08-U14 | 33,896 | 51.2% | Estime (E) |
+| Ados U16-U20 | 5,278 | 8.0% | Estime/National |
+| Adultes X20-X65 | 27,034 | 40.8% | FIDE (F) |
+
+| Type Elo | Count | % |
+|----------|-------|---|
+| Estime (E) | 47,746 | 72.1% |
+| FIDE (F) | 17,494 | 26.4% |
+| National (N) | 965 | 1.5% |
 
 ---
 
@@ -128,6 +154,21 @@ dataset_alice/
 | `X - X` ou `1/2` | nulle | 0.5 | 0.5 |
 | `F - +` | forfait_blanc | 0.0 | 1.0 |
 | `+ - F` | forfait_noir | 1.0 | 0.0 |
+
+### Categories d'age (mapping legacy -> FFE)
+
+| HTML (legacy) | Code FFE | Nom | Age |
+|---------------|----------|-----|-----|
+| PpoM / PpoF | U08 / U08F | Petits Poussins | < 8 ans |
+| PouM / PouF | U10 / U10F | Poussins | 8-9 ans |
+| PupM / PupF | U12 / U12F | Pupilles | 10-11 ans |
+| BenM / BenF | U14 / U14F | Benjamins | 12-13 ans |
+| MinM / MinF | U16 / U16F | Minimes | 14-15 ans |
+| CadM / CadF | U18 / U18F | Cadets | 16-17 ans |
+| JunM / JunF | U20 / U20F | Juniors | 18-19 ans |
+| SenM / SenF | X20 | Seniors | 20-49 ans |
+| SepM / SepF | X50 | Seniors Plus | 50-64 ans |
+| VetM / VetF | X65 | Veterans | 65+ ans |
 
 ### Ligues regionales
 
@@ -170,6 +211,7 @@ Le projet `ffe_scrapper` contient deja un parser :
 
 ```
 C:/Dev/ffe_scrapper/src/parse.py
+C:/Dev/ffe_scrapper/src/analyze_players_v2.py  # Nouveau - analyse joueurs v2
 ```
 
 ### Utilisation documentee
@@ -210,12 +252,13 @@ def groupe_to_dataframe(groupe_dir):
 
 ## 7. Prochaines Taches (ordre recommande)
 
-1. **Copier/adapter parse.py** dans `scripts/parse_dataset.py`
+1. **Adapter parse_dataset.py** pour nouveau format `players_v2/`
 2. **Parser les 15,148 groupes** → `exports/echiquiers.parquet`
-3. **Parser les 883 pages joueurs** → `exports/joueurs.parquet`
+3. **Parser les 66,208 joueurs** → `exports/joueurs.parquet`
 4. **Nettoyage** : Elo=0, forfaits, normalisation noms
 5. **Feature engineering** : Features derivees (historique)
 6. **Export final** : Parquet optimise pour CatBoost/XGBoost
+7. **Cleanup** : Supprimer `players/` (v1 obsolete)
 
 ---
 
@@ -224,10 +267,11 @@ def groupe_to_dataframe(groupe_dir):
 ```
 C:/Dev/Alice-Engine/exports/
 ├── echiquiers.parquet    # ~750k lignes, ~150-300 MB
-├── joueurs.parquet       # ~55k lignes, ~5 MB
+├── joueurs.parquet       # 66,208 lignes, ~10 MB
 └── metadata.json         # Stats parsing
 ```
 
 ---
 
-*Resume genere le 3 Janvier 2026*
+*Resume mis a jour le 4 Janvier 2026*
+*Source: 86,949 fichiers HTML - 66,208 joueurs (100% couverture FFE)*
