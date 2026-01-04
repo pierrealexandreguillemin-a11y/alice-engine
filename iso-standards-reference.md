@@ -52,6 +52,7 @@ docs/
 │
 └── project/            # ISO 15289 - Project Documentation
     ├── ANALYSE_INITIALE_ALICE.md # Analyse initiale
+    ├── BILAN_PARSING.md          # Resultats parsing dataset
     └── CHANGELOG.md              # Journal des modifications
 ```
 
@@ -66,6 +67,7 @@ docs/
 | **Software User Documentation** | SUD | README.md |
 | **Operations Manual** | OpsMan | DEPLOIEMENT_RENDER.md |
 | **Quality Records** | QR | IMPLEMENTATION_STATUS.md |
+| **Data Quality Report** | DQR | BILAN_PARSING.md |
 
 ### Contenu minimal par document (ISO 26514)
 

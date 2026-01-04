@@ -136,7 +136,48 @@ PHASE 2 : FEATURE ENGINEERING (Durée: 1-2 heures)
      - domicile (bool)
      - enjeu_match (maintien/titre/milieu)
 
- 2.3 Encodage catégories:
+ 2.3 Features de fiabilité (extraites des non_joue/forfaits):
+     ─────────────────────────────────────────────────────────
+     Ces données "vides" révèlent des patterns d'indisponibilité
+     exploitables pour ALI (prédiction lineup adverse).
+
+     Par club:
+     - taux_forfait_club : % forfaits historiques du club
+     - taux_non_joue_club : % matchs non joués (capacité à aligner)
+     - fiabilite_club : score composite de régularité
+
+     Par joueur:
+     - taux_presence_joueur : % présence sur matchs possibles
+     - pattern_dispo_mois[1-12] : taux présence par mois
+       (détecte vacances, contraintes saisonnières)
+     - pattern_dispo_jour[Lun-Dim] : taux présence par jour semaine
+       (détecte contraintes professionnelles)
+     - derniere_presence : nombre de rondes depuis dernier match
+     - joueur_fantome : flag si < 20% présence sur 2 saisons
+
+     Exemple d'extraction:
+     ```python
+     # Fiabilité club
+     df_club = df.groupby('equipe').agg({
+         'type_resultat': lambda x: x.isin([
+             'forfait_blanc', 'forfait_noir', 'double_forfait'
+         ]).mean()
+     }).rename(columns={'type_resultat': 'taux_forfait_club'})
+
+     # Pattern mensuel joueur
+     df_player_month = df.groupby(
+         ['blanc_nom', df['date'].dt.month]
+     )['type_resultat'].apply(
+         lambda x: (x == 'non_joue').mean()
+     ).unstack(fill_value=0)
+     ```
+
+     Impact ALI:
+     - Pondère les probabilités de présence joueur
+     - Identifie les clubs susceptibles d'aligner équipes incomplètes
+     - Affine prédictions selon période/date du match
+
+ 2.4 Encodage catégories:
      - CatBoost : rien à faire (natif)
      - XGBoost : LabelEncoder ou OrdinalEncoder
 

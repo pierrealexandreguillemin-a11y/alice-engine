@@ -19,9 +19,21 @@
 - Pre-push hooks (Pytest, Coverage, Xenon, pip-audit)
 - Scripts DevOps (graphs, architecture, ISO docs)
 - Documentation ISO 15289/26514 reorganisee
+- **Script parse_dataset.py** pour extraction donnees FFE
+  - Parsing compositions (ronde_N.html, calendrier.html)
+  - Parsing joueurs licencies (page_XXXX.html)
+  - Export Parquet (echiquiers.parquet, joueurs.parquet)
+  - 13,935 groupes parses, 1,736,490 echiquiers extraits
+  - 35,320 joueurs licencies (dataset incomplet, voir BILAN_PARSING.md)
+  - Champ `mute` (transfert club) ajoute pour reglements FFE
+  - Mapping categories FFE legacy → officiel (U8, U10, X20, X50, X65)
 
 ### Changed
 - Seuil coverage temporairement a 70% (objectif 80%)
+
+### Known Issues
+- Dataset joueurs incomplet (~47% manquants, surtout jeunes U08-U14)
+- Voir `C:\Dev\ffe_scrapper\TODO_SCRAPING_JOUEURS_COMPLET.md` pour action
 
 ### Fixed
 - Erreurs MyPy dans schemas.py
@@ -54,11 +66,14 @@
 
 ## Roadmap
 
-### [0.2.0] - Parsing Dataset
-- [ ] Script parse_dataset.py
-- [ ] Export echiquiers.parquet (~750k lignes)
-- [ ] Export joueurs.parquet (~55k lignes)
-- [ ] Nettoyage donnees (Elo=0, forfaits)
+### [0.2.0] - Parsing Dataset ✅
+- [x] Script parse_dataset.py
+- [x] Export echiquiers.parquet (**1,736,490 lignes** - 34 MB)
+- [x] Export joueurs.parquet (**35,320 lignes** - 1.6 MB)
+- [x] Documentation BILAN_PARSING.md (ISO 25012)
+- [x] Champ `mute` pour reglements FFE
+- [ ] Nettoyage donnees (Elo=0: 18.2%, forfaits: 5%)
+- [ ] Scraping joueurs complet (~66k) - voir ffe_scrapper
 
 ### [0.3.0] - Entrainement Modele
 - [ ] Feature engineering
@@ -76,6 +91,12 @@
 - [ ] Coverage >= 80%
 - [ ] Documentation complete
 - [ ] Performance benchmarks
+
+---
+
+## Documentation associee
+
+- [BILAN_PARSING.md](./BILAN_PARSING.md) - Resultats detailles du parsing
 
 ---
 
