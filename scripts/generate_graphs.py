@@ -24,6 +24,11 @@ SRC_DIRS = ["app", "services"]
 
 def run_cmd(cmd: list[str], capture: bool = True) -> tuple[int, str]:
     """Execute commande et retourne code + output."""
+    # Convert tool commands to python -m for cross-platform compatibility
+    PYTHON_M_TOOLS = {"pydeps", "radon", "pylint"}
+    if cmd and cmd[0] in PYTHON_M_TOOLS:
+        cmd = [sys.executable, "-m"] + cmd
+
     try:
         result = subprocess.run(  # nosec B603, B607
             cmd,
