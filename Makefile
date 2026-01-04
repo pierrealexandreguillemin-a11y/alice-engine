@@ -39,10 +39,11 @@ help:
 	@echo "    make audit        - Audit dependances (pip-audit)"
 	@echo "    make complexity   - Analyse complexite (radon + xenon)"
 	@echo ""
-	@echo "  ARCHITECTURE (pre-push):"
-	@echo "    make graphs       - Generer graphs SVG (pydeps)"
-	@echo "    make architecture - Analyse sante architecture"
-	@echo "    make iso-docs     - MAJ documentation ISO"
+	@echo "  ARCHITECTURE (manual, run before push):"
+	@echo "    make reports      - Generate all reports (then git add)"
+	@echo "    make graphs       - Generate SVG graphs (pydeps)"
+	@echo "    make architecture - Architecture health analysis"
+	@echo "    make iso-docs     - Update ISO documentation"
 	@echo ""
 	@echo "  ALL-IN-ONE:"
 	@echo "    make quality      - Lint + Format + Typecheck + Security"
@@ -124,8 +125,22 @@ complexity:
 	xenon --max-absolute=B --max-modules=B --max-average=A $(SRC) || true
 
 # ============================================
-# ARCHITECTURE (PRE-PUSH) - ISO 42010
+# ARCHITECTURE (MANUAL) - ISO 42010
+# Run before push: make reports && git add -A && git commit
 # ============================================
+reports: architecture graphs iso-docs
+	@echo ""
+	@echo "============================================"
+	@echo "  RAPPORTS GENERES"
+	@echo "============================================"
+	@echo "Fichiers modifies:"
+	@git status --porcelain reports/ graphs/ docs/iso/
+	@echo ""
+	@echo "Executez maintenant:"
+	@echo "  git add reports/ graphs/ docs/iso/"
+	@echo "  git commit -m 'chore(reports): update generated reports'"
+	@echo ""
+
 graphs:
 	@echo "Generation graphs architecture..."
 	$(PYTHON) scripts/generate_graphs.py

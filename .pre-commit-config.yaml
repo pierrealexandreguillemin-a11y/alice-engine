@@ -134,8 +134,12 @@ repos:
         stages: [pre-push]
 
   # ============================================
-  # 9. ARCHITECTURE ANALYSIS (Pre-push) - ISO 42010
+  # 9. ARCHITECTURE ANALYSIS (Manual) - ISO 42010
   # ============================================
+  # NOTE: Ces hooks génèrent des fichiers avec timestamps
+  # Ils doivent être exécutés MANUELLEMENT avant push:
+  #   make reports  # ou: pre-commit run --hook-stage manual -a
+  # Puis commit des fichiers générés.
   - repo: local
     hooks:
       - id: architecture-health
@@ -144,10 +148,10 @@ repos:
         args: [scripts/analyze_architecture.py]
         language: system
         pass_filenames: false
-        stages: [pre-push]
+        stages: [manual]  # Changed from pre-push to manual
 
   # ============================================
-  # 10. GRAPH GENERATION (Pre-push) - ISO 42010
+  # 10. GRAPH GENERATION (Manual) - ISO 42010
   # ============================================
   - repo: local
     hooks:
@@ -157,11 +161,10 @@ repos:
         args: [scripts/generate_graphs.py]
         language: system
         pass_filenames: false
-        stages: [pre-push]
-        always_run: true
+        stages: [manual]  # Changed from pre-push to manual
 
   # ============================================
-  # 11. ISO DOCUMENTATION UPDATE (Pre-push)
+  # 11. ISO DOCUMENTATION UPDATE (Manual)
   # ============================================
   - repo: local
     hooks:
@@ -171,5 +174,4 @@ repos:
         args: [scripts/update_iso_docs.py]
         language: system
         pass_filenames: false
-        stages: [pre-push]
-        always_run: true
+        stages: [manual]  # Changed from pre-push to manual
