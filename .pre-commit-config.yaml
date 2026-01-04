@@ -92,8 +92,8 @@ repos:
     hooks:
       - id: pytest
         name: "Run tests (pytest)"
-        entry: pytest
-        args: [tests/, -v, --tb=short]
+        entry: python
+        args: [-m, pytest, tests/, -v, --tb=short]
         language: system
         pass_filenames: false
         stages: [pre-push]
@@ -101,8 +101,8 @@ repos:
 
       - id: pytest-cov
         name: "Coverage threshold (70%)"
-        entry: pytest
-        args: [--cov=app, --cov=services, --cov-fail-under=70, -q]
+        entry: python
+        args: [-m, pytest, --cov=app, --cov=services, --cov-fail-under=70, -q]
         language: system
         pass_filenames: false
         stages: [pre-push]
@@ -114,8 +114,8 @@ repos:
     hooks:
       - id: xenon
         name: "Complexity threshold (Xenon)"
-        entry: xenon
-        args: [--max-absolute=B, --max-modules=B, --max-average=A, app/, services/]
+        entry: python
+        args: [-m, xenon, --max-absolute=B, --max-modules=B, --max-average=A, app/, services/]
         language: system
         pass_filenames: false
         stages: [pre-push]
@@ -127,8 +127,8 @@ repos:
     hooks:
       - id: pip-audit
         name: "Dependency audit (pip-audit)"
-        entry: pip-audit
-        args: [--strict]
+        entry: python
+        args: [-m, pip_audit, --strict]
         language: system
         pass_filenames: false
         stages: [pre-push]
