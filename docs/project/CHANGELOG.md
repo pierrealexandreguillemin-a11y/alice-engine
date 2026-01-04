@@ -8,6 +8,17 @@
 ## [Unreleased]
 
 ### Added
+- **Module `scripts/ffe_rules_features.py`** - Implementation regles FFE
+  - Types stricts: TypeCompetition, NiveauCompetition, Sexe, Joueur, Equipe
+  - Detection type competition (A02, F01, C01, C03, C04, J02, J03, REG, DEP)
+  - Calcul joueur brule avec seuils variables (1-4 matchs selon competition)
+  - Calcul noyau (50% ou 2 absolu selon niveau)
+  - Validation composition complete (ordre Elo, mutes, quotas)
+  - Zones d'enjeu (montee, descente, danger, mi_tableau)
+- **Tests unitaires** `tests/test_ffe_rules_features.py` (66 tests)
+- **Features reglementaires ML** dans `feature_engineering.py`
+  - Features: nb_equipes, niveau_max, niveau_min, type_competition, multi_equipe
+  - Features equipe: zone_enjeu, niveau_hierarchique
 - Structure projet complete (ISO 42010 SRP)
 - API FastAPI avec endpoints /health et /predict
 - Service ALI (Adversarial Lineup Inference) - placeholder

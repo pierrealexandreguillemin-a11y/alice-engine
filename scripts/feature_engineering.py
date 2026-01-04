@@ -25,6 +25,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from scripts.ffe_rules_features import (
+    TypeCompetition,
+    calculer_zone_enjeu,
+    detecter_type_competition,
+    get_niveau_equipe,
+)
+
 # Configuration paths
 PROJECT_DIR = Path(__file__).parent.parent
 DEFAULT_DATA_DIR = PROJECT_DIR / "data"
@@ -324,6 +331,196 @@ def calculate_board_position(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ==============================================================================
+# FEATURES REGLEMENTAIRES FFE
+# ==============================================================================
+
+
+def build_historique_brulage(df: pd.DataFrame) -> dict[str, dict[str, int]]:
+    """
+    Construit l'historique de brulage par joueur.
+
+    Compte le nombre de matchs joues par chaque joueur dans chaque equipe.
+
+    Args:
+        df: DataFrame echiquiers
+
+    Returns:
+        {joueur_nom: {equipe_nom: nb_matchs}}
+    """
+    historique: dict[str, dict[str, int]] = {}
+
+    for couleur in ["blanc", "noir"]:
+        nom_col = f"{couleur}_nom"
+        df_couleur = df[df[nom_col].notna()].copy()
+
+        for _, row in df_couleur.iterrows():
+            joueur = str(row[nom_col])
+            equipe = str(row[f"equipe_{'dom' if couleur == 'blanc' else 'ext'}"])
+
+            if joueur not in historique:
+                historique[joueur] = {}
+            if equipe not in historique[joueur]:
+                historique[joueur][equipe] = 0
+            historique[joueur][equipe] += 1
+
+    return historique
+
+
+def build_historique_noyau(df: pd.DataFrame) -> dict[str, set[str]]:
+    """
+    Construit l'historique du noyau par equipe.
+
+    Identifie les joueurs ayant deja joue pour chaque equipe.
+
+    Args:
+        df: DataFrame echiquiers
+
+    Returns:
+        {equipe_nom: set(joueur_noms)}
+    """
+    noyau: dict[str, set[str]] = {}
+
+    for couleur in ["blanc", "noir"]:
+        nom_col = f"{couleur}_nom"
+        equipe_col = f"equipe_{'dom' if couleur == 'blanc' else 'ext'}"
+        df_couleur = df[df[nom_col].notna()].copy()
+
+        for _, row in df_couleur.iterrows():
+            joueur = str(row[nom_col])
+            equipe = str(row[equipe_col])
+
+            if equipe not in noyau:
+                noyau[equipe] = set()
+            noyau[equipe].add(joueur)
+
+    return noyau
+
+
+def extract_ffe_regulatory_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extrait les features reglementaires FFE.
+
+    Calcule pour chaque joueur:
+    - nb_equipes: nombre d'equipes differentes jouees
+    - niveau_max: niveau hierarchique max joue (1=Top16)
+    - niveau_min: niveau hierarchique min joue
+    - type_competition: type de competition le plus frequent
+    - matchs_par_niveau: distribution des matchs par niveau
+
+    Args:
+        df: DataFrame echiquiers
+
+    Returns:
+        DataFrame avec features reglementaires par joueur
+    """
+    logger.info("Extraction features reglementaires FFE...")
+
+    features_data = []
+
+    for couleur in ["blanc", "noir"]:
+        nom_col = f"{couleur}_nom"
+        equipe_col = f"equipe_{'dom' if couleur == 'blanc' else 'ext'}"
+        competition_col = "competition"
+
+        df_couleur = df[df[nom_col].notna()].copy()
+
+        for joueur, group in df_couleur.groupby(nom_col):
+            equipes = group[equipe_col].unique()
+            niveaux = [get_niveau_equipe(str(eq)) for eq in equipes]
+
+            # Competition la plus frequente
+            if competition_col in group.columns:
+                competitions = group[competition_col].dropna()
+                if len(competitions) > 0:
+                    type_comp = detecter_type_competition(str(competitions.mode().iloc[0]))
+                else:
+                    type_comp = TypeCompetition.A02
+            else:
+                type_comp = TypeCompetition.A02
+
+            features_data.append(
+                {
+                    "joueur_nom": joueur,
+                    "nb_equipes": len(equipes),
+                    "niveau_max": min(niveaux) if niveaux else 10,  # min = plus fort
+                    "niveau_min": max(niveaux) if niveaux else 10,
+                    "type_competition": type_comp.value,
+                    "multi_equipe": len(equipes) > 1,
+                }
+            )
+
+    result = pd.DataFrame(features_data)
+    if len(result) > 0:
+        result = (
+            result.groupby("joueur_nom")
+            .agg(
+                nb_equipes=("nb_equipes", "max"),
+                niveau_max=("niveau_max", "min"),
+                niveau_min=("niveau_min", "max"),
+                type_competition=("type_competition", "first"),
+                multi_equipe=("multi_equipe", "max"),
+            )
+            .reset_index()
+        )
+
+    logger.info(f"  {len(result)} joueurs avec features reglementaires")
+    logger.info(f"  {result['multi_equipe'].sum()} joueurs multi-equipes")
+
+    return result
+
+
+def extract_team_enjeu_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extrait les features de zone d'enjeu par equipe et saison.
+
+    Args:
+        df: DataFrame echiquiers avec colonnes ronde, saison
+
+    Returns:
+        DataFrame avec zone_enjeu par equipe/saison
+    """
+    logger.info("Extraction features zones d'enjeu...")
+
+    if "ronde" not in df.columns or "saison" not in df.columns:
+        logger.warning("  Colonnes ronde/saison manquantes, skip zones enjeu")
+        return pd.DataFrame()
+
+    features_data = []
+
+    for equipe_col in ["equipe_dom", "equipe_ext"]:
+        for (equipe, saison), group in df.groupby([equipe_col, "saison"]):
+            # Estimation simplifiee basee sur le niveau detecte
+            division = str(equipe).split()[0] if equipe else "N4"
+            niveau = get_niveau_equipe(str(equipe))
+
+            # LIMITATION: Position reelle non disponible dans echiquiers.parquet
+            # Zone enjeu sera "mi_tableau" par defaut
+            # TODO: Enrichir avec donnees classement si disponibles
+            nb_equipes = 10 if niveau <= 4 else 8
+            position_estimee = nb_equipes // 2  # Toujours milieu
+
+            zone = calculer_zone_enjeu(position_estimee, nb_equipes, division)
+
+            features_data.append(
+                {
+                    "equipe": equipe,
+                    "saison": saison,
+                    "zone_enjeu": zone,
+                    "niveau_hierarchique": niveau,
+                    "nb_rondes": group["ronde"].nunique(),
+                }
+            )
+
+    result = pd.DataFrame(features_data)
+    if len(result) > 0:
+        result = result.drop_duplicates(subset=["equipe", "saison"])
+
+    logger.info(f"  {len(result)} equipes/saisons avec zones enjeu")
+
+    return result
+
+
+# ==============================================================================
 # SPLIT TEMPOREL
 # ==============================================================================
 
@@ -388,32 +585,37 @@ def run_feature_engineering(data_dir: Path, output_dir: Path) -> None:
     logger.info(f"  {len(df):,} echiquiers charges")
 
     # 1. Features de fiabilite (AVANT filtrage)
-    logger.info("\n[1/5] Extraction features fiabilite...")
+    logger.info("\n[1/6] Extraction features fiabilite...")
     club_reliability = extract_club_reliability(df)
     player_reliability = extract_player_reliability(df)
     player_monthly = extract_player_monthly_pattern(df)
 
     # 2. Filtrer pour features derivees (parties jouees)
-    logger.info("\n[2/5] Filtrage parties jouees...")
+    logger.info("\n[2/6] Filtrage parties jouees...")
     df_played = df[
         ~df["type_resultat"].isin(["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"])
     ]
-    logger.info(f"  {len(df_played):,} parties jouees ({len(df_played)/len(df)*100:.1f}%)")
+    logger.info(f"  {len(df_played):,} parties jouees ({len(df_played) / len(df) * 100:.1f}%)")
 
     # 3. Features derivees
-    logger.info("\n[3/5] Calcul features derivees...")
+    logger.info("\n[3/6] Calcul features derivees...")
     recent_form = calculate_recent_form(df_played)
     board_position = calculate_board_position(df_played)
 
-    # 4. Exclure Elo=0
-    logger.info("\n[4/5] Filtrage Elo > 0...")
+    # 4. Features reglementaires FFE
+    logger.info("\n[4/6] Extraction features reglementaires FFE...")
+    ffe_regulatory = extract_ffe_regulatory_features(df_played)
+    team_enjeu = extract_team_enjeu_features(df_played)
+
+    # 5. Exclure Elo=0
+    logger.info("\n[5/6] Filtrage Elo > 0...")
     df_clean = df_played[(df_played["blanc_elo"] > 0) & (df_played["noir_elo"] > 0)]
     logger.info(
-        f"  {len(df_clean):,} parties avec Elo valide ({len(df_clean)/len(df_played)*100:.1f}%)"
+        f"  {len(df_clean):,} parties avec Elo valide ({len(df_clean) / len(df_played) * 100:.1f}%)"
     )
 
-    # 5. Split temporel
-    logger.info("\n[5/5] Split temporel...")
+    # 6. Split temporel
+    logger.info("\n[6/6] Split temporel...")
     train, valid, test = temporal_split(df_clean)
 
     # Export
@@ -428,6 +630,11 @@ def run_feature_engineering(data_dir: Path, output_dir: Path) -> None:
     # Features derivees
     recent_form.to_parquet(output_dir / "player_form.parquet", index=False)
     board_position.to_parquet(output_dir / "player_board.parquet", index=False)
+
+    # Features reglementaires FFE
+    ffe_regulatory.to_parquet(output_dir / "ffe_regulatory.parquet", index=False)
+    if len(team_enjeu) > 0:
+        team_enjeu.to_parquet(output_dir / "team_enjeu.parquet", index=False)
 
     # Splits
     train.to_parquet(output_dir / "train.parquet", index=False)
@@ -447,6 +654,10 @@ def run_feature_engineering(data_dir: Path, output_dir: Path) -> None:
     logger.info("  Features derivees:")
     logger.info(f"    - player_form.parquet ({len(recent_form)} joueurs)")
     logger.info(f"    - player_board.parquet ({len(board_position)} joueurs)")
+    logger.info("  Features reglementaires FFE:")
+    logger.info(f"    - ffe_regulatory.parquet ({len(ffe_regulatory)} joueurs)")
+    if len(team_enjeu) > 0:
+        logger.info(f"    - team_enjeu.parquet ({len(team_enjeu)} equipes/saisons)")
     logger.info("  Splits temporels:")
     logger.info(f"    - train.parquet ({len(train):,} echiquiers)")
     logger.info(f"    - valid.parquet ({len(valid):,} echiquiers)")

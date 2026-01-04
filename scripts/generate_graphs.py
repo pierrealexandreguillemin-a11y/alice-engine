@@ -182,7 +182,7 @@ def generate_complexity_html(report_dir: Path, output: Path) -> None:
 </head>
 <body>
     <h1>Rapport Complexite - Alice Engine</h1>
-    <p>Genere le: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    <p>Genere le: {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
 
     <div class="card">
         <h2>Complexite Cyclomatique (Radon CC)</h2>

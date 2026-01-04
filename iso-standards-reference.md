@@ -245,4 +245,72 @@ npm run build
 
 ---
 
-*Dernière MAJ: 2025-01-02 | Chess App v1.4.2*
+---
+
+## Python Implementation (ALICE Engine)
+
+### FFE Rules Module (`scripts/ffe_rules_features.py`)
+
+Implementation complète des règles FFE en Python avec typage strict (ISO/IEC 5055):
+
+```python
+# Types disponibles
+from scripts.ffe_rules_features import (
+    TypeCompetition,      # Enum: A02, F01, C01, C03, C04, J02, J03, REG, DEP
+    NiveauCompetition,    # Enum: TOP16, N1, N2, N3, N4, REGIONAL, DEPARTEMENTAL
+    Sexe,                 # Enum: MASCULIN, FEMININ
+    Joueur,               # dataclass: id_fide, nom, elo, sexe, nationalite, mute
+    Equipe,               # dataclass: nom, club, division, ronde, groupe
+    ReglesCompetition,    # TypedDict: taille_equipe, seuil_brulage, noyau, etc.
+)
+
+# Fonctions de détection
+detecter_type_competition(nom: str) -> TypeCompetition
+get_niveau_equipe(equipe: str) -> int  # 1=Top16, 10=plus faible
+get_regles_competition(type_comp: TypeCompetition) -> ReglesCompetition
+
+# Règle joueur brûlé (A02 Art. 3.7.c)
+est_brule(joueur_id, equipe_cible, historique, seuil=3) -> bool
+matchs_avant_brulage(joueur_id, equipe_sup, historique, seuil=3) -> int
+
+# Règle noyau (A02 Art. 3.7.f)
+get_noyau(equipe_nom, historique_noyau) -> set[int]
+calculer_pct_noyau(composition_ids, equipe_nom, historique) -> float
+valide_noyau(composition_ids, equipe, historique, regles) -> bool
+
+# Zones d'enjeu (classement)
+calculer_zone_enjeu(position, nb_equipes, division) -> str
+
+# Validation composition
+valider_composition(composition, equipe, hist_brulage, hist_noyau, regles) -> list[str]
+```
+
+### Feature Engineering (`scripts/feature_engineering.py`)
+
+Pipeline ML intégrant les features FFE:
+
+| Feature | Type | Source |
+|---------|------|--------|
+| `nb_equipes` | int | Multi-équipes joueur |
+| `niveau_max` | int | Niveau hiérarchique max joué |
+| `niveau_min` | int | Niveau hiérarchique min joué |
+| `type_competition` | cat | A02, F01, C01, etc. |
+| `multi_equipe` | bool | Joueur dans plusieurs équipes |
+| `zone_enjeu` | cat | montee/danger/mi_tableau |
+| `niveau_hierarchique` | int | Niveau équipe (1-10) |
+
+### Tests (`tests/test_ffe_rules_features.py`)
+
+66 tests couvrant:
+- Détection type compétition (12 tests)
+- Niveau équipe (8 tests)
+- Joueur brûlé (6 tests)
+- Noyau (9 tests)
+- Zones d'enjeu (7 tests)
+- Validation composition (8 tests)
+- Règles par compétition (7 tests)
+- Mouvement joueurs (3 tests)
+
+---
+
+*Dernière MAJ: 2026-01-04 | ALICE Engine v0.2.0*

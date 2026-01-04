@@ -796,12 +796,25 @@ def get_regles_scolaire() -> dict:
 
 ---
 
-## 8. Prochaines etapes
+## 8. Etat d'implementation
 
-1. [ ] Parser compositions pour extraire compteurs joueur_brule
-2. [ ] Ajouter features reglementaires dans feature_engineering.py
-3. [ ] Implementer validation CE selon regles
-4. [ ] Tester sur donnees historiques (infractions detectees?)
+| Tache | Statut | Fichier |
+|-------|--------|---------|
+| Types et dataclasses stricts | FAIT | `scripts/ffe_rules_features.py` |
+| Detection type competition | FAIT | `detecter_type_competition()` |
+| Regles par competition | FAIT | `get_regles_competition()` |
+| Calcul joueur brule | FAIT | `est_brule()`, `matchs_avant_brulage()` |
+| Calcul noyau | FAIT | `get_noyau()`, `calculer_pct_noyau()`, `valide_noyau()` |
+| Validation composition | FAIT | `valider_composition()` |
+| Features reglementaires ML | FAIT | `feature_engineering.py` |
+| Tests unitaires | FAIT | `tests/test_ffe_rules_features.py` (66 tests) |
+
+### Prochaines etapes
+
+1. [ ] Enrichir dataset avec features calculees sur historique complet
+2. [ ] Valider detection infractions sur donnees historiques
+3. [ ] Integrer validation CE dans API FastAPI
+4. [ ] Ajouter metriques de conformite reglementaire
 
 ---
 
