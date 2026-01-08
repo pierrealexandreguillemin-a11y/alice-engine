@@ -228,14 +228,19 @@ standings = calculate_standings(df)  # Position réelle par ronde
 
 **✅ IMPLÉMENTÉ** dans `feature_engineering.py:calculate_color_performance()`
 
-| Feature | Type | Description | Status |
-|---------|------|-------------|--------|
-| `score_blancs` | float | Score moyen avec blancs (0-1) | ✅ |
-| `score_noirs` | float | Score moyen avec noirs (0-1) | ✅ |
-| `nb_blancs` | int | Nombre de parties avec blancs | ✅ |
-| `nb_noirs` | int | Nombre de parties avec noirs | ✅ |
-| `avantage_blancs` | float | score_blancs - score_noirs | ✅ |
-| `couleur_preferee` | cat | 'blanc', 'noir', 'neutre' | ✅ |
+| Feature | Type | Plage | Description | Status |
+|---------|------|-------|-------------|--------|
+| `score_blancs` | float | [0, 1] | Score moyen quand joue avec blancs | ✅ |
+| `score_noirs` | float | [0, 1] | Score moyen quand joue avec noirs | ✅ |
+| `nb_blancs` | int | ≥0 | Nombre de parties avec blancs | ✅ |
+| `nb_noirs` | int | ≥0 | Nombre de parties avec noirs | ✅ |
+| `avantage_blancs` | float | [-1, 1] | score_blancs - score_noirs | ✅ |
+| `couleur_preferee` | cat | 3 val | 'blanc', 'noir', 'neutre' | ✅ |
+
+**Valeurs score** (par partie):
+- `1.0` = Victoire (notation échecs: 1-0 si blanc, 0-1 si noir)
+- `0.5` = Nulle (notation échecs: ½-½)
+- `0.0` = Défaite
 
 **Convention échecs interclubs**:
 - Échiquiers impairs (1, 3, 5, 7) = Blancs pour équipe domicile
