@@ -34,18 +34,44 @@ select = [
     "UP",     # pyupgrade
     "S",      # flake8-bandit (securite)
     "N",      # pep8-naming
+    "ANN",    # flake8-annotations (ISO 5055 strict typing)
+    "D",      # pydocstyle (docstrings)
+    "PLC",    # pylint convention
+    "PLR",    # pylint refactor
+    "TCH",    # flake8-type-checking
+    "G",      # flake8-logging-format
+    # Note: COM (commas) disabled - conflicts with ruff formatter
 ]
 ignore = [
     "E501",   # line too long (gere par line-length)
     "S101",   # assert (ok pour tests)
     "B008",   # function call in default arg (ok pour FastAPI Depends)
+    "ANN401", # Any disallowed - elimine manuellement
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D203",   # 1 blank line before class (incompatible D211)
+    "D213",   # Multi-line summary second line (incompatible D212)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]  # Autoriser assert dans tests
+"tests/**/*.py" = [
+    "S101",              # assert ok dans tests
+    "D103",              # docstrings fonction optionnel
+    "ANN",               # annotations optionnelles
+    "PLR2004",           # magic values ok (test values)
+    "N806",              # X uppercase ok (ML convention)
+]
 "scripts/**/*.py" = [
-    "S603", "S607",  # Scripts internes de confiance
+    "S603", "S607",      # Scripts internes de confiance
     "N802", "N803", "N806",  # ML convention: X_train, X_test (majuscules features)
+    "G004", "G003",      # f-string/concat logging ok (lisibilite)
+    "PLC0415",           # imports in functions (lazy imports ML)
+    "PLR0913",           # too many arguments (ML training functions)
+    "PLR0912", "PLR0915",  # too many branches/statements (ML pipelines)
+    "D401",              # imperative mood (non-anglais)
+    "D413",              # blank line after last section
+    "PLR2004",           # magic values (ML thresholds)
+    "TCH001", "TCH003", "TCH004",  # type imports flexibility
 ]
 
 [tool.ruff.lint.isort]
