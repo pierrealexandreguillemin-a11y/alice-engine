@@ -5,7 +5,9 @@ Tests unitaires pour la normalisation des modèles production.
 """
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -14,14 +16,23 @@ from scripts.model_registry import (
     EnvironmentInfo,
     ModelArtifact,
     ProductionModelCard,
+    apply_retention_policy,
     compute_data_lineage,
     compute_dataframe_hash,
     compute_file_checksum,
+    compute_model_signature,
+    extract_feature_importance,
+    generate_signing_key,
     get_environment_info,
     get_git_info,
     get_package_versions,
+    get_retention_status,
     list_model_versions,
     rollback_to_version,
+    validate_dataframe_schema,
+    validate_model_integrity,
+    validate_train_valid_test_schema,
+    verify_model_signature,
 )
 
 
@@ -323,3 +334,383 @@ class TestRollback:
         result = rollback_to_version(tmp_path, "v20240101")
 
         assert result is True
+
+
+# ==============================================================================
+# P1 TESTS - Validation intégrité, Feature importance, Intégration
+# ==============================================================================
+
+
+class TestValidateModelIntegrity:
+    """Tests pour validate_model_integrity (ISO 27001)."""
+
+    def test_valid_integrity(self, tmp_path: Path) -> None:
+        """Test validation réussie avec checksum correct."""
+        model_file = tmp_path / "model.cbm"
+        model_file.write_bytes(b"model binary data")
+        checksum = compute_file_checksum(model_file)
+
+        artifact = ModelArtifact(
+            name="CatBoost",
+            path=model_file,
+            format=".cbm",
+            checksum=checksum,
+            size_bytes=model_file.stat().st_size,
+        )
+
+        result = validate_model_integrity(artifact)
+
+        assert result is True
+
+    def test_invalid_checksum(self, tmp_path: Path) -> None:
+        """Test validation échouée avec checksum incorrect."""
+        model_file = tmp_path / "model.cbm"
+        model_file.write_bytes(b"model binary data")
+
+        artifact = ModelArtifact(
+            name="CatBoost",
+            path=model_file,
+            format=".cbm",
+            checksum="invalid_checksum_" + "0" * 48,  # Wrong checksum
+            size_bytes=model_file.stat().st_size,
+        )
+
+        result = validate_model_integrity(artifact)
+
+        assert result is False
+
+    def test_missing_file(self, tmp_path: Path) -> None:
+        """Test validation échouée avec fichier manquant."""
+        artifact = ModelArtifact(
+            name="CatBoost",
+            path=tmp_path / "nonexistent.cbm",
+            format=".cbm",
+            checksum="a" * 64,
+            size_bytes=100,
+        )
+
+        result = validate_model_integrity(artifact)
+
+        assert result is False
+
+
+class TestExtractFeatureImportance:
+    """Tests pour extract_feature_importance (ISO 42001)."""
+
+    def test_catboost_feature_importance(self) -> None:
+        """Test extraction importance CatBoost."""
+        mock_model = MagicMock()
+        mock_model.get_feature_importance.return_value = np.array([0.3, 0.5, 0.2])
+
+        feature_names = ["elo", "niveau", "ronde"]
+        importance = extract_feature_importance(mock_model, "CatBoost", feature_names)
+
+        assert isinstance(importance, dict)
+        assert len(importance) == 3
+        # Normalisé et trié par importance décroissante
+        assert list(importance.keys())[0] == "niveau"  # 0.5 is highest
+        assert abs(sum(importance.values()) - 1.0) < 0.001  # Sum to 1
+
+    def test_xgboost_feature_importance(self) -> None:
+        """Test extraction importance XGBoost."""
+        mock_model = MagicMock()
+        mock_model.feature_importances_ = np.array([0.4, 0.4, 0.2])
+
+        feature_names = ["elo", "niveau", "ronde"]
+        importance = extract_feature_importance(mock_model, "XGBoost", feature_names)
+
+        assert isinstance(importance, dict)
+        assert len(importance) == 3
+        assert abs(sum(importance.values()) - 1.0) < 0.001
+
+    def test_lightgbm_feature_importance(self) -> None:
+        """Test extraction importance LightGBM."""
+        mock_model = MagicMock()
+        mock_model.feature_importances_ = np.array([0.1, 0.6, 0.3])
+
+        feature_names = ["elo", "niveau", "ronde"]
+        importance = extract_feature_importance(mock_model, "LightGBM", feature_names)
+
+        assert isinstance(importance, dict)
+        assert len(importance) == 3
+        assert list(importance.keys())[0] == "niveau"  # 0.6 is highest
+
+    def test_unknown_model_returns_empty(self) -> None:
+        """Test modèle inconnu retourne dict vide."""
+        mock_model = MagicMock(spec=[])  # No feature importance methods
+
+        feature_names = ["elo", "niveau"]
+        importance = extract_feature_importance(mock_model, "UnknownModel", feature_names)
+
+        assert importance == {}
+
+    def test_empty_features_list(self) -> None:
+        """Test liste features vide."""
+        mock_model = MagicMock()
+        mock_model.get_feature_importance.return_value = np.array([])
+
+        importance = extract_feature_importance(mock_model, "CatBoost", [])
+
+        assert importance == {}
+
+
+# ==============================================================================
+# P2 TESTS - Signature HMAC, Schema validation, Retention policy
+# ==============================================================================
+
+
+class TestModelSignature:
+    """Tests pour signature HMAC-SHA256 (ISO 27001)."""
+
+    def test_generate_signing_key(self) -> None:
+        """Test génération clé de signature."""
+        key = generate_signing_key()
+
+        assert len(key) == 64  # 32 bytes hex
+        assert all(c in "0123456789abcdef" for c in key)
+
+    def test_compute_signature(self, tmp_path: Path) -> None:
+        """Test calcul signature."""
+        model_file = tmp_path / "model.cbm"
+        model_file.write_bytes(b"model binary data")
+        key = generate_signing_key()
+
+        signature = compute_model_signature(model_file, key)
+
+        assert len(signature) == 64  # SHA-256 hex
+
+    def test_signature_deterministic(self, tmp_path: Path) -> None:
+        """Test signature déterministe pour même fichier et clé."""
+        model_file = tmp_path / "model.cbm"
+        model_file.write_bytes(b"model binary data")
+        key = generate_signing_key()
+
+        sig1 = compute_model_signature(model_file, key)
+        sig2 = compute_model_signature(model_file, key)
+
+        assert sig1 == sig2
+
+    def test_different_key_different_signature(self, tmp_path: Path) -> None:
+        """Test clés différentes produisent signatures différentes."""
+        model_file = tmp_path / "model.cbm"
+        model_file.write_bytes(b"model binary data")
+        key1 = generate_signing_key()
+        key2 = generate_signing_key()
+
+        sig1 = compute_model_signature(model_file, key1)
+        sig2 = compute_model_signature(model_file, key2)
+
+        assert sig1 != sig2
+
+    def test_verify_valid_signature(self, tmp_path: Path) -> None:
+        """Test vérification signature valide."""
+        model_file = tmp_path / "model.cbm"
+        model_file.write_bytes(b"model binary data")
+        key = generate_signing_key()
+        signature = compute_model_signature(model_file, key)
+
+        result = verify_model_signature(model_file, signature, key)
+
+        assert result is True
+
+    def test_verify_invalid_signature(self, tmp_path: Path) -> None:
+        """Test vérification signature invalide."""
+        model_file = tmp_path / "model.cbm"
+        model_file.write_bytes(b"model binary data")
+        key = generate_signing_key()
+
+        result = verify_model_signature(model_file, "invalid" + "0" * 56, key)
+
+        assert result is False
+
+    def test_verify_missing_file(self, tmp_path: Path) -> None:
+        """Test vérification fichier manquant."""
+        key = generate_signing_key()
+
+        result = verify_model_signature(tmp_path / "nonexistent.cbm", "a" * 64, key)
+
+        assert result is False
+
+
+class TestSchemaValidation:
+    """Tests pour validation schema DataFrame (ISO 5259)."""
+
+    def test_valid_schema(self) -> None:
+        """Test schema valide."""
+        df = pd.DataFrame(
+            {
+                "resultat_blanc": [1.0, 0.0, 1.0],
+                "blanc_elo": [1500, 1600, 1700],
+                "noir_elo": [1450, 1550, 1650],
+                "diff_elo": [50, 50, 50],
+            }
+        )
+
+        result = validate_dataframe_schema(df)
+
+        assert result.is_valid is True
+        assert len(result.errors) == 0
+
+    def test_missing_required_column(self) -> None:
+        """Test colonne requise manquante."""
+        df = pd.DataFrame(
+            {
+                "blanc_elo": [1500, 1600],
+                "noir_elo": [1450, 1550],
+            }
+        )
+
+        result = validate_dataframe_schema(df)
+
+        assert result.is_valid is False
+        assert any("resultat_blanc" in e for e in result.errors)
+
+    def test_non_numeric_column(self) -> None:
+        """Test colonne non-numérique."""
+        df = pd.DataFrame(
+            {
+                "resultat_blanc": [1.0, 0.0],
+                "blanc_elo": ["high", "low"],  # Should be numeric
+                "noir_elo": [1450, 1550],
+                "diff_elo": [50, 50],
+            }
+        )
+
+        result = validate_dataframe_schema(df)
+
+        assert result.is_valid is False
+        assert any("blanc_elo" in e and "numeric" in e for e in result.errors)
+
+    def test_empty_dataframe(self) -> None:
+        """Test DataFrame vide."""
+        df = pd.DataFrame({"resultat_blanc": []})
+
+        result = validate_dataframe_schema(df)
+
+        assert result.is_valid is False
+        assert any("empty" in e.lower() for e in result.errors)
+
+    def test_high_null_ratio_warning(self) -> None:
+        """Test warning pour taux de null élevé."""
+        df = pd.DataFrame(
+            {
+                "resultat_blanc": [1.0, None, None, None, None],  # 80% null
+                "blanc_elo": [1500, 1600, 1700, 1800, 1900],
+            }
+        )
+
+        result = validate_dataframe_schema(df, required_columns=set())
+
+        assert len(result.warnings) > 0
+        assert any("null" in w.lower() for w in result.warnings)
+
+    def test_allow_missing_columns(self) -> None:
+        """Test allow_missing=True."""
+        df = pd.DataFrame({"other_col": [1, 2, 3]})
+
+        result = validate_dataframe_schema(df, allow_missing=True)
+
+        assert result.is_valid is True
+        assert len(result.warnings) > 0  # Warning instead of error
+
+    def test_train_valid_test_consistency(self) -> None:
+        """Test cohérence train/valid/test."""
+        train = pd.DataFrame(
+            {
+                "resultat_blanc": [1.0] * 100,
+                "blanc_elo": [1500] * 100,
+                "noir_elo": [1400] * 100,
+                "diff_elo": [100] * 100,
+            }
+        )
+        valid = train.copy()
+        test = train.head(20).copy()
+
+        result = validate_train_valid_test_schema(train, valid, test)
+
+        assert result.is_valid is True
+
+
+class TestRetentionPolicy:
+    """Tests pour politique de rétention (ISO 27001)."""
+
+    def test_retention_under_limit(self, tmp_path: Path) -> None:
+        """Test rétention sous la limite."""
+        # Créer 3 versions (sous DEFAULT_MAX_VERSIONS=10)
+        for i in range(3):
+            v = tmp_path / f"v2024010{i}_120000"
+            v.mkdir()
+            (v / "metadata.json").write_text("{}")
+
+        deleted = apply_retention_policy(tmp_path)
+
+        assert len(deleted) == 0
+        assert len(list_model_versions(tmp_path)) == 3
+
+    def test_retention_over_limit(self, tmp_path: Path) -> None:
+        """Test rétention au-dessus de la limite."""
+        # Créer 5 versions avec max_versions=3
+        for i in range(5):
+            v = tmp_path / f"v2024010{i}_120000"
+            v.mkdir()
+            (v / "metadata.json").write_text("{}")
+
+        deleted = apply_retention_policy(tmp_path, max_versions=3)
+
+        assert len(deleted) == 2  # 5 - 3 = 2
+        assert len(list_model_versions(tmp_path)) == 3
+
+    def test_retention_dry_run(self, tmp_path: Path) -> None:
+        """Test dry_run ne supprime pas."""
+        for i in range(5):
+            v = tmp_path / f"v2024010{i}_120000"
+            v.mkdir()
+            (v / "metadata.json").write_text("{}")
+
+        deleted = apply_retention_policy(tmp_path, max_versions=3, dry_run=True)
+
+        assert len(deleted) == 2
+        assert len(list_model_versions(tmp_path)) == 5  # Rien supprimé
+
+    def test_retention_keeps_newest(self, tmp_path: Path) -> None:
+        """Test garde les plus récentes."""
+        versions = ["v20240101_120000", "v20240102_120000", "v20240103_120000"]
+        for v_name in versions:
+            v = tmp_path / v_name
+            v.mkdir()
+            (v / "metadata.json").write_text("{}")
+
+        apply_retention_policy(tmp_path, max_versions=2)
+
+        remaining = list_model_versions(tmp_path)
+        assert len(remaining) == 2
+        # Les plus récentes gardées
+        assert remaining[0].name == "v20240103_120000"
+        assert remaining[1].name == "v20240102_120000"
+
+    def test_get_retention_status(self, tmp_path: Path) -> None:
+        """Test statut rétention."""
+        for i in range(3):
+            v = tmp_path / f"v2024010{i}_120000"
+            v.mkdir()
+            (v / "metadata.json").write_text("{}")
+
+        status = get_retention_status(tmp_path, max_versions=5)
+
+        assert status["current_count"] == 3
+        assert status["max_versions"] == 5
+        assert status["versions_to_delete"] == 0
+        assert status["retention_applied"] is True
+
+    def test_retention_status_over_limit(self, tmp_path: Path) -> None:
+        """Test statut quand au-dessus limite."""
+        for i in range(5):
+            v = tmp_path / f"v2024010{i}_120000"
+            v.mkdir()
+            (v / "metadata.json").write_text("{}")
+
+        status = get_retention_status(tmp_path, max_versions=3)
+
+        assert status["current_count"] == 5
+        assert status["versions_to_delete"] == 2
+        assert status["retention_applied"] is False

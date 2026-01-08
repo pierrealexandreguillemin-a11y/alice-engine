@@ -27,10 +27,12 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
 import platform
+import secrets
 import shutil
 import subprocess
 import sys
@@ -56,6 +58,291 @@ MODEL_FORMATS = {
     "LightGBM": ".txt",
 }
 ONNX_OPSET_VERSION = 15
+
+# P2: Retention policy
+DEFAULT_MAX_VERSIONS = 10
+
+# P2: Schema validation - colonnes requises pour les DataFrames ML
+REQUIRED_TRAIN_COLUMNS: set[str] = {"resultat_blanc"}
+REQUIRED_NUMERIC_COLUMNS: set[str] = {"blanc_elo", "noir_elo", "diff_elo"}
+
+
+# ==============================================================================
+# P2: SIGNATURE HMAC-SHA256 (ISO 27001 - Authenticity)
+# ==============================================================================
+
+
+def generate_signing_key() -> str:
+    """Génère une clé de signature HMAC-SHA256 (32 bytes hex)."""
+    return secrets.token_hex(32)
+
+
+def compute_model_signature(file_path: Path, secret_key: str) -> str:
+    """Calcule la signature HMAC-SHA256 d'un fichier modèle.
+
+    Args:
+    ----
+        file_path: Chemin vers le fichier modèle
+        secret_key: Clé secrète HMAC (hex string)
+
+    Returns:
+    -------
+        Signature HMAC-SHA256 en hex
+    """
+    key_bytes = bytes.fromhex(secret_key)
+    h = hmac.new(key_bytes, digestmod=hashlib.sha256)
+
+    with file_path.open("rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+
+    return h.hexdigest()
+
+
+def verify_model_signature(file_path: Path, signature: str, secret_key: str) -> bool:
+    """Vérifie la signature HMAC-SHA256 d'un fichier modèle.
+
+    Args:
+    ----
+        file_path: Chemin vers le fichier modèle
+        signature: Signature attendue (hex)
+        secret_key: Clé secrète HMAC (hex string)
+
+    Returns:
+    -------
+        True si signature valide, False sinon
+    """
+    if not file_path.exists():
+        logger.error(f"File not found for signature verification: {file_path}")
+        return False
+
+    computed = compute_model_signature(file_path, secret_key)
+    is_valid = hmac.compare_digest(computed, signature)
+
+    if not is_valid:
+        logger.error(f"Signature mismatch for {file_path.name}")
+
+    return is_valid
+
+
+def save_signing_key(key: str, key_path: Path) -> None:
+    """Sauvegarde la clé de signature de manière sécurisée."""
+    key_path.write_text(key)
+    # Restrict permissions (Unix only)
+    if platform.system() != "Windows":
+        os.chmod(key_path, 0o600)
+    logger.info(f"  Signing key saved to {key_path.name}")
+
+
+def load_signing_key(key_path: Path) -> str | None:
+    """Charge la clé de signature."""
+    if not key_path.exists():
+        logger.warning(f"Signing key not found: {key_path}")
+        return None
+    return key_path.read_text().strip()
+
+
+# ==============================================================================
+# P2: SCHEMA VALIDATION (ISO 5259 - Data Quality)
+# ==============================================================================
+
+
+@dataclass
+class SchemaValidationResult:
+    """Résultat de validation de schema DataFrame."""
+
+    is_valid: bool
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+def validate_dataframe_schema(
+    df: pd.DataFrame,
+    required_columns: set[str] | None = None,
+    numeric_columns: set[str] | None = None,
+    *,
+    allow_missing: bool = False,
+) -> SchemaValidationResult:
+    """Valide le schema d'un DataFrame pour ML.
+
+    Args:
+    ----
+        df: DataFrame à valider
+        required_columns: Colonnes obligatoires
+        numeric_columns: Colonnes qui doivent être numériques
+        allow_missing: Autoriser les colonnes manquantes (warning au lieu d'erreur)
+
+    Returns:
+    -------
+        SchemaValidationResult avec statut et messages
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if required_columns is None:
+        required_columns = REQUIRED_TRAIN_COLUMNS
+
+    if numeric_columns is None:
+        numeric_columns = REQUIRED_NUMERIC_COLUMNS
+
+    # Vérifier colonnes requises
+    missing_required = required_columns - set(df.columns)
+    if missing_required:
+        msg = f"Missing required columns: {missing_required}"
+        if allow_missing:
+            warnings.append(msg)
+        else:
+            errors.append(msg)
+
+    # Vérifier colonnes numériques
+    present_numeric = numeric_columns & set(df.columns)
+    for col in present_numeric:
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            errors.append(f"Column '{col}' should be numeric, got {df[col].dtype}")
+
+    # Vérifier valeurs nulles excessives (>50%)
+    for col in df.columns:
+        null_ratio = df[col].isnull().mean()
+        if null_ratio > 0.5:
+            warnings.append(f"Column '{col}' has {null_ratio:.1%} null values")
+
+    # Vérifier DataFrame vide
+    if len(df) == 0:
+        errors.append("DataFrame is empty")
+
+    is_valid = len(errors) == 0
+
+    return SchemaValidationResult(is_valid=is_valid, errors=errors, warnings=warnings)
+
+
+def validate_train_valid_test_schema(
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+) -> SchemaValidationResult:
+    """Valide la cohérence des schemas train/valid/test.
+
+    Args:
+    ----
+        train_df: DataFrame d'entraînement
+        valid_df: DataFrame de validation
+        test_df: DataFrame de test
+
+    Returns:
+    -------
+        SchemaValidationResult global
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # Valider chaque DataFrame
+    for name, df in [("train", train_df), ("valid", valid_df), ("test", test_df)]:
+        result = validate_dataframe_schema(df)
+        errors.extend([f"[{name}] {e}" for e in result.errors])
+        warnings.extend([f"[{name}] {w}" for w in result.warnings])
+
+    # Vérifier cohérence des colonnes
+    train_cols = set(train_df.columns)
+    valid_cols = set(valid_df.columns)
+    test_cols = set(test_df.columns)
+
+    if train_cols != valid_cols:
+        diff = train_cols.symmetric_difference(valid_cols)
+        warnings.append(f"Column mismatch train/valid: {diff}")
+
+    if train_cols != test_cols:
+        diff = train_cols.symmetric_difference(test_cols)
+        warnings.append(f"Column mismatch train/test: {diff}")
+
+    # Vérifier ratio des splits
+    total = len(train_df) + len(valid_df) + len(test_df)
+    if total > 0:
+        train_ratio = len(train_df) / total
+        if train_ratio < 0.5:
+            warnings.append(f"Train ratio is low: {train_ratio:.1%}")
+
+    is_valid = len(errors) == 0
+
+    return SchemaValidationResult(is_valid=is_valid, errors=errors, warnings=warnings)
+
+
+# ==============================================================================
+# P2: VERSION RETENTION POLICY (ISO 27001 - Data Lifecycle)
+# ==============================================================================
+
+
+def apply_retention_policy(
+    models_dir: Path,
+    max_versions: int = DEFAULT_MAX_VERSIONS,
+    *,
+    dry_run: bool = False,
+) -> list[Path]:
+    """Applique la politique de rétention des versions.
+
+    Garde les N versions les plus récentes, supprime les anciennes.
+
+    Args:
+    ----
+        models_dir: Répertoire des modèles
+        max_versions: Nombre maximum de versions à conserver
+        dry_run: Si True, liste seulement sans supprimer
+
+    Returns:
+    -------
+        Liste des versions supprimées (ou à supprimer si dry_run)
+    """
+    versions = list_model_versions(models_dir)
+    deleted: list[Path] = []
+
+    if len(versions) <= max_versions:
+        logger.info(f"Retention: {len(versions)}/{max_versions} versions, nothing to delete")
+        return deleted
+
+    # Versions à supprimer (les plus anciennes)
+    to_delete = versions[max_versions:]
+
+    for version_dir in to_delete:
+        if dry_run:
+            logger.info(f"  [DRY RUN] Would delete: {version_dir.name}")
+        else:
+            try:
+                shutil.rmtree(version_dir)
+                logger.info(f"  Deleted old version: {version_dir.name}")
+            except OSError as e:
+                logger.warning(f"  Failed to delete {version_dir.name}: {e}")
+                continue
+        deleted.append(version_dir)
+
+    logger.info(f"Retention policy applied: kept {max_versions}, deleted {len(deleted)} versions")
+
+    return deleted
+
+
+def get_retention_status(
+    models_dir: Path, max_versions: int = DEFAULT_MAX_VERSIONS
+) -> dict[str, object]:
+    """Retourne le statut de la politique de rétention.
+
+    Args:
+    ----
+        models_dir: Répertoire des modèles
+        max_versions: Nombre maximum de versions
+
+    Returns:
+    -------
+        Dict avec current_count, max_versions, versions_to_delete, etc.
+    """
+    versions = list_model_versions(models_dir)
+    to_delete_count = max(0, len(versions) - max_versions)
+
+    return {
+        "current_count": len(versions),
+        "max_versions": max_versions,
+        "versions_to_delete": to_delete_count,
+        "oldest_version": versions[-1].name if versions else None,
+        "newest_version": versions[0].name if versions else None,
+        "retention_applied": to_delete_count == 0,
+    }
 
 
 # ==============================================================================
