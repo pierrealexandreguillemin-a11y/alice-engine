@@ -740,32 +740,32 @@ def compute_features_for_split(
             if "equipe" in result.columns:
                 result = result.drop(columns=["equipe"])
 
-    # Player reliability - merge sur joueur_id (blanc/noir)
+    # Player reliability - merge sur joueur_nom (blanc/noir)
     if len(player_reliability) > 0:
-        player_cols = ["taux_presence", "nb_forfaits", "joueur_fantome"]
+        player_cols = ["taux_presence", "joueur_fantome"]
         for color in ["blanc", "noir"]:
             merge_df = player_reliability.rename(columns={c: f"{c}_{color}" for c in player_cols})
             result = result.merge(
-                merge_df[["joueur_id"] + [f"{c}_{color}" for c in player_cols]],
-                left_on=f"{color}_id",
-                right_on="joueur_id",
+                merge_df[["joueur_nom"] + [f"{c}_{color}" for c in player_cols]],
+                left_on=f"{color}_nom",
+                right_on="joueur_nom",
                 how="left",
             )
-            if "joueur_id" in result.columns:
-                result = result.drop(columns=["joueur_id"])
+            if "joueur_nom" in result.columns:
+                result = result.drop(columns=["joueur_nom"])
 
     # Forme recente
     if len(recent_form) > 0:
         for color in ["blanc", "noir"]:
             merge_df = recent_form.rename(columns={"forme_recente": f"forme_recente_{color}"})
             result = result.merge(
-                merge_df[["joueur_id", f"forme_recente_{color}"]],
-                left_on=f"{color}_id",
-                right_on="joueur_id",
+                merge_df[["joueur_nom", f"forme_recente_{color}"]],
+                left_on=f"{color}_nom",
+                right_on="joueur_nom",
                 how="left",
             )
-            if "joueur_id" in result.columns:
-                result = result.drop(columns=["joueur_id"])
+            if "joueur_nom" in result.columns:
+                result = result.drop(columns=["joueur_nom"])
 
     # Position echiquier moyenne
     if len(board_position) > 0:
@@ -774,31 +774,31 @@ def compute_features_for_split(
                 columns={"echiquier_moyen": f"echiquier_moyen_{color}"}
             )
             result = result.merge(
-                merge_df[["joueur_id", f"echiquier_moyen_{color}"]],
-                left_on=f"{color}_id",
-                right_on="joueur_id",
+                merge_df[["joueur_nom", f"echiquier_moyen_{color}"]],
+                left_on=f"{color}_nom",
+                right_on="joueur_nom",
                 how="left",
             )
-            if "joueur_id" in result.columns:
-                result = result.drop(columns=["joueur_id"])
+            if "joueur_nom" in result.columns:
+                result = result.drop(columns=["joueur_nom"])
 
     # FFE regulatory features
     if len(ffe_regulatory) > 0:
         ffe_cols = ["nb_equipes", "niveau_max", "niveau_min", "multi_equipe"]
         for color in ["blanc", "noir"]:
             merge_df = ffe_regulatory.rename(columns={c: f"ffe_{c}_{color}" for c in ffe_cols})
-            cols_to_merge = ["joueur_id"] + [
+            cols_to_merge = ["joueur_nom"] + [
                 f"ffe_{c}_{color}" for c in ffe_cols if c in ffe_regulatory.columns
             ]
             if len(cols_to_merge) > 1:
                 result = result.merge(
                     merge_df[cols_to_merge],
-                    left_on=f"{color}_id",
-                    right_on="joueur_id",
+                    left_on=f"{color}_nom",
+                    right_on="joueur_nom",
                     how="left",
                 )
-                if "joueur_id" in result.columns:
-                    result = result.drop(columns=["joueur_id"])
+                if "joueur_nom" in result.columns:
+                    result = result.drop(columns=["joueur_nom"])
 
     # Team enjeu
     if len(team_enjeu) > 0:
