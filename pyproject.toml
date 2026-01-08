@@ -72,6 +72,7 @@ ignore = [
     "D413",              # blank line after last section
     "PLR2004",           # magic values (ML thresholds)
     "TCH001", "TCH003", "TCH004",  # type imports flexibility
+    "ANN101", "ANN102",  # self/cls annotation (redundant in Python)
 ]
 
 [tool.ruff.lint.isort]
