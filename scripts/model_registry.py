@@ -62,9 +62,15 @@ ONNX_OPSET_VERSION = 15
 # P2: Retention policy
 DEFAULT_MAX_VERSIONS = 10
 
-# P2: Schema validation - colonnes requises pour les DataFrames ML
-REQUIRED_TRAIN_COLUMNS: set[str] = {"resultat_blanc"}
+# P2: Schema validation - colonnes requises pour les DataFrames ML (ISO 5259)
+REQUIRED_TRAIN_COLUMNS: set[str] = {"resultat_blanc", "blanc_elo", "noir_elo"}
 REQUIRED_NUMERIC_COLUMNS: set[str] = {"blanc_elo", "noir_elo", "diff_elo"}
+
+# Plages de valeurs FFE (ISO 5259 - Data Quality)
+ELO_MIN = 1000  # ELO minimum réaliste (débutant classé)
+ELO_MAX = 3000  # ELO maximum (Magnus Carlsen ~2850)
+ELO_WARNING_LOW = 1100  # Warning si beaucoup de joueurs sous ce seuil
+ELO_WARNING_HIGH = 2700  # Warning si beaucoup de joueurs au-dessus
 
 
 # ==============================================================================
@@ -148,6 +154,49 @@ def load_signing_key(key_path: Path) -> str | None:
 
 # Extension pour fichiers chiffrés
 ENCRYPTED_EXTENSION = ".enc"
+
+# Variables d'environnement pour les clés (ISO 27001 - Key Management)
+ENV_ENCRYPTION_KEY = "ALICE_ENCRYPTION_KEY"
+ENV_SIGNING_KEY = "ALICE_SIGNING_KEY"
+
+
+def get_key_from_env(env_var: str) -> bytes | None:
+    """Récupère une clé depuis une variable d'environnement.
+
+    Args:
+    ----
+        env_var: Nom de la variable d'environnement
+
+    Returns:
+    -------
+        Clé en bytes ou None si non définie
+
+    Note:
+    ----
+        ISO 27001 - Les clés ne doivent JAMAIS être stockées avec les données.
+        Utiliser des variables d'environnement, KMS, Vault ou HSM.
+    """
+    import base64
+
+    key_value = os.environ.get(env_var)
+    if not key_value:
+        return None
+
+    try:
+        return base64.b64decode(key_value)
+    except Exception:
+        logger.warning(f"Invalid base64 in {env_var}")
+        return None
+
+
+def get_signing_key_from_env() -> str | None:
+    """Récupère la clé de signature depuis l'environnement.
+
+    Returns
+    -------
+        Clé hex ou None si non définie
+    """
+    return os.environ.get(ENV_SIGNING_KEY)
 
 
 def generate_encryption_key() -> bytes:
@@ -320,6 +369,7 @@ def encrypt_model_directory(
     encryption_key: bytes | None = None,
     *,
     delete_originals: bool = False,
+    save_key_to_file: bool = False,
 ) -> tuple[list[Path], bytes]:
     """Chiffre tous les fichiers modèle d'un répertoire version.
 
@@ -328,13 +378,33 @@ def encrypt_model_directory(
         version_dir: Répertoire contenant les modèles
         encryption_key: Clé AES-256 (génère une nouvelle si None)
         delete_originals: Supprimer les fichiers originaux après chiffrement
+        save_key_to_file: Sauvegarder la clé dans le répertoire (NON RECOMMANDÉ)
 
     Returns:
     -------
         (liste_fichiers_chiffrés, clé_utilisée)
+
+    Warning:
+    -------
+        ISO 27001 - La clé NE DOIT PAS être stockée avec les données chiffrées.
+        Utilisez les variables d'environnement (ALICE_ENCRYPTION_KEY) ou un KMS.
+
+        Pour définir la clé en variable d'environnement :
+        ```
+        import base64
+        key = generate_encryption_key()
+        print(f"ALICE_ENCRYPTION_KEY={base64.b64encode(key).decode()}")
+        ```
     """
+    # Priorité : paramètre > env var > génération
+    if encryption_key is None:
+        encryption_key = get_key_from_env(ENV_ENCRYPTION_KEY)
+
     if encryption_key is None:
         encryption_key = generate_encryption_key()
+        logger.warning(
+            "Generated new encryption key. Store it securely in ALICE_ENCRYPTION_KEY env var!"
+        )
 
     encrypted_files: list[Path] = []
     model_extensions = {".cbm", ".ubj", ".txt", ".joblib", ".onnx"}
@@ -350,9 +420,13 @@ def encrypt_model_directory(
                 file_path.unlink()
                 logger.info(f"  Deleted original: {file_path.name}")
 
-    # Sauvegarder la clé dans le répertoire
-    key_path = version_dir / "encryption.key"
-    save_encryption_key(encryption_key, key_path)
+    # Sauvegarder la clé SEULEMENT si explicitement demandé (non recommandé)
+    if save_key_to_file:
+        key_path = version_dir / "encryption.key"
+        save_encryption_key(encryption_key, key_path)
+        logger.warning(
+            f"  ⚠️  Key saved to {key_path.name} - THIS IS NOT RECOMMENDED FOR PRODUCTION!"
+        )
 
     logger.info(f"  Encrypted {len(encrypted_files)} model files in {version_dir.name}")
 
@@ -370,20 +444,25 @@ def decrypt_model_directory(
     Args:
     ----
         version_dir: Répertoire contenant les modèles chiffrés
-        encryption_key: Clé AES-256 (charge depuis encryption.key si None)
+        encryption_key: Clé AES-256 (priorité: param > env var > fichier local)
         delete_encrypted: Supprimer les fichiers chiffrés après déchiffrement
 
     Returns:
     -------
         Liste des fichiers déchiffrés
     """
-    # Charger la clé si non fournie
+    # Priorité : paramètre > env var > fichier local (legacy)
     if encryption_key is None:
-        key_path = version_dir / "encryption.key"
-        encryption_key = load_encryption_key(key_path)
+        encryption_key = get_key_from_env(ENV_ENCRYPTION_KEY)
 
     if encryption_key is None:
-        logger.error("No encryption key available")
+        key_path = version_dir / "encryption.key"
+        if key_path.exists():
+            encryption_key = load_encryption_key(key_path)
+            logger.warning("Loaded key from file - consider migrating to env var")
+
+    if encryption_key is None:
+        logger.error("No encryption key available (set ALICE_ENCRYPTION_KEY env var)")
         return []
 
     decrypted_files: list[Path] = []
@@ -571,7 +650,7 @@ def compute_drift_metrics(
     actuals: pd.Series,
     baseline_elo_mean: float,
     baseline_elo_std: float,
-    baseline_elo_distribution: pd.Series | None = None,
+    baseline_elo_distribution: pd.Series,
 ) -> DriftMetrics:
     """Calcule les métriques de drift pour une ronde.
 
@@ -582,16 +661,27 @@ def compute_drift_metrics(
         actuals: Série des résultats réels (0/1)
         baseline_elo_mean: Moyenne ELO du training set
         baseline_elo_std: Écart-type ELO du training set
-        baseline_elo_distribution: Distribution ELO complète pour PSI
+        baseline_elo_distribution: Distribution ELO complète pour PSI (OBLIGATOIRE)
 
     Returns:
     -------
         DriftMetrics pour cette ronde
+
+    Note:
+    ----
+        baseline_elo_distribution est obligatoire pour calculer le PSI.
+        Sans baseline, le drift serait masqué (PSI=0 toujours).
     """
     from sklearn.metrics import accuracy_score, roc_auc_score
 
     timestamp = datetime.now().isoformat()
     alerts: list[str] = []
+
+    # Validation colonnes requises
+    required_cols = {"predicted_proba", "elo_blanc", "elo_noir"}
+    missing_cols = required_cols - set(predictions.columns)
+    if missing_cols:
+        raise ValueError(f"Missing required columns in predictions: {missing_cols}")
 
     # Métriques de prédiction
     predicted_classes = (predictions["predicted_proba"] >= 0.5).astype(int)
@@ -610,11 +700,8 @@ def compute_drift_metrics(
     elo_mean_shift = abs(current_mean - baseline_elo_mean)
     elo_std_shift = abs(current_std - baseline_elo_std)
 
-    # PSI si distribution baseline disponible
-    if baseline_elo_distribution is not None:
-        psi = compute_psi(baseline_elo_distribution, current_elo)
-    else:
-        psi = 0.0
+    # PSI toujours calculé (baseline obligatoire)
+    psi = compute_psi(baseline_elo_distribution, current_elo)
 
     # Détection d'alertes
     has_warning = False
@@ -677,7 +764,7 @@ def add_round_to_drift_report(
     round_number: int,
     predictions: pd.DataFrame,
     actuals: pd.Series,
-    baseline_elo_distribution: pd.Series | None = None,
+    baseline_elo_distribution: pd.Series,
 ) -> DriftMetrics:
     """Ajoute les métriques d'une ronde au rapport de drift.
 
@@ -687,7 +774,7 @@ def add_round_to_drift_report(
         round_number: Numéro de la ronde
         predictions: Prédictions de la ronde
         actuals: Résultats réels
-        baseline_elo_distribution: Distribution ELO baseline pour PSI
+        baseline_elo_distribution: Distribution ELO baseline pour PSI (OBLIGATOIRE)
 
     Returns:
     -------
@@ -816,6 +903,7 @@ def validate_dataframe_schema(
     numeric_columns: set[str] | None = None,
     *,
     allow_missing: bool = False,
+    validate_elo_ranges: bool = True,
 ) -> SchemaValidationResult:
     """Valide le schema d'un DataFrame pour ML.
 
@@ -825,6 +913,7 @@ def validate_dataframe_schema(
         required_columns: Colonnes obligatoires
         numeric_columns: Colonnes qui doivent être numériques
         allow_missing: Autoriser les colonnes manquantes (warning au lieu d'erreur)
+        validate_elo_ranges: Valider les plages ELO FFE
 
     Returns:
     -------
@@ -863,6 +952,46 @@ def validate_dataframe_schema(
     # Vérifier DataFrame vide
     if len(df) == 0:
         errors.append("DataFrame is empty")
+
+    # === Validation plages ELO FFE (ISO 5259) ===
+    if validate_elo_ranges and len(df) > 0:
+        elo_columns = ["blanc_elo", "noir_elo"]
+        for col in elo_columns:
+            if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
+                col_data = df[col].dropna()
+                if len(col_data) > 0:
+                    # Erreurs : valeurs hors plage absolue
+                    below_min = (col_data < ELO_MIN).sum()
+                    above_max = (col_data > ELO_MAX).sum()
+                    if below_min > 0:
+                        errors.append(
+                            f"Column '{col}' has {below_min} values below ELO_MIN ({ELO_MIN})"
+                        )
+                    if above_max > 0:
+                        errors.append(
+                            f"Column '{col}' has {above_max} values above ELO_MAX ({ELO_MAX})"
+                        )
+
+                    # Warnings : distribution suspecte
+                    pct_low = (col_data < ELO_WARNING_LOW).mean()
+                    pct_high = (col_data > ELO_WARNING_HIGH).mean()
+                    if pct_low > 0.1:  # >10% sous 1100
+                        warnings.append(
+                            f"Column '{col}': {pct_low:.1%} values below {ELO_WARNING_LOW} (unusual)"
+                        )
+                    if pct_high > 0.05:  # >5% au-dessus 2700
+                        warnings.append(
+                            f"Column '{col}': {pct_high:.1%} values above {ELO_WARNING_HIGH} (unusual)"
+                        )
+
+        # Vérifier cohérence diff_elo si présent
+        if "diff_elo" in df.columns and "blanc_elo" in df.columns and "noir_elo" in df.columns:
+            computed_diff = df["blanc_elo"] - df["noir_elo"]
+            mismatch = (df["diff_elo"] != computed_diff).sum()
+            if mismatch > 0:
+                warnings.append(
+                    f"diff_elo inconsistent with blanc_elo - noir_elo in {mismatch} rows"
+                )
 
     is_valid = len(errors) == 0
 
