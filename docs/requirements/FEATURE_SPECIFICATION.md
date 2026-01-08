@@ -264,9 +264,194 @@ def validate_dataframe_schema(df, validate_elo_ranges=True):
 
 ---
 
-## 9. Impact Inconnu (A Investiguer)
+## 9. Features Joueur - Prediction Presence (ALI)
 
-### 9.1 Age sur prediction
+### 9.1 Historique Joueur
+
+| Feature | Type | Description | Usage |
+|---------|------|-------------|-------|
+| `taux_presence_saison` | float | % rondes jouees cette saison | Fiabilite |
+| `taux_presence_global` | float | % rondes jouees sur 3 saisons | Tendance |
+| `derniere_presence` | int | Nb rondes depuis dernier match | Disponibilite |
+| `nb_matchs_saison` | int | Matchs joues cette saison | Regle < ronde N |
+| `rondes_manquees_consecutives` | int | Serie d'absences | Blessure/indispo ? |
+
+### 9.2 Pattern Joueur
+
+| Feature | Type | Description |
+|---------|------|-------------|
+| `titulaire_regulier` | bool | Joue >70% des rondes |
+| `joueur_occasionnel` | bool | Joue 30-70% des rondes |
+| `remplacant` | bool | Joue <30% des rondes |
+| `position_preferee` | int | Echiquier modal (1-8) |
+| `variance_position` | float | Ecart-type position jouee |
+
+---
+
+## 10. Features Club/Equipe - Comportement (ALI)
+
+### 10.1 Stabilite Effectif
+
+| Feature | Type | Description |
+|---------|------|-------------|
+| `nb_joueurs_utilises_saison` | int | Joueurs differents alignes |
+| `rotation_effectif` | float | Turnover moyen par ronde |
+| `noyau_stable` | int | Joueurs presents >80% |
+| `profondeur_effectif` | int | Joueurs disponibles total |
+
+### 10.2 Pattern Composition
+
+| Feature | Type | Description |
+|---------|------|-------------|
+| `compo_type_domicile` | cat | Pattern typique a domicile |
+| `compo_type_exterieur` | cat | Pattern typique a l'exterieur |
+| `renforce_fin_saison` | bool | Tendance a renforcer R7-R9 |
+| `preserve_titulaires` | bool | Fait tourner pour eviter brulage |
+
+---
+
+## 11. Features Contextuelles - Scenario Fin Saison (CE)
+
+### 11.1 Enjeu Sportif
+
+| Feature | Type | Description | Impact prediction |
+|---------|------|-------------|-------------------|
+| `zone_enjeu` | cat | montee/danger/mi_tableau | Intensite |
+| `ecart_montee_pts` | int | Distance du 1er | Motivation |
+| `ecart_descente_pts` | int | Marge sur relegation | Pression |
+| `matchs_restants` | int | Rondes restantes | Urgence |
+| `montee_mathematique` | bool | Peut encore monter ? | Abandon possible |
+| `maintien_assure` | bool | Ne peut plus descendre ? | Relachement |
+
+### 11.2 Scenarios Fin de Saison
+
+| Scenario | Description | Comportement attendu |
+|----------|-------------|----------------------|
+| `course_titre` | 1er-2e, ecart < 3 pts | Composition maximale |
+| `course_montee` | 3e-4e, barrage possible | Renforcement progressif |
+| `confort` | Mi-tableau, rien a jouer | Rotation, repos titulaires |
+| `danger` | Zone rouge, -3 pts du maintien | Tous les titulaires |
+| `condamne` | Descente mathematique | Demobilisation possible |
+
+### 11.3 Features Derivees
+
+```python
+def calculer_scenario_saison(
+    position: int,
+    points: int,
+    pts_premier: int,
+    pts_releguable: int,
+    matchs_restants: int,
+) -> str:
+    """Determine le scenario de fin de saison."""
+    pts_max = points + matchs_restants * 3
+
+    # Montee impossible
+    if pts_max < pts_premier:
+        if points <= pts_releguable:
+            return "condamne"
+        return "confort"
+
+    # En course
+    if position <= 2:
+        return "course_titre"
+    if position <= 4:
+        return "course_montee"
+
+    # Danger
+    ecart_releguable = points - pts_releguable
+    if ecart_releguable <= 3:
+        return "danger"
+
+    return "confort"
+```
+
+---
+
+## 12. Features Temporelles - Periode Saison
+
+### 12.1 Cycle Saison
+
+| Feature | Type | Valeurs | Description |
+|---------|------|---------|-------------|
+| `phase_saison` | cat | debut/milieu/fin | Position dans saison |
+| `ronde_normalisee` | float | 0-1 | ronde / total_rondes |
+| `mois` | int | 9-5 | Septembre a Mai |
+
+### 12.2 Pattern Saisonnier
+
+| Phase | Rondes | Comportement typique |
+|-------|--------|----------------------|
+| **Debut** | R1-R3 | Exploration, test effectif |
+| **Milieu** | R4-R6 | Stabilisation, rotation |
+| **Fin** | R7-R9 | Enjeu max, titulaires |
+
+### 12.3 Calendrier
+
+| Feature | Type | Description |
+|---------|------|-------------|
+| `domicile` | bool | Match a domicile |
+| `adversaire_niveau` | int | Classement adverse actuel |
+| `match_derby` | bool | Meme ville/region |
+| `match_important` | bool | Top 4 ou lutte maintien |
+
+---
+
+## 13. Matrice Features par Module ALICE
+
+| Module | Features principales | Objectif |
+|--------|---------------------|----------|
+| **ALI** (Inference) | Presence joueur, pattern club, calendrier | Predire QUI jouera |
+| **CE** (Composition) | ELO, enjeu, scenario fin saison | Optimiser matchups |
+
+### 13.1 Pipeline ALI
+
+```
+Entrees:
+├── club_adverse_id
+├── ronde
+└── historique_compositions[]
+
+Features extraites:
+├── Par joueur adverse:
+│   ├── taux_presence
+│   ├── derniere_presence
+│   └── position_preferee
+├── Par equipe:
+│   ├── stabilite_effectif
+│   └── pattern_composition
+└── Contexte:
+    ├── enjeu_sportif
+    ├── phase_saison
+    └── match_domicile
+
+Sortie:
+└── P(joueur_i present) pour chaque joueur
+```
+
+### 13.2 Pipeline CE
+
+```
+Entrees:
+├── joueurs_disponibles[]
+├── contraintes_ffe{}
+└── prediction_adverse (depuis ALI)
+
+Features:
+├── diff_elo par echiquier
+├── score_attendu FIDE
+├── scenario_fin_saison
+└── enjeu_match
+
+Sortie:
+└── composition_optimale + score_attendu
+```
+
+---
+
+## 14. Impact Inconnu (A Investiguer)
+
+### 14.1 Age sur prediction
 
 **Hypothese** : A ELO egal, un jeune (K=40) a plus de variance qu'un adulte (K=20).
 
@@ -277,7 +462,7 @@ def validate_dataframe_schema(df, validate_elo_ranges=True):
 
 **Action** : Experimentation A/B avec/sans feature age.
 
-### 9.2 Forme recente
+### 14.2 Forme recente
 
 **Hypothese** : L'ELO mensuel (mis a jour chaque 1er du mois) capture la forme.
 
@@ -285,9 +470,9 @@ def validate_dataframe_schema(df, validate_elo_ranges=True):
 
 ---
 
-## 10. Tracabilite (ISO 5259)
+## 15. Tracabilite (ISO 5259)
 
-### 10.1 Sources
+### 15.1 Sources
 
 | Donnee | Source | MAJ |
 |--------|--------|-----|
@@ -297,7 +482,7 @@ def validate_dataframe_schema(df, validate_elo_ranges=True):
 | Regles | Chapitre 6.1 FIDE | Annuelle |
 | Categories | Reglements FFE | Annuelle |
 
-### 10.2 Historique
+### 15.2 Historique
 
 | Version | Date | Changement |
 |---------|------|------------|
