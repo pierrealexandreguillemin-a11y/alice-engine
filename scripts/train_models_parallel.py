@@ -18,15 +18,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import joblib
 import numpy as np
 import pandas as pd
 import yaml
@@ -52,6 +49,7 @@ from scripts.ml_types import (
     XGBoostConfig,
     XGBoostModel,
 )
+from scripts.model_registry import save_production_models
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -163,11 +161,13 @@ def prepare_features(
     """Prepare les features pour l'entrainement.
 
     Args:
+    ----
         df: DataFrame brut
         label_encoders: encodeurs existants (pour valid/test)
         fit_encoders: True pour train, False pour valid/test
 
     Returns:
+    -------
         X, y, label_encoders
     """
     df = df.copy()
@@ -466,155 +466,6 @@ def train_all_models_parallel(
 
 
 # ==============================================================================
-# SAUVEGARDE DES MODELES
-# ==============================================================================
-
-
-def save_models(
-    results: ModelResults,
-    models_dir: Path,
-    label_encoders: dict[str, LabelEncoder],
-    config: dict[str, object],
-) -> Path:
-    """Sauvegarde les modeles et metadata (Model Card)."""
-    # Creer repertoire versionne
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    version_dir = models_dir / f"v{timestamp}"
-    version_dir.mkdir(parents=True, exist_ok=True)
-
-    logger.info(f"\nSaving models to: {version_dir}")
-
-    # Sauvegarder chaque modele
-    for name, result in results.items():
-        if result.model is None:
-            continue
-
-        if name == "CatBoost":
-            model_path = version_dir / "catboost.cbm"
-            model = result.model
-            if hasattr(model, "save_model"):
-                model.save_model(str(model_path))  # type: ignore[union-attr]
-            logger.info(f"  Saved {model_path.name}")
-
-        elif name == "XGBoost":
-            model_path = version_dir / "xgboost.ubj"
-            model = result.model
-            if hasattr(model, "save_model"):
-                model.save_model(str(model_path))  # type: ignore[union-attr]
-            logger.info(f"  Saved {model_path.name}")
-
-        elif name == "LightGBM":
-            model_path = version_dir / "lightgbm.txt"
-            model = result.model
-            if hasattr(model, "booster_"):
-                model.booster_.save_model(str(model_path))  # type: ignore[union-attr]
-            logger.info(f"  Saved {model_path.name}")
-
-    # Sauvegarder label encoders
-    encoders_path = version_dir / "label_encoders.joblib"
-    joblib.dump(label_encoders, encoders_path)
-    logger.info(f"  Saved {encoders_path.name}")
-
-    # Creer Model Card (metadata.json)
-    model_card = create_model_card(results, config, timestamp)
-    metadata_path = version_dir / "metadata.json"
-    with metadata_path.open("w") as f:
-        json.dump(model_card, f, indent=2)
-    logger.info(f"  Saved {metadata_path.name}")
-
-    # Mettre a jour symlink "current"
-    current_link = models_dir / "current"
-    if current_link.exists() or current_link.is_symlink():
-        current_link.unlink()
-
-    # Sur Windows, utiliser junction au lieu de symlink
-    import platform
-    import subprocess
-
-    if platform.system() == "Windows":
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(current_link), str(version_dir)],
-            capture_output=True,
-            check=False,
-        )
-    else:
-        current_link.symlink_to(version_dir.name)
-
-    logger.info(f"  Updated 'current' -> {version_dir.name}")
-
-    return version_dir
-
-
-def create_model_card(
-    results: ModelResults,
-    config: dict[str, object],
-    timestamp: str,
-) -> dict[str, object]:
-    """Cree une Model Card (ISO 42001) avec metadata et metriques."""
-    import catboost
-    import lightgbm
-    import sklearn
-    import xgboost
-
-    # Trouver le meilleur modele
-    best_name: str | None = None
-    best_auc = 0.0
-    metrics_all: dict[str, dict[str, float]] = {}
-
-    for name, result in results.items():
-        if result.model is None:
-            continue
-        auc = result.metrics.auc_roc
-        metrics_all[name.lower()] = {
-            "auc": auc,
-            "accuracy": result.metrics.accuracy,
-            "f1": result.metrics.f1_score,
-            "precision": result.metrics.precision,
-            "recall": result.metrics.recall,
-            "log_loss": result.metrics.log_loss,
-            "train_time_s": result.metrics.train_time_s,
-        }
-        if auc > best_auc:
-            best_auc = auc
-            best_name = name
-
-    return {
-        "version": f"v{timestamp}",
-        "created_at": datetime.now().isoformat(),
-        "framework": {
-            "catboost": catboost.__version__,
-            "xgboost": xgboost.__version__,
-            "lightgbm": lightgbm.__version__,
-            "sklearn": sklearn.__version__,
-        },
-        "dataset": {
-            "features_numeric": NUMERIC_FEATURES,
-            "features_categorical": CATEGORICAL_FEATURES,
-            "target": "resultat_blanc",
-        },
-        "metrics": metrics_all,
-        "best_single_model": {
-            "name": best_name,
-            "auc": best_auc,
-        },
-        "hyperparameters": {
-            "catboost": config.get("catboost", {}),
-            "xgboost": config.get("xgboost", {}),
-            "lightgbm": config.get("lightgbm", {}),
-        },
-        "training": {
-            "parallel": True,
-            "max_workers": 3,
-        },
-        "conformance": {
-            "iso_42001": "AI Management System",
-            "iso_5259": "Data Quality for ML",
-            "iso_29119": "Software Testing",
-        },
-    }
-
-
-# ==============================================================================
 # MLFLOW TRACKING
 # ==============================================================================
 
@@ -749,9 +600,37 @@ def run_training(
         result.metrics.test_f1 = test_metrics.f1_score
         logger.info(f"  [{name}] Test AUC: {test_metrics.auc_roc:.4f}")
 
-    # Sauvegarder modeles
-    logger.info("\n[5/5] Saving models...")
-    version_dir = save_models(results, models_dir, encoders, config)
+    # Sauvegarder modeles (ISO 42001/5259/27001)
+    logger.info("\n[5/5] Saving models with production compliance...")
+    models_dict = {name: result.model for name, result in results.items() if result.model}
+    metrics_dict = {
+        name: {
+            "auc_roc": result.metrics.auc_roc,
+            "accuracy": result.metrics.accuracy,
+            "precision": result.metrics.precision,
+            "recall": result.metrics.recall,
+            "f1_score": result.metrics.f1_score,
+            "log_loss": result.metrics.log_loss,
+            "train_time_s": result.metrics.train_time_s,
+            "test_auc": result.metrics.test_auc,
+        }
+        for name, result in results.items()
+        if result.model
+    }
+    version_dir = save_production_models(
+        models=models_dict,
+        metrics=metrics_dict,
+        models_dir=models_dir,
+        train_df=train,
+        valid_df=valid,
+        test_df=test,
+        train_path=data_dir / "train.parquet",
+        valid_path=data_dir / "valid.parquet",
+        test_path=data_dir / "test.parquet",
+        feature_names=list(X_train.columns),
+        hyperparameters=config,
+        label_encoders=encoders,
+    )
 
     # MLflow logging
     if use_mlflow:
