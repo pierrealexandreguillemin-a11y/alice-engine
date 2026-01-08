@@ -1,10 +1,11 @@
 # ALICE Training Progress - Quality Records
 
 > **Document Type**: Quality Records (QR) - ISO 15289
-> **Version**: 1.2.0
+> **Version**: 1.3.0
 > **Date creation**: 4 Janvier 2026
 > **Derniere MAJ**: 8 Janvier 2026
 > **Responsable**: Claude Code / Pierre
+> **Methodologie**: [METHODOLOGIE_ML_TRAINING.md](./METHODOLOGIE_ML_TRAINING.md)
 
 ---
 
@@ -29,6 +30,52 @@ Ce document trace chaque phase, son statut, et les artefacts produits.
 | 5 | Hyperparameter Tuning | 🔄 A faire | - | - |
 | 6 | Entrainement final | 🔄 A faire | - | models/*.cbm |
 | 7 | Deploiement | 🔄 A faire | - | API FastAPI |
+
+---
+
+## 2bis. Gaps Critiques Identifies (8 Janvier 2026)
+
+> **Audit**: Analyse conformite standards industrie + ISO ML
+> **Documentation complete**: [METHODOLOGIE_ML_TRAINING.md](./METHODOLOGIE_ML_TRAINING.md)
+
+### Gaps Bloquants Production
+
+| ID | Gap | Severite | Fichier | Effort |
+|----|-----|----------|---------|--------|
+| **GAP-001** | Pas de script d'entrainement | CRITIQUE | evaluate_models.py | 2j |
+| **GAP-002** | Data leakage features | CRITIQUE | feature_engineering.py:588 | 1j |
+| **GAP-003** | Pas d'experiment tracking | CRITIQUE | N/A | 2j |
+| **GAP-004** | Hyperparametres hardcodes | HAUTE | evaluate_models.py:143 | 1j |
+| **GAP-005** | Inference service stub | CRITIQUE | inference.py:54 | 1j |
+
+### Detail GAP-002: Data Leakage
+
+```python
+# PROBLEME ACTUEL (feature_engineering.py:588-598)
+club_reliability = extract_club_reliability(df)  # TOUT le dataset!
+# PUIS split temporel = features utilisent donnees futures
+
+# CORRECTION REQUISE
+train, valid, test = temporal_split(df)  # Split D'ABORD
+train_features = compute_features(train)  # Features PAR split
+```
+
+### Conformite Standards
+
+| Standard | Actuel | Cible |
+|----------|--------|-------|
+| MLOps Maturity | Level 0 (manuel) | Level 1 |
+| ISO/IEC 42001 | 40% | 80% |
+| ISO/IEC 5259 (Data Quality) | 50% | 90% |
+| Reproducibility | Tier Bronze | Tier Silver |
+
+### Plan Correctif
+
+| Phase | Taches | Effort | Deadline |
+|-------|--------|--------|----------|
+| **Phase 1** | Fix critiques (GAP-001 to 005) | 7j | Semaine 2 |
+| **Phase 2** | MLOps (Optuna, CV, metrics) | 5j | Semaine 3 |
+| **Phase 3** | Production (monitoring, CI/CD) | 4j | Semaine 4 |
 
 ---
 
@@ -344,6 +391,7 @@ Un renforcement d'une equipe = affaiblissement d'une autre.
 | 1.0.0 | 2026-01-04 | Claude Code | Creation initiale |
 | 1.1.0 | 2026-01-08 | Claude Code | Ajout interpretation Phase 4, limites performances |
 | 1.2.0 | 2026-01-08 | Claude Code | Ajout section 4 "Integration regles FFE dans ML" |
+| 1.3.0 | 2026-01-08 | Claude Code | Ajout section 2bis "Gaps Critiques", lien methodologie |
 
 ---
 
