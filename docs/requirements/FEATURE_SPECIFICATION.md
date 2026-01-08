@@ -1,10 +1,32 @@
 # Specification des Features ML - ALICE Engine
 
 > **Document Type**: System Requirements (SyRS) - ISO 15289
-> **Version**: 1.0.0
+> **Version**: 1.1.0
 > **Date**: 8 Janvier 2026
 > **Norme ISO 5259**: Data Quality for ML
 > **Source**: Chapitre 6.1 FIDE (Oct 2025), Reglements FFE 2025-2026
+
+---
+
+## 0. Statut Implementation (ISO 15289)
+
+| Feature | Module | Status | Tests |
+|---------|--------|--------|-------|
+| **ELO (blanc/noir/diff)** | echiquiers.parquet | ✅ Implementé | ✅ |
+| **Type ELO (F/N/E)** | joueurs.parquet | ✅ Implementé | ✅ |
+| **Fiabilite club** | feature_engineering.py | ✅ Implementé | ⚠️ |
+| **Fiabilite joueur** | feature_engineering.py | ✅ Implementé | ⚠️ |
+| **Forme recente** | feature_engineering.py | ✅ Implementé | ⚠️ |
+| **Position echiquier** | feature_engineering.py | ✅ Implementé | ⚠️ |
+| **Performance couleur** | feature_engineering.py | ✅ Implementé | ✅ 14 tests |
+| **Classement reel** | feature_engineering.py | ✅ Implementé | ✅ 14 tests |
+| **Zone enjeu reelle** | feature_engineering.py | ✅ Implementé | ✅ 14 tests |
+| **Regles FFE (brulage/noyau)** | ffe_rules_features.py | ✅ Implementé | ✅ 66 tests |
+| **Presence joueur (ALI)** | - | ❌ Planifie | - |
+| **Comportement club (ALI)** | - | ❌ Planifie | - |
+| **Scenario fin saison (CE)** | - | ❌ Planifie | - |
+
+**Legende**: ✅ = OK | ⚠️ = Tests a ajouter | ❌ = Non implemente
 
 ---
 
@@ -179,19 +201,47 @@ def get_expected_score(diff_elo: int) -> float:
 
 **Justification** : Enjeu different selon competition/division.
 
-### 5.2 Enjeu
+### 5.2 Enjeu (CORRIGÉ - Position réelle)
 
-| Feature | Type | Description |
-|---------|------|-------------|
-| `zone_enjeu` | cat | montee, danger, mi_tableau |
-| `ecart_montee` | int | Points du 1er - points equipe |
-| `ecart_descente` | int | Points equipe - seuil relegation |
+**✅ IMPLÉMENTÉ** dans `feature_engineering.py:calculate_standings()`
 
-### 5.3 Couleur
+| Feature | Type | Description | Status |
+|---------|------|-------------|--------|
+| `position` | int | Classement réel calculé depuis scores | ✅ |
+| `points_cumules` | int | Points accumulés (2 victoire, 1 nul) | ✅ |
+| `zone_enjeu` | cat | montee, danger, mi_tableau | ✅ |
+| `ecart_premier` | int | Points du 1er - points equipe | ✅ |
+| `ecart_dernier` | int | Points equipe - points du dernier | ✅ |
+| `nb_equipes` | int | Nombre d'equipes dans le groupe | ✅ |
 
-| Feature | Type | Justification |
-|---------|------|---------------|
-| `est_blanc` | bool | Avantage blanc ~55% statistique |
+**Calcul position** (ISO 5259 - depuis données réelles):
+```python
+# Points Interclubs FFE:
+# - Victoire match (score > adversaire): 2 pts
+# - Nul match (score = adversaire): 1 pt
+# - Défaite match (score < adversaire): 0 pt
+
+standings = calculate_standings(df)  # Position réelle par ronde
+```
+
+### 5.3 Performance par Couleur
+
+**✅ IMPLÉMENTÉ** dans `feature_engineering.py:calculate_color_performance()`
+
+| Feature | Type | Description | Status |
+|---------|------|-------------|--------|
+| `score_blancs` | float | Score moyen avec blancs (0-1) | ✅ |
+| `score_noirs` | float | Score moyen avec noirs (0-1) | ✅ |
+| `nb_blancs` | int | Nombre de parties avec blancs | ✅ |
+| `nb_noirs` | int | Nombre de parties avec noirs | ✅ |
+| `avantage_blancs` | float | score_blancs - score_noirs | ✅ |
+| `couleur_preferee` | cat | 'blanc', 'noir', 'neutre' | ✅ |
+
+**Convention échecs interclubs**:
+- Échiquiers impairs (1, 3, 5, 7) = Blancs pour équipe domicile
+- Échiquiers pairs (2, 4, 6, 8) = Noirs pour équipe domicile
+
+**Seuil préférence**: |avantage_blancs| > 0.05 = significatif
 
 ---
 

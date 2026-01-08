@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Feature Engineering pour ALICE - Preparation des donnees ML.
+"""Feature Engineering pour ALICE - Preparation des donnees ML.
 
 Ce script transforme les donnees brutes (echiquiers.parquet) en features
 exploitables pour l'entrainement du modele ALI (Adversarial Lineup Inference).
@@ -51,15 +50,16 @@ logger = logging.getLogger(__name__)
 
 
 def extract_club_reliability(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Extrait les features de fiabilite par club.
+    """Extrait les features de fiabilite par club.
 
     Utilise les non_joue et forfaits pour identifier les clubs defaillants.
 
     Args:
+    ----
         df: DataFrame echiquiers complet (avant filtrage)
 
     Returns:
+    -------
         DataFrame avec colonnes:
         - equipe: nom du club
         - taux_forfait: % de forfaits sur l'historique
@@ -98,15 +98,16 @@ def extract_club_reliability(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def extract_player_reliability(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Extrait les features de fiabilite par joueur.
+    """Extrait les features de fiabilite par joueur.
 
     Analyse les patterns de presence/absence pour chaque joueur.
 
     Args:
+    ----
         df: DataFrame echiquiers complet
 
     Returns:
+    -------
         DataFrame avec colonnes:
         - joueur_nom: nom complet du joueur
         - nb_matchs: nombre total de matchs
@@ -156,15 +157,16 @@ def extract_player_reliability(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def extract_player_monthly_pattern(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Extrait les patterns de disponibilite mensuelle par joueur.
+    """Extrait les patterns de disponibilite mensuelle par joueur.
 
     Detecte les joueurs indisponibles certains mois (vacances, pro, etc.)
 
     Args:
+    ----
         df: DataFrame echiquiers avec colonne 'date'
 
     Returns:
+    -------
         DataFrame avec colonnes:
         - joueur_nom: nom complet
         - dispo_mois_1 ... dispo_mois_12: taux presence par mois
@@ -226,14 +228,15 @@ def extract_player_monthly_pattern(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_recent_form(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
-    """
-    Calcule la forme recente de chaque joueur (score sur N derniers matchs).
+    """Calcule la forme recente de chaque joueur (score sur N derniers matchs).
 
     Args:
+    ----
         df: DataFrame echiquiers filtre (parties jouees uniquement)
         window: nombre de matchs pour calculer la forme
 
     Returns:
+    -------
         DataFrame avec colonnes:
         - joueur_nom: nom complet
         - forme_recente: score moyen sur les N derniers matchs (0-1)
@@ -284,16 +287,17 @@ def calculate_recent_form(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
 
 
 def calculate_board_position(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calcule la position moyenne sur l'echiquier pour chaque joueur.
+    """Calcule la position moyenne sur l'echiquier pour chaque joueur.
 
     Un joueur habitue a jouer sur echiquier 1 vs echiquier 8
     n'a pas le meme niveau.
 
     Args:
+    ----
         df: DataFrame echiquiers
 
     Returns:
+    -------
         DataFrame avec colonnes:
         - joueur_nom: nom complet
         - echiquier_moyen: position moyenne
@@ -330,21 +334,120 @@ def calculate_board_position(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def calculate_color_performance(df: pd.DataFrame, min_games: int = 10) -> pd.DataFrame:
+    """Calcule la performance par couleur (blanc/noir) pour chaque joueur.
+
+    Convention echecs interclubs:
+    - Echiquiers impairs (1, 3, 5, 7) = Blancs pour equipe domicile
+    - Echiquiers pairs (2, 4, 6, 8) = Noirs pour equipe domicile
+
+    Certains joueurs performent mieux avec une couleur.
+
+    Args:
+    ----
+        df: DataFrame echiquiers (parties jouees uniquement)
+        min_games: Minimum de parties pour calculer (defaut: 10)
+
+    Returns:
+    -------
+        DataFrame avec colonnes:
+        - joueur_nom: nom complet
+        - score_blancs: score moyen avec blancs (0-1)
+        - score_noirs: score moyen avec noirs (0-1)
+        - nb_blancs: nombre de parties avec blancs
+        - nb_noirs: nombre de parties avec noirs
+        - avantage_blancs: score_blancs - score_noirs (>0 = prefere blancs)
+        - couleur_preferee: 'blanc', 'noir', ou 'neutre'
+
+    ISO 5259: Feature calculee depuis donnees reelles.
+    """
+    logger.info("Calcul performance par couleur (blanc/noir)...")
+
+    # Filtrer parties jouees
+    parties_jouees = df[
+        ~df["type_resultat"].isin(["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"])
+    ].copy()
+
+    # Stats par joueur jouant avec blancs
+    blancs_stats = (
+        parties_jouees.groupby("blanc_nom")
+        .agg(
+            score_blancs=("resultat_blanc", "mean"),
+            nb_blancs=("resultat_blanc", "count"),
+        )
+        .reset_index()
+        .rename(columns={"blanc_nom": "joueur_nom"})
+    )
+
+    # Stats par joueur jouant avec noirs
+    noirs_stats = (
+        parties_jouees.groupby("noir_nom")
+        .agg(
+            score_noirs=("resultat_noir", "mean"),
+            nb_noirs=("resultat_noir", "count"),
+        )
+        .reset_index()
+        .rename(columns={"noir_nom": "joueur_nom"})
+    )
+
+    # Fusionner
+    result = blancs_stats.merge(noirs_stats, on="joueur_nom", how="outer")
+
+    # Remplir NaN
+    result["score_blancs"] = result["score_blancs"].fillna(0.5)
+    result["score_noirs"] = result["score_noirs"].fillna(0.5)
+    result["nb_blancs"] = result["nb_blancs"].fillna(0).astype(int)
+    result["nb_noirs"] = result["nb_noirs"].fillna(0).astype(int)
+
+    # Filtrer joueurs avec assez de parties
+    result["nb_total"] = result["nb_blancs"] + result["nb_noirs"]
+    result = result[result["nb_total"] >= min_games].copy()
+
+    # Calculer avantage couleur
+    result["avantage_blancs"] = result["score_blancs"] - result["score_noirs"]
+
+    # Categoriser preference (seuil 5% = significatif)
+    def categorize_preference(row: pd.Series) -> str:
+        # Besoin de min 5 parties dans chaque couleur pour juger
+        if row["nb_blancs"] < 5 or row["nb_noirs"] < 5:
+            return "neutre"
+        if row["avantage_blancs"] > 0.05:
+            return "blanc"
+        elif row["avantage_blancs"] < -0.05:
+            return "noir"
+        return "neutre"
+
+    result["couleur_preferee"] = result.apply(categorize_preference, axis=1)
+
+    # Nettoyer colonnes
+    result = result.drop(columns=["nb_total"])
+
+    logger.info(f"  {len(result)} joueurs avec stats couleur")
+    logger.info(
+        f"  Preferences: {(result['couleur_preferee'] == 'blanc').sum()} blanc, "
+        f"{(result['couleur_preferee'] == 'noir').sum()} noir, "
+        f"{(result['couleur_preferee'] == 'neutre').sum()} neutre"
+    )
+
+    return result
+
+
 # ==============================================================================
 # FEATURES REGLEMENTAIRES FFE
 # ==============================================================================
 
 
 def build_historique_brulage(df: pd.DataFrame) -> dict[str, dict[str, int]]:
-    """
-    Construit l'historique de brulage par joueur.
+    """Construit l'historique de brulage par joueur.
 
     Compte le nombre de matchs joues par chaque joueur dans chaque equipe.
 
     Args:
+    ----
         df: DataFrame echiquiers
 
     Returns:
+    -------
         {joueur_nom: {equipe_nom: nb_matchs}}
     """
     historique: dict[str, dict[str, int]] = {}
@@ -367,15 +470,16 @@ def build_historique_brulage(df: pd.DataFrame) -> dict[str, dict[str, int]]:
 
 
 def build_historique_noyau(df: pd.DataFrame) -> dict[str, set[str]]:
-    """
-    Construit l'historique du noyau par equipe.
+    """Construit l'historique du noyau par equipe.
 
     Identifie les joueurs ayant deja joue pour chaque equipe.
 
     Args:
+    ----
         df: DataFrame echiquiers
 
     Returns:
+    -------
         {equipe_nom: set(joueur_noms)}
     """
     noyau: dict[str, set[str]] = {}
@@ -397,8 +501,7 @@ def build_historique_noyau(df: pd.DataFrame) -> dict[str, set[str]]:
 
 
 def extract_ffe_regulatory_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Extrait les features reglementaires FFE.
+    """Extrait les features reglementaires FFE.
 
     Calcule pour chaque joueur:
     - nb_equipes: nombre d'equipes differentes jouees
@@ -408,9 +511,11 @@ def extract_ffe_regulatory_features(df: pd.DataFrame) -> pd.DataFrame:
     - matchs_par_niveau: distribution des matchs par niveau
 
     Args:
+    ----
         df: DataFrame echiquiers
 
     Returns:
+    -------
         DataFrame avec features reglementaires par joueur
     """
     logger.info("Extraction features reglementaires FFE...")
@@ -469,36 +574,199 @@ def extract_ffe_regulatory_features(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def extract_team_enjeu_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Extrait les features de zone d'enjeu par equipe et saison.
+def calculate_standings(df: pd.DataFrame) -> pd.DataFrame:
+    """Calcule le classement reel par equipe/saison/groupe/ronde.
+
+    Points Interclubs FFE:
+    - Victoire match (score > adversaire): 2 pts
+    - Nul match (score = adversaire): 1 pt
+    - Defaite match (score < adversaire): 0 pt
 
     Args:
+    ----
+        df: DataFrame echiquiers complet
+
+    Returns:
+    -------
+        DataFrame avec colonnes:
+        - equipe, saison, competition, division, groupe, ronde
+        - points_cumules: points accumules jusqu'a cette ronde
+        - position: classement a cette ronde (1 = premier)
+        - nb_equipes: nombre total d'equipes dans le groupe
+        - ecart_premier: points du 1er - points equipe
+        - ecart_dernier: points equipe - points du dernier
+
+    ISO 5259: Position calculee depuis donnees reelles, pas estimee.
+    """
+    logger.info("Calcul classement reel depuis scores matchs...")
+
+    # Extraire matchs uniques (un seul row par match, pas par echiquier)
+    match_cols = [
+        "saison",
+        "competition",
+        "division",
+        "groupe",
+        "ronde",
+        "equipe_dom",
+        "equipe_ext",
+        "score_dom",
+        "score_ext",
+    ]
+
+    # Verifier colonnes presentes
+    missing = [c for c in match_cols if c not in df.columns]
+    if missing:
+        logger.warning(f"  Colonnes manquantes pour classement: {missing}")
+        return pd.DataFrame()
+
+    matches = df.drop_duplicates(
+        subset=["saison", "competition", "division", "groupe", "ronde", "equipe_dom", "equipe_ext"]
+    )[match_cols].copy()
+
+    logger.info(f"  {len(matches)} matchs uniques")
+
+    # Calculer points par match
+    standings_data = []
+
+    for (saison, comp, div, groupe), group_matches in matches.groupby(
+        ["saison", "competition", "division", "groupe"]
+    ):
+        # Accumuler points par equipe au fil des rondes
+        equipe_points: dict[str, int] = {}
+        equipe_played: dict[str, int] = {}
+
+        for ronde in sorted(group_matches["ronde"].unique()):
+            ronde_matches = group_matches[group_matches["ronde"] == ronde]
+
+            for _, match in ronde_matches.iterrows():
+                dom = match["equipe_dom"]
+                ext = match["equipe_ext"]
+                sd = match["score_dom"]
+                se = match["score_ext"]
+
+                # Initialiser si nouveau
+                if dom not in equipe_points:
+                    equipe_points[dom] = 0
+                    equipe_played[dom] = 0
+                if ext not in equipe_points:
+                    equipe_points[ext] = 0
+                    equipe_played[ext] = 0
+
+                # Attribuer points (2 victoire, 1 nul, 0 defaite)
+                equipe_played[dom] += 1
+                equipe_played[ext] += 1
+
+                if sd > se:  # Dom gagne
+                    equipe_points[dom] += 2
+                elif se > sd:  # Ext gagne
+                    equipe_points[ext] += 2
+                else:  # Nul
+                    equipe_points[dom] += 1
+                    equipe_points[ext] += 1
+
+            # Calculer classement a cette ronde
+            ranking = sorted(equipe_points.items(), key=lambda x: -x[1])
+            nb_equipes = len(ranking)
+            pts_premier = ranking[0][1] if ranking else 0
+            pts_dernier = ranking[-1][1] if ranking else 0
+
+            for position, (equipe, pts) in enumerate(ranking, 1):
+                standings_data.append(
+                    {
+                        "equipe": equipe,
+                        "saison": saison,
+                        "competition": comp,
+                        "division": div,
+                        "groupe": groupe,
+                        "ronde": ronde,
+                        "points_cumules": pts,
+                        "matchs_joues": equipe_played[equipe],
+                        "position": position,
+                        "nb_equipes": nb_equipes,
+                        "ecart_premier": pts_premier - pts,
+                        "ecart_dernier": pts - pts_dernier,
+                    }
+                )
+
+    result = pd.DataFrame(standings_data)
+    logger.info(f"  {len(result)} lignes classement generees")
+
+    return result
+
+
+def extract_team_enjeu_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Extrait les features de zone d'enjeu par equipe et saison.
+
+    CORRIGE: Utilise position reelle calculee depuis les scores.
+
+    Args:
+    ----
         df: DataFrame echiquiers avec colonnes ronde, saison
 
     Returns:
-        DataFrame avec zone_enjeu par equipe/saison
+    -------
+        DataFrame avec zone_enjeu par equipe/saison/ronde
+
+    ISO 5259: Zone d'enjeu basee sur position reelle, pas estimee.
     """
-    logger.info("Extraction features zones d'enjeu...")
+    logger.info("Extraction features zones d'enjeu (position reelle)...")
 
     if "ronde" not in df.columns or "saison" not in df.columns:
         logger.warning("  Colonnes ronde/saison manquantes, skip zones enjeu")
         return pd.DataFrame()
 
+    # Calculer classement reel
+    standings = calculate_standings(df)
+
+    if standings.empty:
+        logger.warning("  Classement vide, fallback estimation")
+        return _extract_team_enjeu_fallback(df)
+
+    # Enrichir avec zone d'enjeu
+    features_data = []
+
+    for _, row in standings.iterrows():
+        division = str(row["division"]) if row["division"] else "N4"
+        zone = calculer_zone_enjeu(row["position"], row["nb_equipes"], division)
+
+        features_data.append(
+            {
+                "equipe": row["equipe"],
+                "saison": row["saison"],
+                "competition": row["competition"],
+                "division": row["division"],
+                "groupe": row["groupe"],
+                "ronde": row["ronde"],
+                "position": row["position"],
+                "points_cumules": row["points_cumules"],
+                "nb_equipes": row["nb_equipes"],
+                "ecart_premier": row["ecart_premier"],
+                "ecart_dernier": row["ecart_dernier"],
+                "zone_enjeu": zone,
+                "niveau_hierarchique": get_niveau_equipe(str(row["equipe"])),
+            }
+        )
+
+    result = pd.DataFrame(features_data)
+    logger.info(f"  {len(result)} equipes/rondes avec zones enjeu reelles")
+
+    return result
+
+
+def _extract_team_enjeu_fallback(df: pd.DataFrame) -> pd.DataFrame:
+    """Fallback si calcul classement impossible (donnees incompletes)."""
+    logger.warning("  Utilisation fallback zone enjeu (estimation)")
+
     features_data = []
 
     for equipe_col in ["equipe_dom", "equipe_ext"]:
         for (equipe, saison), group in df.groupby([equipe_col, "saison"]):
-            # Estimation simplifiee basee sur le niveau detecte
             division = str(equipe).split()[0] if equipe else "N4"
             niveau = get_niveau_equipe(str(equipe))
-
-            # LIMITATION: Position reelle non disponible dans echiquiers.parquet
-            # Zone enjeu sera "mi_tableau" par defaut
-            # TODO: Enrichir avec donnees classement si disponibles
             nb_equipes = 10 if niveau <= 4 else 8
-            position_estimee = nb_equipes // 2  # Toujours milieu
 
+            # Fallback: position estimee mi-tableau
+            position_estimee = nb_equipes // 2
             zone = calculer_zone_enjeu(position_estimee, nb_equipes, division)
 
             features_data.append(
@@ -508,14 +776,15 @@ def extract_team_enjeu_features(df: pd.DataFrame) -> pd.DataFrame:
                     "zone_enjeu": zone,
                     "niveau_hierarchique": niveau,
                     "nb_rondes": group["ronde"].nunique(),
+                    "position": position_estimee,
+                    "nb_equipes": nb_equipes,
+                    "is_fallback": True,
                 }
             )
 
     result = pd.DataFrame(features_data)
     if len(result) > 0:
         result = result.drop_duplicates(subset=["equipe", "saison"])
-
-    logger.info(f"  {len(result)} equipes/saisons avec zones enjeu")
 
     return result
 
@@ -530,15 +799,16 @@ def temporal_split(
     train_end: int = 2022,
     valid_end: int = 2023,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Split temporel des donnees pour eviter data leakage.
+    """Split temporel des donnees pour eviter data leakage.
 
     Args:
+    ----
         df: DataFrame echiquiers
         train_end: derniere saison pour train (incluse)
         valid_end: derniere saison pour validation (incluse)
 
     Returns:
+    -------
         Tuple (train, valid, test) DataFrames
     """
     logger.info(
@@ -568,8 +838,7 @@ def temporal_split(
 
 
 def run_feature_engineering(data_dir: Path, output_dir: Path) -> None:
-    """
-    Pipeline complet de feature engineering.
+    """Pipeline complet de feature engineering.
 
     ATTENTION: DATA LEAKAGE!
     Cette fonction calcule les features AVANT le split temporel,
@@ -690,15 +959,16 @@ def compute_features_for_split(
     df_history: pd.DataFrame,
     split_name: str,
 ) -> pd.DataFrame:
-    """
-    Calcule les features pour un split en utilisant uniquement l'historique visible.
+    """Calcule les features pour un split en utilisant uniquement l'historique visible.
 
     Args:
+    ----
         df_split: Donnees du split (train, valid ou test)
         df_history: Donnees historiques visibles (pour calculer les features)
         split_name: Nom du split pour logging
 
     Returns:
+    -------
         DataFrame avec features ajoutees
     """
     logger.info(
@@ -824,8 +1094,7 @@ def compute_features_for_split(
 
 
 def run_feature_engineering_v2(data_dir: Path, output_dir: Path) -> None:
-    """
-    Pipeline feature engineering V2 - SANS DATA LEAKAGE.
+    """Pipeline feature engineering V2 - SANS DATA LEAKAGE.
 
     Cette version corrige le data leakage en:
     1. Faisant le split temporel D'ABORD
@@ -834,6 +1103,7 @@ def run_feature_engineering_v2(data_dir: Path, output_dir: Path) -> None:
     Conformite ISO/IEC 42001 (AI Management), ISO/IEC 5259 (Data Quality for ML).
 
     Args:
+    ----
         data_dir: Repertoire des donnees sources
         output_dir: Repertoire de sortie
     """
