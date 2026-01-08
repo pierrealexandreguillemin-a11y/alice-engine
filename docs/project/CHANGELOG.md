@@ -38,6 +38,15 @@
   - 35,320 joueurs licencies (dataset incomplet, voir BILAN_PARSING.md)
   - Champ `mute` (transfert club) ajoute pour reglements FFE
   - Mapping categories FFE legacy → officiel (U8, U10, X20, X50, X65)
+- **Script feature_engineering.py** - Pipeline features ML
+  - Features fiabilite club/joueur
+  - Features forme recente, echiquier moyen
+  - Split temporel (2002-2022 / 2023 / 2024-2026)
+- **Script evaluate_models.py** - Evaluation comparative ML
+  - CatBoost vs XGBoost vs LightGBM
+  - Export resultats CSV
+- **Documentation `.claude.md`** - Instructions Claude Code
+- **ADR-007** - Decision Layered+SRP vs DDD
 
 ### Changed
 - Seuil coverage temporairement a 70% (objectif 80%)
@@ -45,6 +54,8 @@
 ### Known Issues
 - Dataset joueurs incomplet (~47% manquants, surtout jeunes U08-U14)
 - Voir `C:\Dev\ffe_scrapper\TODO_SCRAPING_JOUEURS_COMPLET.md` pour action
+- AUC 0.75 = "bon" mais pas "excellent" (cible: 0.80+)
+- Ecart CatBoost/LightGBM faible (+0.21% AUC)
 
 ### Fixed
 - Erreurs MyPy dans schemas.py
@@ -86,13 +97,22 @@
 - [ ] Nettoyage donnees (Elo=0: 18.2%, forfaits: 5%)
 - [ ] Scraping joueurs complet (~66k) - voir ffe_scrapper
 
-### [0.3.0] - Entrainement Modele
-- [ ] Feature engineering
-- [ ] Entrainement CatBoost
-- [ ] Validation croisee
-- [ ] Export modele .cbm
+### [0.3.0] - Feature Engineering & Evaluation ✅
+- [x] Feature engineering (`feature_engineering.py`)
+- [x] Features fiabilite (club_reliability, player_reliability)
+- [x] Features forme/board (player_form, player_board)
+- [x] Split temporel (2002-2022 / 2023 / 2024-2026)
+- [x] Evaluation CatBoost vs XGBoost vs LightGBM
+- [x] **Resultat**: CatBoost retenu (AUC 0.7527, +1.4% vs XGBoost)
+- [x] Documentation ML_EVALUATION_RESULTS.md
 
-### [0.4.0] - Integration chess-app
+### [0.4.0] - Hyperparameter Tuning 🔄 (en cours)
+- [ ] Optuna tuning (depth, learning_rate, l2_leaf_reg)
+- [ ] Validation croisee
+- [ ] Cible: AUC 0.80+ (actuellement 0.75)
+- [ ] Export modele final .cbm
+
+### [0.5.0] - Integration chess-app
 - [ ] Connexion MongoDB Atlas
 - [ ] Endpoint /predict fonctionnel
 - [ ] Tests integration
@@ -105,10 +125,28 @@
 
 ---
 
-## Documentation associee
+## Bilan performances ML (8 Janvier 2026)
 
-- [BILAN_PARSING.md](./BILAN_PARSING.md) - Resultats detailles du parsing
+| Modele | AUC-ROC | Accuracy | Statut |
+|--------|---------|----------|--------|
+| **CatBoost** | **0.7527** | **68.30%** | Retenu |
+| LightGBM | 0.7506 | 68.22% | Backup |
+| XGBoost | 0.7384 | 67.44% | Baseline |
+
+**Interpretation**:
+- AUC 0.75 = "bon" (echelle: 0.5=hasard, 0.7=acceptable, 0.8=tres bon, 0.9=excellent)
+- Accuracy 68% = 32% d'erreurs
+- Ecart CatBoost/LightGBM faible (+0.21% AUC)
+- Ameliorations necessaires: hyperparameter tuning, features supplementaires
 
 ---
 
-*Derniere mise a jour: 3 Janvier 2026*
+## Documentation associee
+
+- [BILAN_PARSING.md](./BILAN_PARSING.md) - Resultats detailles du parsing
+- [ML_EVALUATION_RESULTS.md](./ML_EVALUATION_RESULTS.md) - Evaluation modeles ML
+- [TRAINING_PROGRESS.md](./TRAINING_PROGRESS.md) - Suivi phases entrainement
+
+---
+
+*Derniere mise a jour: 8 Janvier 2026*

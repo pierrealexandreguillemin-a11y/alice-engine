@@ -1,9 +1,9 @@
 # ALICE Training Progress - Quality Records
 
 > **Document Type**: Quality Records (QR) - ISO 15289
-> **Version**: 1.0.0
+> **Version**: 1.1.0
 > **Date creation**: 4 Janvier 2026
-> **Derniere MAJ**: 4 Janvier 2026
+> **Derniere MAJ**: 8 Janvier 2026
 > **Responsable**: Claude Code / Pierre
 
 ---
@@ -105,6 +105,22 @@ Ce document trace chaque phase, son statut, et les artefacts produits.
 **Decision**: CatBoost retenu (+1.4% AUC vs XGBoost)
 
 **Artefacts**: `data/ml_evaluation_results.csv`
+
+#### Interpretation des resultats (MAJ 8 Janvier 2026)
+
+| Metrique | Valeur | Interpretation |
+|----------|--------|----------------|
+| AUC 0.7527 | "Bon" | Echelle: 0.5=hasard, 0.7=acceptable, 0.8=tres bon |
+| Accuracy 68% | Acceptable | 32% erreurs = 1 prediction sur 3 fausse |
+| Ecart vs LightGBM | +0.21% | Faible, quasi ex-aequo |
+| Ecart vs XGBoost | +1.43% | Significatif |
+
+**Limites identifiees**:
+- AUC < 0.80 (cible) → hyperparameter tuning necessaire
+- Dataset ancien (2002-2022) → patterns potentiellement obsoletes
+- Ecart faible vs LightGBM → choix justifie par categories natives uniquement
+
+**Actions correctives**: Phase 5 (Optuna) + features supplementaires
 
 ### Phase 5 : Hyperparameter Tuning 🔄
 
@@ -226,6 +242,7 @@ Un renforcement d'une equipe = affaiblissement d'une autre.
 | Version | Date | Auteur | Modifications |
 |---------|------|--------|---------------|
 | 1.0.0 | 2026-01-04 | Claude Code | Creation initiale |
+| 1.1.0 | 2026-01-08 | Claude Code | Ajout interpretation Phase 4, limites performances |
 
 ---
 

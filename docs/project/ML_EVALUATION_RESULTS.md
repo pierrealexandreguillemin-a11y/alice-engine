@@ -1,6 +1,7 @@
 # Evaluation ML - CatBoost vs XGBoost vs LightGBM
 
 > **Date**: 4 Janvier 2026
+> **Derniere MAJ**: 8 Janvier 2026
 > **Dataset**: 1,139,819 echiquiers (train), 70,647 (valid), 197,843 (test)
 > **Split**: Temporel (2002-2022 / 2023 / 2024-2026)
 
@@ -93,7 +94,69 @@ model = CatBoostClassifier(
 
 ---
 
-## 4. Features utilisees
+## 4. Interpretation et limites
+
+### 4.1 Echelle AUC-ROC
+
+| Plage AUC | Interpretation | Alice-Engine |
+|-----------|----------------|--------------|
+| 0.50 - 0.60 | Mediocre (a peine mieux que hasard) | |
+| 0.60 - 0.70 | Acceptable | |
+| **0.70 - 0.80** | **Bon** | **0.7527 ← actuel** |
+| 0.80 - 0.90 | Tres bon | ← cible |
+| 0.90 - 1.00 | Excellent | |
+
+**Verdict**: Performance "bonne" mais pas "excellente". Marge d'amelioration.
+
+### 4.2 Accuracy et taux d'erreur
+
+```
+Accuracy:    68.30%
+Taux erreur: 31.70% (environ 1 prediction sur 3 incorrecte)
+```
+
+**Contexte**: Pour la prediction de compositions d'echecs, ce taux est acceptable
+car le modele genere des probabilites (scenarios multiples), pas une prediction unique.
+
+### 4.3 Ecarts entre modeles
+
+| Comparaison | Ecart AUC | Ecart Accuracy | Significativite |
+|-------------|-----------|----------------|-----------------|
+| CatBoost vs XGBoost | +1.43% | +0.86% | **Significatif** |
+| CatBoost vs LightGBM | +0.21% | +0.08% | **Faible** |
+
+**Analyse**:
+- CatBoost domine clairement XGBoost (+1.4% AUC)
+- CatBoost et LightGBM sont quasi ex-aequo (+0.21% AUC)
+- Le choix CatBoost reste justifie par sa gestion native des categories
+
+### 4.4 Limites identifiees
+
+| Limite | Impact | Mitigation |
+|--------|--------|------------|
+| AUC < 0.80 | Predictions moyennement fiables | Hyperparameter tuning (Phase 5) |
+| 32% erreurs | 1 prediction sur 3 fausse | Scenarios multiples, probabilites |
+| Ecart faible vs LightGBM | Choix CatBoost discutable | Justifie par categories natives |
+| Dataset ancien (2002-2022) | Patterns obsoletes possibles | Reentrainer sur 2018-2024 |
+
+### 4.5 Actions correctives prevues
+
+1. **Phase 5 - Hyperparameter Tuning** (Optuna)
+   - Cible: AUC 0.80+
+   - Parametres: depth, learning_rate, l2_leaf_reg, iterations
+
+2. **Features supplementaires**
+   - `taux_forfait_club` - fiabilite club
+   - `forme_recente` - 5 derniers matchs
+   - `objectif_equipe` - montee/maintien/descente
+
+3. **Split temporel ajuste**
+   - Reentrainer sur donnees recentes (2018-2024)
+   - Eviter patterns obsoletes des annees 2000
+
+---
+
+## 5. Features utilisees
 
 ### Numeriques (6)
 
@@ -115,7 +178,7 @@ model = CatBoostClassifier(
 
 ---
 
-## 5. Prochaines ameliorations
+## 6. Prochaines ameliorations
 
 1. **Ajouter features fiabilite** (deja extraites):
    - `taux_forfait_club`
@@ -135,7 +198,7 @@ model = CatBoostClassifier(
 
 ---
 
-## 6. Fichiers generes
+## 7. Fichiers generes
 
 - `data/ml_evaluation_results.csv`: Resultats bruts
 - `scripts/evaluate_models.py`: Script d'evaluation
@@ -143,4 +206,5 @@ model = CatBoostClassifier(
 ---
 
 *Genere le 4 Janvier 2026*
+*Mis a jour le 8 Janvier 2026*
 *Script: evaluate_models.py*
