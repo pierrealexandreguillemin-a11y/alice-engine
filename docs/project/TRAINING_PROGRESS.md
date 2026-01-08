@@ -1,7 +1,7 @@
 # ALICE Training Progress - Quality Records
 
 > **Document Type**: Quality Records (QR) - ISO 15289
-> **Version**: 1.1.0
+> **Version**: 1.2.0
 > **Date creation**: 4 Janvier 2026
 > **Derniere MAJ**: 8 Janvier 2026
 > **Responsable**: Claude Code / Pierre
@@ -158,9 +158,109 @@ Ce document trace chaque phase, son statut, et les artefacts produits.
 
 ---
 
-## 4. Features a ajouter (Phase 2 bis)
+## 4. Integration regles FFE dans ML (Phase 4 bis) 🔄
 
-### 4.1 Objectif equipe par saison (NOUVEAU)
+> **Statut**: A faire
+> **Priorite**: Haute - Impact attendu sur AUC: +5-10%
+> **Documentation**: `docs/requirements/REGLES_FFE_ALICE.md`
+> **Implementation**: `scripts/ffe_rules_features.py`
+
+### 4.1 Dataset de regles disponible
+
+Les regles FFE sont **documentees et implementees** mais **non integrees** dans l'entrainement ML.
+
+| Composant | Fichier | Lignes | Statut |
+|-----------|---------|--------|--------|
+| Documentation | `REGLES_FFE_ALICE.md` | 1,153 | ✅ Complet |
+| Implementation | `ffe_rules_features.py` | 845 | ✅ Complet |
+| Tests | `test_ffe_rules_features.py` | 442 | ✅ 66 tests |
+| **Integration ML** | `feature_engineering.py` | - | ⚠️ **A faire** |
+
+### 4.2 Features reglementaires disponibles
+
+```python
+# Dans ffe_rules_features.py - PRETS A UTILISER
+FeaturesReglementaires(TypedDict):
+    joueur_brule: bool           # Joueur grille dans equipe superieure
+    matchs_avant_brulage: int    # 0-3 matchs restants avant brulage
+    est_dans_noyau: bool         # Fait partie du noyau equipe
+    pct_noyau_equipe: float      # % noyau actuel de l'equipe
+    joueur_mute: bool            # Transfert d'un autre club
+    zone_enjeu_equipe: str       # montee/danger/mi_tableau/descente
+```
+
+### 4.3 Plan d'integration ML
+
+#### Etape 1: Calcul features sur dataset historique
+
+```python
+# A ajouter dans feature_engineering.py
+def extract_ffe_regulatory_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Pour chaque ligne (match joue):
+    1. Construire historique_brulage depuis matchs precedents
+    2. Construire historique_noyau depuis matchs precedents
+    3. Calculer features reglementaires pour chaque joueur
+    """
+    from scripts.ffe_rules_features import (
+        est_brule,
+        matchs_avant_brulage,
+        get_noyau,
+        calculer_pct_noyau,
+        calculer_zone_enjeu,
+    )
+    # Implementation...
+```
+
+#### Etape 2: Features par competition
+
+| Type Competition | Features specifiques |
+|------------------|---------------------|
+| A02 (National) | `joueur_brule`, `pct_noyau`, `nb_mutes`, `quota_nat` |
+| F01 (Feminin) | `joueur_brule` (seuil=1), `joueuse_fr_presente` |
+| C01 (Coupe) | Aucune contrainte specifique |
+| C03 (Loubatiere) | `tous_elo_sous_1800` |
+| C04 (Parite) | `parite_2h_2f`, `elo_total_equipe` |
+| J02 (Jeunes) | `joueur_brule` (seuil=4), ordre par age |
+| REG/DEP | `noyau_2_absolu` |
+
+#### Etape 3: Reentrainement avec features regles
+
+| Feature | Type | Impact attendu |
+|---------|------|----------------|
+| `joueur_brule` | bool | **Eleve** - Exclut joueurs non-eligibles |
+| `matchs_avant_brulage` | int 0-3 | **Moyen** - Probabilite utilisation strategique |
+| `pct_noyau_equipe` | float | **Moyen** - Contrainte composition |
+| `zone_enjeu` | cat | **Eleve** - Motivation equipe |
+| `joueur_mute` | bool | **Faible** - Rare (<5% joueurs) |
+
+### 4.4 Hypothese d'amelioration
+
+```
+AUC actuel:     0.7527 (sans features regles)
+AUC cible:      0.80+  (avec features regles + tuning)
+
+Justification:
+- Un joueur brule NE PEUT PAS jouer → prediction certaine
+- Zone enjeu "montee" → meilleurs joueurs alignes
+- Zone enjeu "descente" → renforcement ou abandon
+- Noyau insuffisant → composition contrainte
+```
+
+### 4.5 Validation de l'integration
+
+| Test | Critere | Methode |
+|------|---------|---------|
+| Coherence | Features non-nulles | `assert df['joueur_brule'].notna().all()` |
+| Distribution | % brules ~10-15% | Statistiques descriptives |
+| Correlation | `joueur_brule` ↔ non-selection | Test chi2 |
+| Impact AUC | Delta significatif | A/B test avec/sans features |
+
+---
+
+## 5. Features complementaires (Phase 2 bis)
+
+### 5.1 Objectif equipe par saison
 
 **Concept**: Chaque equipe a un objectif de fin de saison qui influence les compositions.
 
@@ -177,7 +277,7 @@ Ce document trace chaque phase, son statut, et les artefacts produits.
 - `pression_match`: enjeu selon classement et adversaire
 - `renforcement_saison`: detection joueurs transferes intra-club
 
-### 4.2 Effet vases communiquants
+### 5.2 Effet vases communiquants
 
 **Concept**: Dans un club multi-equipes, les joueurs peuvent migrer entre equipes.
 Un renforcement d'une equipe = affaiblissement d'une autre.
@@ -190,7 +290,7 @@ Un renforcement d'une equipe = affaiblissement d'une autre.
 
 ---
 
-## 5. Decisions techniques (ADR)
+## 6. Decisions techniques (ADR)
 
 ### ADR-001: Choix CatBoost
 
@@ -225,7 +325,7 @@ Un renforcement d'une equipe = affaiblissement d'une autre.
 
 ---
 
-## 6. Conformite ISO
+## 7. Conformite ISO
 
 | Norme | Application | Statut |
 |-------|-------------|--------|
@@ -237,12 +337,13 @@ Un renforcement d'une equipe = affaiblissement d'une autre.
 
 ---
 
-## 7. Historique des modifications
+## 8. Historique des modifications
 
 | Version | Date | Auteur | Modifications |
 |---------|------|--------|---------------|
 | 1.0.0 | 2026-01-04 | Claude Code | Creation initiale |
 | 1.1.0 | 2026-01-08 | Claude Code | Ajout interpretation Phase 4, limites performances |
+| 1.2.0 | 2026-01-08 | Claude Code | Ajout section 4 "Integration regles FFE dans ML" |
 
 ---
 

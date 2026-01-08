@@ -47,6 +47,10 @@
   - Export resultats CSV
 - **Documentation `.claude.md`** - Instructions Claude Code
 - **ADR-007** - Decision Layered+SRP vs DDD
+- **Documentation integration regles FFE → ML** dans TRAINING_PROGRESS.md
+  - Section 4 "Integration regles FFE dans ML (Phase 4 bis)"
+  - Plan d'integration features reglementaires
+  - Hypothese amelioration AUC +5-10%
 
 ### Changed
 - Seuil coverage temporairement a 70% (objectif 80%)
@@ -106,13 +110,20 @@
 - [x] **Resultat**: CatBoost retenu (AUC 0.7527, +1.4% vs XGBoost)
 - [x] Documentation ML_EVALUATION_RESULTS.md
 
-### [0.4.0] - Hyperparameter Tuning 🔄 (en cours)
+### [0.4.0] - Integration regles FFE dans ML 🔄 (en cours)
+- [ ] Integrer features reglementaires (`joueur_brule`, `noyau`, `zone_enjeu`)
+- [ ] Calculer features sur dataset historique complet
+- [ ] Reentrainer CatBoost avec features regles
+- [ ] Valider impact AUC (cible: +5-10%)
+- [ ] Documentation: `REGLES_FFE_ALICE.md` (1,153 lignes), `ffe_rules_features.py` (845 lignes)
+
+### [0.5.0] - Hyperparameter Tuning
 - [ ] Optuna tuning (depth, learning_rate, l2_leaf_reg)
 - [ ] Validation croisee
 - [ ] Cible: AUC 0.80+ (actuellement 0.75)
 - [ ] Export modele final .cbm
 
-### [0.5.0] - Integration chess-app
+### [0.6.0] - Integration chess-app
 - [ ] Connexion MongoDB Atlas
 - [ ] Endpoint /predict fonctionnel
 - [ ] Tests integration

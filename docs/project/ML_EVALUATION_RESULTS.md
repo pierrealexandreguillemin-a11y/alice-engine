@@ -180,21 +180,43 @@ car le modele genere des probabilites (scenarios multiples), pas une prediction 
 
 ## 6. Prochaines ameliorations
 
-1. **Ajouter features fiabilite** (deja extraites):
-   - `taux_forfait_club`
-   - `taux_presence_joueur`
-   - `forme_recente`
-   - `echiquier_moyen`
+### 6.1 Features reglementaires FFE (Priorite: HAUTE)
 
-2. **Optimiser hyperparametres** (Optuna):
-   - `depth`: [4, 6, 8, 10]
-   - `learning_rate`: [0.01, 0.05, 0.1]
-   - `l2_leaf_reg`: [1, 3, 5, 10]
+> **Dataset disponible**: `docs/requirements/REGLES_FFE_ALICE.md` (1,153 lignes)
+> **Implementation**: `scripts/ffe_rules_features.py` (845 lignes, 66 tests)
+> **Statut**: Implemente mais NON integre dans ML
 
-3. **Split temporel ajuste**:
-   - Train: 2018-2023 (donnees recentes)
-   - Valid: 2024
-   - Test: 2025-2026
+| Feature | Type | Impact attendu | Source |
+|---------|------|----------------|--------|
+| `joueur_brule` | bool | **Eleve** | `est_brule()` |
+| `matchs_avant_brulage` | int 0-3 | **Moyen** | `matchs_avant_brulage()` |
+| `est_dans_noyau` | bool | **Moyen** | `get_noyau()` |
+| `pct_noyau_equipe` | float | **Moyen** | `calculer_pct_noyau()` |
+| `zone_enjeu` | cat | **Eleve** | `calculer_zone_enjeu()` |
+| `joueur_mute` | bool | **Faible** | Champ `mute` dataset |
+
+**Hypothese**: AUC +5-10% attendu car:
+- Joueur brule = prediction certaine (ne peut pas jouer)
+- Zone enjeu influence directement les choix de composition
+
+### 6.2 Features fiabilite (deja extraites)
+
+- `taux_forfait_club`
+- `taux_presence_joueur`
+- `forme_recente`
+- `echiquier_moyen`
+
+### 6.3 Optimiser hyperparametres (Optuna)
+
+- `depth`: [4, 6, 8, 10]
+- `learning_rate`: [0.01, 0.05, 0.1]
+- `l2_leaf_reg`: [1, 3, 5, 10]
+
+### 6.4 Split temporel ajuste
+
+- Train: 2018-2023 (donnees recentes)
+- Valid: 2024
+- Test: 2025-2026
 
 ---
 
