@@ -152,4 +152,123 @@ Reutiliser le cluster MongoDB Atlas de chess-app.
 
 ---
 
-*Derniere mise a jour: 3 Janvier 2026*
+## ADR-007: Layered + SRP vs Domain-Driven Design (DDD)
+
+**Date**: 8 Janvier 2026
+**Statut**: Accepte
+
+### Contexte
+
+Choix du paradigme architectural pour structurer le code d'Alice-Engine.
+Deux approches principales considerees:
+
+1. **Layered Architecture + SRP** (actuel)
+   - Controller → Service → Repository
+   - Single Responsibility Principle par couche
+   - Simple, explicite
+
+2. **Domain-Driven Design (DDD)**
+   - Bounded Contexts, Aggregates, Entities, Value Objects
+   - Ubiquitous Language
+   - Architecture hexagonale/onion
+
+### Decision
+
+Conserver **Layered Architecture + SRP** et ne pas adopter DDD.
+
+### Raisons
+
+#### 1. Complexite du domaine insuffisante pour DDD
+
+| Critere | Alice-Engine | Seuil DDD |
+|---------|--------------|-----------|
+| Bounded Contexts | 1 (Composition) | 3+ |
+| Regles metier | ~10 regles FFE | 50+ |
+| Workflows | Lineaire (predict→optimize) | Multiples, branches |
+| Equipe | 1-2 devs | 5+ devs |
+
+#### 2. DDD serait over-engineering
+
+Le domaine Alice-Engine est **algorithmique**, pas **metier complexe**:
+- ALI: Inference ML (CatBoost) → calcul statistique
+- CE: Optimisation (OR-Tools) → probleme mathematique
+- Regles FFE: ~10 regles, pas de processus metier
+
+DDD brille pour: banque, assurance, e-commerce, ERP.
+DDD est excessif pour: API ML, microservices simples, CRUD.
+
+#### 3. Cout cognitif non justifie
+
+| Element DDD | Cout | Benefice Alice |
+|-------------|------|----------------|
+| Bounded Contexts | Eleve | Nul (1 seul contexte) |
+| Aggregates | Moyen | Faible |
+| Domain Events | Eleve | Nul (pas d'evenements) |
+| Ubiquitous Language | Moyen | Deja present (termes FFE) |
+| Repository pattern | Faible | Deja implemente |
+
+#### 4. Layered suffit pour les besoins actuels
+
+```
+app/api/routes.py      # Controller: HTTP validation
+services/inference.py  # Service: Logique ML pure
+services/composer.py   # Service: Logique optimisation pure
+services/data_loader.py # Repository: I/O MongoDB/Parquet
+```
+
+- **Testabilite**: Services sans I/O, facilement mockables
+- **Lisibilite**: Flux lineaire, pas d'indirection
+- **Maintenance**: 1 dev peut comprendre tout le code
+
+### Quand reconsiderer DDD
+
+Adopter DDD si Alice-Engine evolue vers:
+
+1. **Multi-domaines**: Gestion licences, calendrier, paiements, notifications
+2. **Equipe elargie**: 5+ developpeurs necessitant bounded contexts
+3. **Regles metier complexes**: Workflows avec etats, branches, rollbacks
+4. **Event-driven**: Besoin de Domain Events, CQRS, Event Sourcing
+
+Indicateurs de bascule:
+- Plus de 3 Bounded Contexts identifies
+- Plus de 50 regles metier
+- Plus de 5 developpeurs
+- Couplage fort entre modules
+
+### Consequences
+
+#### Positif
+- Code simple et explicite
+- Onboarding rapide (< 1 jour)
+- Pas de framework DDD a maitriser
+- Performance: pas d'indirection inutile
+
+#### Negatif
+- Si le domaine se complexifie, refactoring necessaire
+- Moins de patterns "enterprise-ready"
+
+#### Neutre
+- ISO 42010 respecte (documentation architecture)
+- SRP respecte (separation des couches)
+- Testabilite equivalente
+
+### Alternatives evaluees
+
+| Approche | Verdict | Raison |
+|----------|---------|--------|
+| DDD complet | Rejete | Over-engineering |
+| DDD-lite (tactique only) | Rejete | Benefice insuffisant |
+| Hexagonal | Rejete | Ports/Adapters excessifs |
+| Clean Architecture | Rejete | 4 couches = trop pour le projet |
+| **Layered + SRP** | **Accepte** | Equilibre complexite/benefice |
+
+### References
+
+- ISO 42010: Architecture Description
+- Martin Fowler: "Is Design Dead?" (simplicite vs patterns)
+- Eric Evans: "DDD - Tackling Complexity" (quand utiliser DDD)
+- YAGNI: You Aren't Gonna Need It
+
+---
+
+*Derniere mise a jour: 8 Janvier 2026*
