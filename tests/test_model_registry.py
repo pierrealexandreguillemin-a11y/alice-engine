@@ -13,15 +13,23 @@ import pytest
 
 from scripts.model_registry import (
     ENCRYPTED_EXTENSION,
+    PSI_THRESHOLD_WARNING,
     DataLineage,
+    DriftMetrics,
+    DriftReport,
     EnvironmentInfo,
     ModelArtifact,
     ProductionModelCard,
+    add_round_to_drift_report,
     apply_retention_policy,
+    check_drift_status,
     compute_data_lineage,
     compute_dataframe_hash,
+    compute_drift_metrics,
     compute_file_checksum,
     compute_model_signature,
+    compute_psi,
+    create_drift_report,
     decrypt_model_directory,
     decrypt_model_file,
     encrypt_model_directory,
@@ -34,8 +42,10 @@ from scripts.model_registry import (
     get_package_versions,
     get_retention_status,
     list_model_versions,
+    load_drift_report,
     load_encryption_key,
     rollback_to_version,
+    save_drift_report,
     save_encryption_key,
     validate_dataframe_schema,
     validate_model_integrity,
@@ -891,3 +901,270 @@ class TestAES256Encryption:
         for name, original_data in models.items():
             assert (version_dir / name).exists()
             assert (version_dir / name).read_bytes() == original_data
+
+
+# ==============================================================================
+# P3 TESTS - Drift Monitoring (ISO 5259 / ISO 42001)
+# ==============================================================================
+
+
+class TestPSI:
+    """Tests pour Population Stability Index."""
+
+    def test_psi_identical_distributions(self) -> None:
+        """Test PSI=0 pour distributions identiques."""
+        baseline = pd.Series([1500] * 100 + [1600] * 100 + [1700] * 100)
+        current = pd.Series([1500] * 100 + [1600] * 100 + [1700] * 100)
+
+        psi = compute_psi(baseline, current)
+
+        assert psi < 0.01  # Quasi-identique
+
+    def test_psi_slight_shift(self) -> None:
+        """Test PSI faible pour léger décalage."""
+        np.random.seed(42)
+        baseline = pd.Series(np.random.normal(1500, 200, 1000))
+        current = pd.Series(np.random.normal(1520, 200, 1000))  # Shift +20
+
+        psi = compute_psi(baseline, current)
+
+        assert psi < PSI_THRESHOLD_WARNING
+
+    def test_psi_significant_shift(self) -> None:
+        """Test PSI élevé pour décalage significatif."""
+        np.random.seed(42)
+        baseline = pd.Series(np.random.normal(1500, 200, 1000))
+        current = pd.Series(np.random.normal(1700, 200, 1000))  # Shift +200
+
+        psi = compute_psi(baseline, current)
+
+        assert psi > PSI_THRESHOLD_WARNING
+
+
+class TestDriftMetrics:
+    """Tests pour calcul métriques de drift."""
+
+    @pytest.fixture
+    def sample_predictions(self) -> tuple[pd.DataFrame, pd.Series]:
+        """Crée des données de prédiction de test."""
+        predictions = pd.DataFrame(
+            {
+                "predicted_proba": [0.7, 0.3, 0.8, 0.4, 0.6, 0.2, 0.9, 0.5],
+                "elo_blanc": [1500, 1600, 1700, 1400, 1550, 1450, 1800, 1500],
+                "elo_noir": [1450, 1550, 1650, 1500, 1500, 1550, 1700, 1550],
+            }
+        )
+        actuals = pd.Series([1, 0, 1, 0, 1, 0, 1, 1])
+        return predictions, actuals
+
+    def test_compute_drift_metrics(self, sample_predictions: tuple) -> None:
+        """Test calcul métriques de drift."""
+        predictions, actuals = sample_predictions
+
+        metrics = compute_drift_metrics(
+            round_number=1,
+            predictions=predictions,
+            actuals=actuals,
+            baseline_elo_mean=1550,
+            baseline_elo_std=150,
+        )
+
+        assert isinstance(metrics, DriftMetrics)
+        assert metrics.round_number == 1
+        assert 0 <= metrics.accuracy <= 1
+        assert metrics.predictions_count == 8
+
+    def test_drift_metrics_to_dict(self, sample_predictions: tuple) -> None:
+        """Test conversion métriques en dict."""
+        predictions, actuals = sample_predictions
+
+        metrics = compute_drift_metrics(
+            round_number=1,
+            predictions=predictions,
+            actuals=actuals,
+            baseline_elo_mean=1550,
+            baseline_elo_std=150,
+        )
+        metrics_dict = metrics.to_dict()
+
+        assert "round" in metrics_dict
+        assert "predictions" in metrics_dict
+        assert "drift" in metrics_dict
+        assert "status" in metrics_dict
+
+    def test_drift_alert_on_elo_shift(self) -> None:
+        """Test alerte sur shift ELO significatif."""
+        predictions = pd.DataFrame(
+            {
+                "predicted_proba": [0.5] * 10,
+                "elo_blanc": [1800] * 10,  # Beaucoup plus haut que baseline
+                "elo_noir": [1750] * 10,
+            }
+        )
+        actuals = pd.Series([1] * 5 + [0] * 5)
+
+        metrics = compute_drift_metrics(
+            round_number=1,
+            predictions=predictions,
+            actuals=actuals,
+            baseline_elo_mean=1500,  # Baseline beaucoup plus bas
+            baseline_elo_std=150,
+        )
+
+        assert metrics.has_warning is True
+        assert len(metrics.alerts) > 0
+
+
+class TestDriftReport:
+    """Tests pour rapport de drift."""
+
+    def test_create_drift_report(self) -> None:
+        """Test création rapport drift."""
+        training_elo = pd.Series([1500, 1600, 1400, 1550, 1650])
+
+        report = create_drift_report(
+            season="2025-2026",
+            model_version="v20250101",
+            training_elo=training_elo,
+        )
+
+        assert report.season == "2025-2026"
+        assert report.model_version == "v20250101"
+        assert report.baseline_elo_mean == training_elo.mean()
+        assert len(report.rounds) == 0
+
+    def test_add_round_to_report(self) -> None:
+        """Test ajout ronde au rapport."""
+        training_elo = pd.Series([1500] * 100)
+        report = create_drift_report("2025-2026", "v1", training_elo)
+
+        predictions = pd.DataFrame(
+            {
+                "predicted_proba": [0.6, 0.4, 0.7, 0.3],
+                "elo_blanc": [1500, 1550, 1600, 1450],
+                "elo_noir": [1480, 1520, 1580, 1500],
+            }
+        )
+        actuals = pd.Series([1, 0, 1, 0])
+
+        metrics = add_round_to_drift_report(report, 1, predictions, actuals)
+
+        assert len(report.rounds) == 1
+        assert metrics.round_number == 1
+
+    def test_drift_report_summary(self) -> None:
+        """Test résumé du rapport."""
+        report = DriftReport(
+            season="2025-2026",
+            model_version="v1",
+            baseline_elo_mean=1500,
+            baseline_elo_std=150,
+            rounds=[
+                DriftMetrics(1, "2025-01-01", 100, 0.75, 0.80, 10, 5, 0.05, False, False, []),
+                DriftMetrics(2, "2025-02-01", 100, 0.73, 0.78, 15, 8, 0.08, False, False, []),
+                DriftMetrics(3, "2025-03-01", 100, 0.70, 0.75, 20, 10, 0.12, True, False, ["W"]),
+            ],
+        )
+
+        summary = report.get_summary()
+
+        assert summary["rounds_monitored"] == 3
+        assert summary["accuracy_trend"]["first"] == 0.75
+        assert summary["accuracy_trend"]["last"] == 0.70
+        assert summary["alerts"]["warnings"] == 1
+
+    def test_save_load_drift_report(self, tmp_path: Path) -> None:
+        """Test sauvegarde/chargement rapport."""
+        report = DriftReport(
+            season="2025-2026",
+            model_version="v1",
+            baseline_elo_mean=1500,
+            baseline_elo_std=150,
+            rounds=[
+                DriftMetrics(1, "2025-01-01", 100, 0.75, 0.80, 10, 5, 0.05, False, False, []),
+            ],
+        )
+
+        report_path = tmp_path / "drift_report.json"
+        save_drift_report(report, report_path)
+
+        loaded = load_drift_report(report_path)
+
+        assert loaded is not None
+        assert loaded.season == report.season
+        assert len(loaded.rounds) == 1
+        assert loaded.rounds[0].accuracy == 0.75
+
+    def test_load_missing_report(self, tmp_path: Path) -> None:
+        """Test chargement rapport inexistant."""
+        result = load_drift_report(tmp_path / "nonexistent.json")
+
+        assert result is None
+
+
+class TestDriftStatus:
+    """Tests pour vérification statut drift."""
+
+    def test_status_ok(self) -> None:
+        """Test statut OK."""
+        report = DriftReport(
+            season="2025-2026",
+            model_version="v1",
+            baseline_elo_mean=1500,
+            baseline_elo_std=150,
+            rounds=[
+                DriftMetrics(1, "t", 100, 0.75, 0.80, 10, 5, 0.05, False, False, []),
+                DriftMetrics(2, "t", 100, 0.74, 0.79, 12, 6, 0.06, False, False, []),
+            ],
+        )
+
+        status = check_drift_status(report)
+
+        assert status["status"] == "OK"
+
+    def test_status_monitor_closely(self) -> None:
+        """Test statut dégradation légère."""
+        report = DriftReport(
+            season="2025-2026",
+            model_version="v1",
+            baseline_elo_mean=1500,
+            baseline_elo_std=150,
+            rounds=[
+                DriftMetrics(1, "t", 100, 0.80, 0.85, 10, 5, 0.05, False, False, []),
+                DriftMetrics(2, "t", 100, 0.74, 0.78, 15, 8, 0.08, False, False, []),
+            ],
+        )
+
+        status = check_drift_status(report)
+
+        assert status["status"] == "MONITOR_CLOSELY"
+
+    def test_status_retrain_recommended(self) -> None:
+        """Test statut retraining recommandé."""
+        report = DriftReport(
+            season="2025-2026",
+            model_version="v1",
+            baseline_elo_mean=1500,
+            baseline_elo_std=150,
+            rounds=[
+                DriftMetrics(1, "t", 100, 0.75, 0.80, 10, 5, 0.30, True, True, ["C"]),
+            ],
+        )
+
+        status = check_drift_status(report)
+
+        assert status["status"] == "RETRAIN_RECOMMENDED"
+
+    def test_status_no_data(self) -> None:
+        """Test statut sans données."""
+        report = DriftReport(
+            season="2025-2026",
+            model_version="v1",
+            baseline_elo_mean=1500,
+            baseline_elo_std=150,
+            rounds=[],
+        )
+
+        status = check_drift_status(report)
+
+        assert status["status"] == "NO_DATA"

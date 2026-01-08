@@ -404,6 +404,399 @@ def decrypt_model_directory(
 
 
 # ==============================================================================
+# P3: DRIFT MONITORING (ISO 5259 - Data Quality / ISO 42001 - AI Lifecycle)
+# ==============================================================================
+
+# Seuils de drift
+PSI_THRESHOLD_WARNING = 0.1  # Population Stability Index
+PSI_THRESHOLD_CRITICAL = 0.25
+ACCURACY_DROP_THRESHOLD = 0.05  # 5% drop = warning
+ELO_SHIFT_THRESHOLD = 50  # Écart moyen ELO significatif
+
+
+@dataclass
+class DriftMetrics:
+    """Métriques de drift pour monitoring modèle."""
+
+    round_number: int
+    timestamp: str
+    # Métriques de prédiction
+    predictions_count: int
+    accuracy: float
+    auc_roc: float | None
+    # Métriques de drift features
+    elo_mean_shift: float  # Écart moyenne ELO vs training
+    elo_std_shift: float  # Écart écart-type ELO
+    psi_score: float  # Population Stability Index
+    # Alertes
+    has_warning: bool = False
+    has_critical: bool = False
+    alerts: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        """Convertit en dictionnaire."""
+        return {
+            "round": self.round_number,
+            "timestamp": self.timestamp,
+            "predictions": {
+                "count": self.predictions_count,
+                "accuracy": self.accuracy,
+                "auc_roc": self.auc_roc,
+            },
+            "drift": {
+                "elo_mean_shift": self.elo_mean_shift,
+                "elo_std_shift": self.elo_std_shift,
+                "psi_score": self.psi_score,
+            },
+            "status": {
+                "has_warning": self.has_warning,
+                "has_critical": self.has_critical,
+                "alerts": self.alerts,
+            },
+        }
+
+
+@dataclass
+class DriftReport:
+    """Rapport de drift sur la saison."""
+
+    season: str
+    model_version: str
+    baseline_elo_mean: float
+    baseline_elo_std: float
+    rounds: list[DriftMetrics] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        """Convertit en dictionnaire."""
+        return {
+            "season": self.season,
+            "model_version": self.model_version,
+            "baseline": {
+                "elo_mean": self.baseline_elo_mean,
+                "elo_std": self.baseline_elo_std,
+            },
+            "rounds": [r.to_dict() for r in self.rounds],
+            "summary": self.get_summary(),
+        }
+
+    def get_summary(self) -> dict[str, object]:
+        """Résumé du drift sur la saison."""
+        if not self.rounds:
+            return {"status": "no_data"}
+
+        accuracies = [r.accuracy for r in self.rounds]
+        psi_scores = [r.psi_score for r in self.rounds]
+        warnings = sum(1 for r in self.rounds if r.has_warning)
+        criticals = sum(1 for r in self.rounds if r.has_critical)
+
+        return {
+            "rounds_monitored": len(self.rounds),
+            "accuracy_trend": {
+                "first": accuracies[0],
+                "last": accuracies[-1],
+                "min": min(accuracies),
+                "max": max(accuracies),
+                "degradation": accuracies[0] - accuracies[-1],
+            },
+            "psi_trend": {
+                "max": max(psi_scores),
+                "avg": sum(psi_scores) / len(psi_scores),
+            },
+            "alerts": {
+                "warnings": warnings,
+                "criticals": criticals,
+            },
+            "recommendation": self._get_recommendation(accuracies, psi_scores, criticals),
+        }
+
+    def _get_recommendation(
+        self, accuracies: list[float], psi_scores: list[float], criticals: int
+    ) -> str:
+        """Génère une recommandation basée sur le drift."""
+        if criticals > 2:
+            return "RETRAIN_URGENT"
+        if max(psi_scores) > PSI_THRESHOLD_CRITICAL:
+            return "RETRAIN_RECOMMENDED"
+        if accuracies[0] - accuracies[-1] > ACCURACY_DROP_THRESHOLD:
+            return "MONITOR_CLOSELY"
+        return "OK"
+
+
+def compute_psi(
+    baseline: pd.Series,
+    current: pd.Series,
+    bins: int = 10,
+) -> float:
+    """Calcule le Population Stability Index (PSI).
+
+    PSI mesure le changement de distribution entre baseline et current.
+    - PSI < 0.1: Pas de changement significatif
+    - 0.1 <= PSI < 0.25: Changement modéré (warning)
+    - PSI >= 0.25: Changement significatif (action requise)
+
+    Args:
+    ----
+        baseline: Distribution de référence (training)
+        current: Distribution actuelle (inference)
+        bins: Nombre de bins pour l'histogramme
+
+    Returns:
+    -------
+        Score PSI
+    """
+    import numpy as np
+
+    # Créer des bins basés sur la baseline
+    min_val = min(baseline.min(), current.min())
+    max_val = max(baseline.max(), current.max())
+    bin_edges = np.linspace(min_val, max_val, bins + 1)
+
+    # Calculer les proportions
+    baseline_counts, _ = np.histogram(baseline, bins=bin_edges)
+    current_counts, _ = np.histogram(current, bins=bin_edges)
+
+    # Éviter division par zéro
+    baseline_pct = (baseline_counts + 1) / (len(baseline) + bins)
+    current_pct = (current_counts + 1) / (len(current) + bins)
+
+    # PSI = Σ (current% - baseline%) * ln(current% / baseline%)
+    psi = np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
+
+    return float(psi)
+
+
+def compute_drift_metrics(
+    round_number: int,
+    predictions: pd.DataFrame,
+    actuals: pd.Series,
+    baseline_elo_mean: float,
+    baseline_elo_std: float,
+    baseline_elo_distribution: pd.Series | None = None,
+) -> DriftMetrics:
+    """Calcule les métriques de drift pour une ronde.
+
+    Args:
+    ----
+        round_number: Numéro de la ronde (1-9)
+        predictions: DataFrame avec colonnes 'predicted_proba', 'elo_blanc', 'elo_noir'
+        actuals: Série des résultats réels (0/1)
+        baseline_elo_mean: Moyenne ELO du training set
+        baseline_elo_std: Écart-type ELO du training set
+        baseline_elo_distribution: Distribution ELO complète pour PSI
+
+    Returns:
+    -------
+        DriftMetrics pour cette ronde
+    """
+    from sklearn.metrics import accuracy_score, roc_auc_score
+
+    timestamp = datetime.now().isoformat()
+    alerts: list[str] = []
+
+    # Métriques de prédiction
+    predicted_classes = (predictions["predicted_proba"] >= 0.5).astype(int)
+    accuracy = accuracy_score(actuals, predicted_classes)
+
+    try:
+        auc = roc_auc_score(actuals, predictions["predicted_proba"])
+    except ValueError:
+        auc = None  # Cas où une seule classe présente
+
+    # Métriques de drift ELO
+    current_elo = pd.concat([predictions["elo_blanc"], predictions["elo_noir"]])
+    current_mean = current_elo.mean()
+    current_std = current_elo.std()
+
+    elo_mean_shift = abs(current_mean - baseline_elo_mean)
+    elo_std_shift = abs(current_std - baseline_elo_std)
+
+    # PSI si distribution baseline disponible
+    if baseline_elo_distribution is not None:
+        psi = compute_psi(baseline_elo_distribution, current_elo)
+    else:
+        psi = 0.0
+
+    # Détection d'alertes
+    has_warning = False
+    has_critical = False
+
+    if psi >= PSI_THRESHOLD_CRITICAL:
+        has_critical = True
+        alerts.append(f"CRITICAL: PSI={psi:.3f} (seuil={PSI_THRESHOLD_CRITICAL})")
+    elif psi >= PSI_THRESHOLD_WARNING:
+        has_warning = True
+        alerts.append(f"WARNING: PSI={psi:.3f} (seuil={PSI_THRESHOLD_WARNING})")
+
+    if elo_mean_shift > ELO_SHIFT_THRESHOLD:
+        has_warning = True
+        alerts.append(f"WARNING: ELO mean shift={elo_mean_shift:.1f} points")
+
+    return DriftMetrics(
+        round_number=round_number,
+        timestamp=timestamp,
+        predictions_count=len(predictions),
+        accuracy=accuracy,
+        auc_roc=auc,
+        elo_mean_shift=elo_mean_shift,
+        elo_std_shift=elo_std_shift,
+        psi_score=psi,
+        has_warning=has_warning,
+        has_critical=has_critical,
+        alerts=alerts,
+    )
+
+
+def create_drift_report(
+    season: str,
+    model_version: str,
+    training_elo: pd.Series,
+) -> DriftReport:
+    """Crée un rapport de drift vide pour la saison.
+
+    Args:
+    ----
+        season: Identifiant saison (ex: "2025-2026")
+        model_version: Version du modèle
+        training_elo: Distribution ELO du training set
+
+    Returns:
+    -------
+        DriftReport initialisé
+    """
+    return DriftReport(
+        season=season,
+        model_version=model_version,
+        baseline_elo_mean=training_elo.mean(),
+        baseline_elo_std=training_elo.std(),
+        rounds=[],
+    )
+
+
+def add_round_to_drift_report(
+    report: DriftReport,
+    round_number: int,
+    predictions: pd.DataFrame,
+    actuals: pd.Series,
+    baseline_elo_distribution: pd.Series | None = None,
+) -> DriftMetrics:
+    """Ajoute les métriques d'une ronde au rapport de drift.
+
+    Args:
+    ----
+        report: Rapport de drift existant
+        round_number: Numéro de la ronde
+        predictions: Prédictions de la ronde
+        actuals: Résultats réels
+        baseline_elo_distribution: Distribution ELO baseline pour PSI
+
+    Returns:
+    -------
+        DriftMetrics de la ronde ajoutée
+    """
+    metrics = compute_drift_metrics(
+        round_number=round_number,
+        predictions=predictions,
+        actuals=actuals,
+        baseline_elo_mean=report.baseline_elo_mean,
+        baseline_elo_std=report.baseline_elo_std,
+        baseline_elo_distribution=baseline_elo_distribution,
+    )
+    report.rounds.append(metrics)
+    return metrics
+
+
+def save_drift_report(report: DriftReport, output_path: Path) -> None:
+    """Sauvegarde le rapport de drift en JSON.
+
+    Args:
+    ----
+        report: Rapport à sauvegarder
+        output_path: Chemin de sortie
+    """
+    with output_path.open("w", encoding="utf-8") as f:
+        json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
+    logger.info(f"  Drift report saved to {output_path.name}")
+
+
+def load_drift_report(input_path: Path) -> DriftReport | None:
+    """Charge un rapport de drift depuis JSON.
+
+    Args:
+    ----
+        input_path: Chemin du fichier
+
+    Returns:
+    -------
+        DriftReport ou None si non trouvé
+    """
+    if not input_path.exists():
+        logger.warning(f"Drift report not found: {input_path}")
+        return None
+
+    with input_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Reconstruire les dataclasses
+    rounds = []
+    for r in data.get("rounds", []):
+        rounds.append(
+            DriftMetrics(
+                round_number=r["round"],
+                timestamp=r["timestamp"],
+                predictions_count=r["predictions"]["count"],
+                accuracy=r["predictions"]["accuracy"],
+                auc_roc=r["predictions"]["auc_roc"],
+                elo_mean_shift=r["drift"]["elo_mean_shift"],
+                elo_std_shift=r["drift"]["elo_std_shift"],
+                psi_score=r["drift"]["psi_score"],
+                has_warning=r["status"]["has_warning"],
+                has_critical=r["status"]["has_critical"],
+                alerts=r["status"]["alerts"],
+            )
+        )
+
+    return DriftReport(
+        season=data["season"],
+        model_version=data["model_version"],
+        baseline_elo_mean=data["baseline"]["elo_mean"],
+        baseline_elo_std=data["baseline"]["elo_std"],
+        rounds=rounds,
+    )
+
+
+def check_drift_status(report: DriftReport) -> dict[str, object]:
+    """Vérifie le statut de drift et retourne recommandation.
+
+    Args:
+    ----
+        report: Rapport de drift
+
+    Returns:
+    -------
+        Dict avec status et recommandation
+    """
+    summary = report.get_summary()
+
+    if summary.get("status") == "no_data":
+        return {"status": "NO_DATA", "message": "Aucune donnée de monitoring"}
+
+    recommendation = summary.get("recommendation", "OK")
+
+    messages = {
+        "OK": "Modèle stable, pas d'action requise",
+        "MONITOR_CLOSELY": "Légère dégradation, surveiller les prochaines rondes",
+        "RETRAIN_RECOMMENDED": "Drift significatif détecté, retraining recommandé",
+        "RETRAIN_URGENT": "Drift critique, retraining urgent nécessaire",
+    }
+
+    return {
+        "status": recommendation,
+        "message": messages.get(recommendation, "Unknown"),
+        "summary": summary,
+    }
+
+
+# ==============================================================================
 # P2: SCHEMA VALIDATION (ISO 5259 - Data Quality)
 # ==============================================================================
 
