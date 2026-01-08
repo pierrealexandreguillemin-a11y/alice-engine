@@ -47,6 +47,11 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 from scripts.ml_types import MLClassifier
+from scripts.model_registry import (
+    compute_data_lineage,
+    compute_file_checksum,
+    get_environment_info,
+)
 
 # Configuration paths
 PROJECT_DIR = Path(__file__).parent.parent
@@ -260,6 +265,7 @@ def compute_oof_for_model(
     """Calcule les OOF predictions pour un modele avec K-fold CV.
 
     Args:
+    ----
         model_name: Nom du modele
         X_train: Features train (numpy array)
         y_train: Labels train
@@ -269,6 +275,7 @@ def compute_oof_for_model(
         config: Configuration hyperparametres
 
     Returns:
+    -------
         (model_name, oof_preds, test_preds, auc_score)
     """
     import lightgbm as lgb
@@ -343,10 +350,12 @@ def compute_soft_voting(
     """Calcule le soft voting (moyenne ponderee des probabilites).
 
     Args:
+    ----
         test_matrix: Matrice (n_samples, n_models) des probabilites
         weights: Poids par modele (None = moyenne simple)
 
     Returns:
+    -------
         Probabilites moyennees
     """
     if weights is None:
@@ -378,6 +387,7 @@ def create_stacking_ensemble(
     """Cree un ensemble stacking avec out-of-fold predictions.
 
     Args:
+    ----
         X_train: Features d'entrainement
         y_train: Labels d'entrainement
         X_test: Features de test
@@ -388,6 +398,7 @@ def create_stacking_ensemble(
         parallel: Executer les modeles en parallele
 
     Returns:
+    -------
         StackingResult avec toutes les metriques
     """
     logger.info("\n" + "=" * 60)
@@ -591,28 +602,75 @@ def save_stacking_ensemble(
     result: StackingResult,
     models_dir: Path,
     config: dict[str, object],
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    data_dir: Path,
 ) -> Path:
-    """Sauvegarde l'ensemble stacking."""
+    """Sauvegarde l'ensemble stacking avec conformité ISO."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     version_dir = models_dir / f"stacking_v{timestamp}"
     version_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"\nSaving stacking ensemble to: {version_dir}")
 
-    # Meta-model
+    # Environment info (ISO 42001 - Reproductibilité)
+    env_info = get_environment_info()
+    if env_info.git_commit:
+        logger.info(f"  Git: {env_info.git_commit[:8]} ({env_info.git_branch})")
+
+    # Meta-model avec checksum (ISO 27001 - Intégrité)
     meta_path = version_dir / "stacking_meta.joblib"
     joblib.dump(result.meta_model, meta_path)
-    logger.info(f"  Saved {meta_path.name}")
+    meta_checksum = compute_file_checksum(meta_path)
+    logger.info(f"  Saved {meta_path.name} (SHA256: {meta_checksum[:12]}...)")
 
-    # OOF predictions
+    # OOF predictions avec checksum
     oof_path = version_dir / "oof_predictions.npy"
     np.save(oof_path, result.oof_predictions)
-    logger.info(f"  Saved {oof_path.name}")
+    oof_checksum = compute_file_checksum(oof_path)
+    logger.info(f"  Saved {oof_path.name} (SHA256: {oof_checksum[:12]}...)")
 
-    # Metadata
+    # Test predictions
+    test_path = version_dir / "test_predictions.npy"
+    np.save(test_path, result.test_predictions)
+    test_checksum = compute_file_checksum(test_path)
+    logger.info(f"  Saved {test_path.name} (SHA256: {test_checksum[:12]}...)")
+
+    # Data lineage (ISO 5259 - Traçabilité)
+    train_full = pd.concat([train_df, valid_df], ignore_index=True)
+    data_lineage = compute_data_lineage(
+        data_dir / "train.parquet",
+        data_dir / "valid.parquet",
+        data_dir / "test.parquet",
+        train_full,
+        valid_df,
+        test_df,
+    )
+
+    # Metadata complète
     metadata: dict[str, object] = {
         "version": f"stacking_v{timestamp}",
         "created_at": datetime.now().isoformat(),
+        "environment": env_info.to_dict(),
+        "data_lineage": data_lineage.to_dict(),
+        "artifacts": {
+            "meta_model": {
+                "path": str(meta_path),
+                "checksum": meta_checksum,
+                "size_bytes": meta_path.stat().st_size,
+            },
+            "oof_predictions": {
+                "path": str(oof_path),
+                "checksum": oof_checksum,
+                "size_bytes": oof_path.stat().st_size,
+            },
+            "test_predictions": {
+                "path": str(test_path),
+                "checksum": test_checksum,
+                "size_bytes": test_path.stat().st_size,
+            },
+        },
         "n_folds": result.n_folds,
         "model_weights": result.model_weights,
         "metrics": {
@@ -630,15 +688,17 @@ def save_stacking_ensemble(
         "use_stacking": result.use_stacking,
         "config": {"stacking": config.get("stacking", {})},
         "conformance": {
-            "iso_42001": "AI Management System",
+            "iso_42001": "AI Management System - Model Card",
+            "iso_5259": "Data Quality - Data Lineage",
+            "iso_27001": "Information Security - Checksums",
             "method": "K-Fold OOF Stacking + Soft Voting",
         },
     }
 
     metadata_path = version_dir / "metadata.json"
-    with metadata_path.open("w") as f:
-        json.dump(metadata, f, indent=2)
-    logger.info(f"  Saved {metadata_path.name}")
+    with metadata_path.open("w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+    logger.info("  Saved metadata.json (ISO 42001 Model Card)")
 
     return version_dir
 
@@ -697,9 +757,11 @@ def run_stacking(
         parallel=parallel,
     )
 
-    # Save
-    logger.info("\n[4/4] Saving ensemble...")
-    version_dir = save_stacking_ensemble(result, models_dir, config)
+    # Save (ISO 42001/5259/27001)
+    logger.info("\n[4/4] Saving ensemble with production compliance...")
+    version_dir = save_stacking_ensemble(
+        result, models_dir, config, train_full, valid, test, data_dir
+    )
 
     # Summary
     logger.info("\n" + "=" * 60)
