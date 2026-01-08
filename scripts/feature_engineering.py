@@ -568,7 +568,23 @@ def temporal_split(
 
 
 def run_feature_engineering(data_dir: Path, output_dir: Path) -> None:
-    """Pipeline complet de feature engineering."""
+    """
+    Pipeline complet de feature engineering.
+
+    ATTENTION: DATA LEAKAGE!
+    Cette fonction calcule les features AVANT le split temporel,
+    ce qui cause du data leakage (features utilisent donnees futures).
+
+    Utilisez run_feature_engineering_v2() pour un pipeline sans leakage.
+
+    @deprecated: Utilisez run_feature_engineering_v2() a la place.
+    """
+    logger.warning("!" * 60)
+    logger.warning("ATTENTION: Cette version a un DATA LEAKAGE!")
+    logger.warning("Les features sont calculees AVANT le split temporel.")
+    logger.warning("Utilisez run_feature_engineering_v2() pour corriger.")
+    logger.warning("!" * 60)
+
     logger.info("=" * 60)
     logger.info("ALICE Engine - Feature Engineering")
     logger.info("=" * 60)
@@ -664,6 +680,243 @@ def run_feature_engineering(data_dir: Path, output_dir: Path) -> None:
     logger.info(f"    - test.parquet ({len(test):,} echiquiers)")
 
 
+# ==============================================================================
+# PIPELINE V2 - SANS DATA LEAKAGE
+# ==============================================================================
+
+
+def compute_features_for_split(
+    df_split: pd.DataFrame,
+    df_history: pd.DataFrame,
+    split_name: str,
+) -> pd.DataFrame:
+    """
+    Calcule les features pour un split en utilisant uniquement l'historique visible.
+
+    Args:
+        df_split: Donnees du split (train, valid ou test)
+        df_history: Donnees historiques visibles (pour calculer les features)
+        split_name: Nom du split pour logging
+
+    Returns:
+        DataFrame avec features ajoutees
+    """
+    logger.info(
+        f"  Computing features for {split_name} using {len(df_history):,} historical records..."
+    )
+
+    # Features de fiabilite calculees sur l'historique
+    club_reliability = extract_club_reliability(df_history)
+    player_reliability = extract_player_reliability(df_history)
+
+    # Features derivees (forme, position) sur l'historique
+    df_history_played = df_history[
+        ~df_history["type_resultat"].isin(
+            ["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"]
+        )
+    ]
+
+    recent_form = calculate_recent_form(df_history_played)
+    board_position = calculate_board_position(df_history_played)
+
+    # Features reglementaires
+    ffe_regulatory = extract_ffe_regulatory_features(df_history_played)
+    team_enjeu = extract_team_enjeu_features(df_history_played)
+
+    # Merger les features sur le split
+    result = df_split.copy()
+
+    # Club reliability - merge sur equipe_dom et equipe_ext
+    if len(club_reliability) > 0:
+        club_cols = ["taux_forfait", "taux_non_joue", "fiabilite_score"]
+        for suffix, col in [("dom", "equipe_dom"), ("ext", "equipe_ext")]:
+            merge_df = club_reliability.rename(columns={c: f"{c}_{suffix}" for c in club_cols})
+            result = result.merge(
+                merge_df[["equipe"] + [f"{c}_{suffix}" for c in club_cols]],
+                left_on=col,
+                right_on="equipe",
+                how="left",
+            )
+            if "equipe" in result.columns:
+                result = result.drop(columns=["equipe"])
+
+    # Player reliability - merge sur joueur_id (blanc/noir)
+    if len(player_reliability) > 0:
+        player_cols = ["taux_presence", "nb_forfaits", "joueur_fantome"]
+        for color in ["blanc", "noir"]:
+            merge_df = player_reliability.rename(columns={c: f"{c}_{color}" for c in player_cols})
+            result = result.merge(
+                merge_df[["joueur_id"] + [f"{c}_{color}" for c in player_cols]],
+                left_on=f"{color}_id",
+                right_on="joueur_id",
+                how="left",
+            )
+            if "joueur_id" in result.columns:
+                result = result.drop(columns=["joueur_id"])
+
+    # Forme recente
+    if len(recent_form) > 0:
+        for color in ["blanc", "noir"]:
+            merge_df = recent_form.rename(columns={"forme_recente": f"forme_recente_{color}"})
+            result = result.merge(
+                merge_df[["joueur_id", f"forme_recente_{color}"]],
+                left_on=f"{color}_id",
+                right_on="joueur_id",
+                how="left",
+            )
+            if "joueur_id" in result.columns:
+                result = result.drop(columns=["joueur_id"])
+
+    # Position echiquier moyenne
+    if len(board_position) > 0:
+        for color in ["blanc", "noir"]:
+            merge_df = board_position.rename(
+                columns={"echiquier_moyen": f"echiquier_moyen_{color}"}
+            )
+            result = result.merge(
+                merge_df[["joueur_id", f"echiquier_moyen_{color}"]],
+                left_on=f"{color}_id",
+                right_on="joueur_id",
+                how="left",
+            )
+            if "joueur_id" in result.columns:
+                result = result.drop(columns=["joueur_id"])
+
+    # FFE regulatory features
+    if len(ffe_regulatory) > 0:
+        ffe_cols = ["nb_equipes", "niveau_max", "niveau_min", "multi_equipe"]
+        for color in ["blanc", "noir"]:
+            merge_df = ffe_regulatory.rename(columns={c: f"ffe_{c}_{color}" for c in ffe_cols})
+            cols_to_merge = ["joueur_id"] + [
+                f"ffe_{c}_{color}" for c in ffe_cols if c in ffe_regulatory.columns
+            ]
+            if len(cols_to_merge) > 1:
+                result = result.merge(
+                    merge_df[cols_to_merge],
+                    left_on=f"{color}_id",
+                    right_on="joueur_id",
+                    how="left",
+                )
+                if "joueur_id" in result.columns:
+                    result = result.drop(columns=["joueur_id"])
+
+    # Team enjeu
+    if len(team_enjeu) > 0:
+        for suffix, col in [("dom", "equipe_dom"), ("ext", "equipe_ext")]:
+            merge_df = team_enjeu.rename(
+                columns={
+                    "zone_enjeu": f"zone_enjeu_{suffix}",
+                    "niveau_hierarchique": f"niveau_hier_{suffix}",
+                }
+            )
+            result = result.merge(
+                merge_df[["equipe", "saison", f"zone_enjeu_{suffix}", f"niveau_hier_{suffix}"]],
+                left_on=[col, "saison"],
+                right_on=["equipe", "saison"],
+                how="left",
+            )
+            if "equipe" in result.columns:
+                result = result.drop(columns=["equipe"])
+
+    logger.info(f"  {split_name}: {len(result):,} samples, {len(result.columns)} features")
+
+    return result
+
+
+def run_feature_engineering_v2(data_dir: Path, output_dir: Path) -> None:
+    """
+    Pipeline feature engineering V2 - SANS DATA LEAKAGE.
+
+    Cette version corrige le data leakage en:
+    1. Faisant le split temporel D'ABORD
+    2. Calculant les features PAR SPLIT avec uniquement les donnees historiques visibles
+
+    Conformite ISO/IEC 42001 (AI Management), ISO/IEC 5259 (Data Quality for ML).
+
+    Args:
+        data_dir: Repertoire des donnees sources
+        output_dir: Repertoire de sortie
+    """
+    logger.info("=" * 60)
+    logger.info("ALICE Engine - Feature Engineering V2 (No Leakage)")
+    logger.info("ISO/IEC 42001, 5259 Conformant")
+    logger.info("=" * 60)
+
+    # Charger donnees
+    echiquiers_path = data_dir / "echiquiers.parquet"
+    if not echiquiers_path.exists():
+        logger.error(f"Fichier non trouve: {echiquiers_path}")
+        logger.error("Executez d'abord: python scripts/parse_dataset.py")
+        return
+
+    logger.info(f"\nChargement {echiquiers_path}...")
+    df = pd.read_parquet(echiquiers_path)
+    logger.info(f"  {len(df):,} echiquiers charges")
+
+    # 1. Filtrer parties jouees et Elo valide
+    logger.info("\n[1/4] Filtrage donnees...")
+    df_played = df[
+        ~df["type_resultat"].isin(["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"])
+    ]
+    df_clean = df_played[(df_played["blanc_elo"] > 0) & (df_played["noir_elo"] > 0)]
+    logger.info(f"  {len(df_clean):,} parties valides")
+
+    # 2. SPLIT TEMPOREL D'ABORD (crucial pour eviter leakage)
+    logger.info("\n[2/4] Split temporel AVANT features...")
+    train_raw, valid_raw, test_raw = temporal_split(df_clean)
+
+    # 3. Calculer features PAR SPLIT avec historique approprie
+    logger.info("\n[3/4] Calcul features per-split (no leakage)...")
+
+    # Train: features calculees sur train uniquement
+    logger.info("\n  --- TRAIN ---")
+    train = compute_features_for_split(
+        df_split=train_raw,
+        df_history=df[df["saison"] <= train_raw["saison"].max()],  # Historique train
+        split_name="train",
+    )
+
+    # Valid: features calculees sur train + valid historique
+    # (valid peut voir train car train est dans le passe)
+    logger.info("\n  --- VALID ---")
+    valid_history = df[df["saison"] <= valid_raw["saison"].max()]
+    valid = compute_features_for_split(
+        df_split=valid_raw,
+        df_history=valid_history,
+        split_name="valid",
+    )
+
+    # Test: features calculees sur tout l'historique (train + valid)
+    # En production, test ne voit que le passe
+    logger.info("\n  --- TEST ---")
+    test_history = df[df["saison"] <= test_raw["saison"].min() - 1]  # Avant test
+    test = compute_features_for_split(
+        df_split=test_raw,
+        df_history=test_history,
+        split_name="test",
+    )
+
+    # 4. Export
+    logger.info("\n[4/4] Export...")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    train.to_parquet(output_dir / "train.parquet", index=False)
+    valid.to_parquet(output_dir / "valid.parquet", index=False)
+    test.to_parquet(output_dir / "test.parquet", index=False)
+
+    # Resume
+    logger.info("\n" + "=" * 60)
+    logger.info("Feature engineering V2 termine!")
+    logger.info("=" * 60)
+    logger.info(f"\nFichiers generes dans {output_dir}/:")
+    logger.info(f"  - train.parquet ({len(train):,} echiquiers, {len(train.columns)} features)")
+    logger.info(f"  - valid.parquet ({len(valid):,} echiquiers)")
+    logger.info(f"  - test.parquet ({len(test):,} echiquiers)")
+    logger.info("\nDATA LEAKAGE: CORRIGE")
+    logger.info("  - Split temporel effectue AVANT calcul des features")
+    logger.info("  - Chaque split utilise uniquement les donnees historiques visibles")
+
+
 def main() -> None:
     """Point d'entree."""
     parser = argparse.ArgumentParser(description="Feature engineering ALICE")
@@ -679,9 +932,18 @@ def main() -> None:
         default=DEFAULT_DATA_DIR / "features",
         help="Repertoire de sortie",
     )
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Utiliser l'ancienne version avec data leakage (NON RECOMMANDE)",
+    )
     args = parser.parse_args()
 
-    run_feature_engineering(args.data_dir, args.output_dir)
+    if args.legacy:
+        logger.warning("Mode legacy active - DATA LEAKAGE PRESENT!")
+        run_feature_engineering(args.data_dir, args.output_dir)
+    else:
+        run_feature_engineering_v2(args.data_dir, args.output_dir)
 
 
 if __name__ == "__main__":

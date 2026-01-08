@@ -1,0 +1,196 @@
+# Hyperparameters Configuration - Alice-Engine ML Pipeline
+# Version: 1.0.0
+# Date: 8 Janvier 2026
+# Conformite: ISO/IEC 42001 (AI Management)
+#
+# Usage:
+#   from scripts.train_models_parallel import load_hyperparameters
+#   params = load_hyperparameters("config/hyperparameters.yaml")
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+global:
+  random_seed: 42
+  n_folds: 5                    # K-Fold cross-validation
+  early_stopping_rounds: 50     # Patience pour early stopping
+  eval_metric: "auc"            # Metrique d'optimisation
+  task_type: "CPU"              # CPU ou GPU (CatBoost)
+  verbose: 100                  # Frequence logs (iterations)
+
+# =============================================================================
+# CATBOOST - Model principal (categories natives)
+# Documentation: https://catboost.ai/docs/concepts/parameter-tuning.html
+# =============================================================================
+catboost:
+  # Boosting parameters
+  iterations: 1000
+  learning_rate: 0.03
+  depth: 6
+
+  # Regularization
+  l2_leaf_reg: 3
+  min_data_in_leaf: 20
+
+  # Performance
+  thread_count: -1              # Tous les cores
+  task_type: "CPU"
+
+  # Categorical features
+  cat_features:
+    - type_competition
+    - division
+    - ligue_code
+    - blanc_titre
+    - noir_titre
+    - jour_semaine
+    - zone_enjeu
+
+  # Early stopping
+  early_stopping_rounds: 50
+
+  # Reproducibility
+  random_seed: 42
+
+  # Output
+  verbose: 100
+
+# =============================================================================
+# XGBOOST - Model secondaire (rapide, bien documente)
+# Documentation: https://xgboost.readthedocs.io/en/stable/parameter.html
+# =============================================================================
+xgboost:
+  # Boosting parameters
+  n_estimators: 1000
+  learning_rate: 0.03
+  max_depth: 6
+
+  # Regularization
+  reg_lambda: 1.0               # L2 regularization
+  reg_alpha: 0.0                # L1 regularization
+  min_child_weight: 1
+
+  # Performance
+  tree_method: "hist"           # Fast histogram-based
+  n_jobs: -1
+
+  # Early stopping
+  early_stopping_rounds: 50
+
+  # Reproducibility
+  random_state: 42
+
+  # Output
+  verbosity: 1
+
+# =============================================================================
+# LIGHTGBM - Model secondaire (tres rapide, memoire efficiente)
+# Documentation: https://lightgbm.readthedocs.io/en/latest/Parameters.html
+# =============================================================================
+lightgbm:
+  # Boosting parameters
+  n_estimators: 1000
+  learning_rate: 0.03
+  num_leaves: 63                # 2^depth - 1 (depth=6)
+  max_depth: -1                 # No limit (controlled by num_leaves)
+
+  # Regularization
+  reg_lambda: 1.0               # L2 regularization
+  reg_alpha: 0.0                # L1 regularization
+  min_child_samples: 20
+
+  # Categorical features
+  categorical_feature: "auto"   # Auto-detect from pandas categorical
+
+  # Performance
+  n_jobs: -1
+
+  # Early stopping
+  early_stopping_rounds: 50
+
+  # Reproducibility
+  random_state: 42
+
+  # Output
+  verbose: -1                   # Silent mode
+
+# =============================================================================
+# STACKING META-LEARNER
+# =============================================================================
+stacking:
+  meta_learner: "logistic_regression"
+
+  logistic_regression:
+    C: 1.0
+    max_iter: 1000
+    random_state: 42
+
+  # Alternative: Ridge regression
+  ridge:
+    alpha: 1.0
+
+  # Selection criteria
+  selection:
+    min_gain_vs_best_single: 0.01  # +1% AUC minimum pour choisir stacking
+
+# =============================================================================
+# OPTUNA HYPERPARAMETER SEARCH (Phase future)
+# =============================================================================
+optuna:
+  n_trials: 100
+  timeout: 3600                 # 1 heure max
+
+  catboost_search_space:
+    depth: [4, 6, 8, 10]
+    learning_rate: [0.01, 0.03, 0.05, 0.1]
+    l2_leaf_reg: [1, 3, 5, 10]
+    iterations: [500, 1000, 1500]
+
+  xgboost_search_space:
+    max_depth: [4, 6, 8, 10]
+    learning_rate: [0.01, 0.03, 0.05, 0.1]
+    reg_lambda: [0.1, 1.0, 5.0, 10.0]
+    n_estimators: [500, 1000, 1500]
+
+  lightgbm_search_space:
+    num_leaves: [31, 63, 127]
+    learning_rate: [0.01, 0.03, 0.05, 0.1]
+    reg_lambda: [0.1, 1.0, 5.0, 10.0]
+    n_estimators: [500, 1000, 1500]
+
+# =============================================================================
+# METRICS THRESHOLDS (ISO 25010)
+# =============================================================================
+metrics_thresholds:
+  auc_roc:
+    minimum: 0.70
+    target: 0.78
+    excellent: 0.85
+
+  accuracy:
+    minimum: 0.60
+    target: 0.70
+    excellent: 0.75
+
+  f1_score:
+    minimum: 0.55
+    target: 0.65
+    excellent: 0.75
+
+  log_loss:
+    maximum: 0.70
+    target: 0.55
+    excellent: 0.45
+
+# =============================================================================
+# MLFLOW TRACKING
+# =============================================================================
+mlflow:
+  experiment_name: "alice-ml-training"
+  tracking_uri: "./mlruns"       # Local tracking
+  artifact_location: "./mlruns/artifacts"
+
+  log_params: true
+  log_metrics: true
+  log_models: true
+  log_feature_importance: true
