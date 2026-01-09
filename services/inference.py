@@ -1,13 +1,18 @@
-# services/inference.py
-"""
-ALI - Adversarial Lineup Inference
+"""Module: inference.py - ALI (Adversarial Lineup Inference).
 
 Service de prediction de la composition adverse.
 Logique metier pure, sans I/O direct (SRP).
 
-@description Predit quels joueurs adverses vont jouer
+ISO Compliance:
+- ISO/IEC 42001:2023 - AI Management System (predictions tracables)
+- ISO/IEC 42010 - Architecture (Service layer, SRP)
+- ISO/IEC 27001 - Information Security (audit logs)
+- ISO/IEC 5259:2024 - Data Quality for ML (input validation)
+
 @see CDC_ALICE.md - F.1 Prediction de Composition Adverse
-@see ISO 42010 - Service layer
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 import logging
@@ -30,8 +35,7 @@ class PlayerProbability:
 
 
 class InferenceService:
-    """
-    Service ALI (Adversarial Lineup Inference).
+    """Service ALI (Adversarial Lineup Inference).
 
     Responsabilite: Predire la composition adverse probable.
 
@@ -41,9 +45,8 @@ class InferenceService:
         - get_player_probability: Probabilite pour un joueur specifique
     """
 
-    def __init__(self, model_path: str | None = None):
-        """
-        Initialise le service d'inference.
+    def __init__(self, model_path: str | None = None) -> None:
+        """Initialise le service d'inference.
 
         @param model_path: Chemin vers le modele CatBoost/XGBoost
         """
@@ -52,8 +55,7 @@ class InferenceService:
         self.is_loaded = False
 
     def load_model(self) -> bool:
-        """
-        Charge le modele ML depuis le disque.
+        """Charge le modele ML depuis le disque.
 
         @returns: True si charge avec succes
         """
@@ -66,11 +68,11 @@ class InferenceService:
             # from catboost import CatBoostClassifier
             # self.model = CatBoostClassifier()
             # self.model.load_model(self.model_path)
-            logger.info(f"Modele charge depuis {self.model_path}")
+            logger.info("Modele charge depuis %s", self.model_path)
             self.is_loaded = True
             return True
         except Exception as e:
-            logger.error(f"Erreur chargement modele: {e}")
+            logger.error("Erreur chargement modele: %s", e)
             return False
 
     def predict_lineup(
@@ -80,8 +82,7 @@ class InferenceService:
         opponent_players: list[dict[str, Any]],
         team_size: int = 8,
     ) -> list[PlayerProbability]:
-        """
-        Predit la composition adverse probable.
+        """Predit la composition adverse probable.
 
         @param opponent_club_id: ID FFE du club adverse
         @param round_number: Numero de la ronde
@@ -108,8 +109,7 @@ class InferenceService:
         predictions: list[PlayerProbability],
         scenario_count: int = 20,
     ) -> list[dict[str, Any]]:
-        """
-        Genere plusieurs scenarios de composition adverse.
+        """Genere plusieurs scenarios de composition adverse.
 
         @param predictions: Predictions de probabilites par joueur
         @param scenario_count: Nombre de scenarios a generer
@@ -125,8 +125,7 @@ class InferenceService:
         players: list[dict[str, Any]],
         team_size: int,
     ) -> list[PlayerProbability]:
-        """
-        Prediction fallback basee sur l'ordre Elo.
+        """Prediction fallback basee sur l'ordre Elo.
 
         Utilisee quand le modele n'est pas charge.
         Hypothese: Les meilleurs joueurs jouent en priorite.

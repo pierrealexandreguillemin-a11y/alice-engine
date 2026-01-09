@@ -1,13 +1,18 @@
-# services/data_loader.py
-"""
-Data Loader - Repository Layer (SRP)
+"""Module: data_loader.py - Repository Layer (SRP).
 
 Acces aux donnees MongoDB et fichiers locaux.
 Seul module autorise a faire des I/O.
 
-@description Charge les donnees historiques pour l'entrainement et l'inference
-@see ISO 42010 - Repository layer
-@see ISO 25012 - Qualite des donnees
+ISO Compliance:
+- ISO/IEC 5259:2024 - Data Quality for ML (data loading, validation)
+- ISO/IEC 25012 - Data Quality (completude, coherence)
+- ISO/IEC 42010 - Architecture (Repository layer, SRP)
+- ISO/IEC 27001 - Information Security (acces donnees)
+
+@see CDC_ALICE.md - Data access patterns
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 import logging
@@ -18,8 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class DataLoader:
-    """
-    Repository pour l'acces aux donnees.
+    """Repository pour l'acces aux donnees.
 
     Responsabilite unique: I/O (MongoDB, fichiers).
     Aucune logique metier ici.
@@ -34,9 +38,8 @@ class DataLoader:
         self,
         mongodb_uri: str | None = None,
         dataset_path: Path | None = None,
-    ):
-        """
-        Initialise le data loader.
+    ) -> None:
+        """Initialise le data loader.
 
         @param mongodb_uri: URI MongoDB (lecture seule)
         @param dataset_path: Chemin vers dataset local (Parquet)
@@ -46,8 +49,7 @@ class DataLoader:
         self.db = None
 
     async def connect(self) -> bool:
-        """
-        Connecte a MongoDB.
+        """Connect to MongoDB.
 
         @returns: True si connecte
         """
@@ -56,7 +58,7 @@ class DataLoader:
             return False
 
         try:
-            from motor.motor_asyncio import AsyncIOMotorClient
+            from motor.motor_asyncio import AsyncIOMotorClient  # noqa: PLC0415
 
             client = AsyncIOMotorClient(self.mongodb_uri)
             self.db = client.get_default_database()
@@ -65,7 +67,7 @@ class DataLoader:
             logger.info("MongoDB connecte")
             return True
         except Exception as e:
-            logger.error(f"Erreur connexion MongoDB: {e}")
+            logger.error("Erreur connexion MongoDB: %s", e)
             return False
 
     async def get_opponent_history(
@@ -73,8 +75,7 @@ class DataLoader:
         club_id: str,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """
-        Recupere l'historique des compositions d'un club.
+        """Recupere l'historique des compositions d'un club.
 
         @param club_id: ID FFE du club
         @param limit: Nombre max de matchs
@@ -99,7 +100,7 @@ class DataLoader:
 
             return await cursor.to_list(length=limit)
         except Exception as e:
-            logger.error(f"Erreur lecture historique: {e}")
+            logger.error("Erreur lecture historique: %s", e)
             return []
 
     async def get_club_players(
@@ -107,8 +108,7 @@ class DataLoader:
         club_id: str,
         active_only: bool = True,
     ) -> list[dict[str, Any]]:
-        """
-        Recupere les joueurs d'un club.
+        """Recupere les joueurs d'un club.
 
         @param club_id: ID FFE du club
         @param active_only: Uniquement joueurs actifs
@@ -141,15 +141,14 @@ class DataLoader:
 
             return await cursor.to_list(length=200)
         except Exception as e:
-            logger.error(f"Erreur lecture joueurs: {e}")
+            logger.error("Erreur lecture joueurs: %s", e)
             return []
 
     def load_training_data(
         self,
         seasons: list[int] | None = None,
     ) -> Any:
-        """
-        Charge les donnees d'entrainement depuis fichiers Parquet.
+        """Charge les donnees d'entrainement depuis fichiers Parquet.
 
         @param seasons: Saisons a charger (None = toutes)
 
@@ -162,11 +161,11 @@ class DataLoader:
             return None
 
         try:
-            import pandas as pd
+            import pandas as pd  # noqa: PLC0415
 
             parquet_file = self.dataset_path / "echiquiers.parquet"
             if not parquet_file.exists():
-                logger.error(f"Fichier non trouve: {parquet_file}")
+                logger.error("Fichier non trouve: %s", parquet_file)
                 return None
 
             df = pd.read_parquet(parquet_file)
@@ -174,9 +173,9 @@ class DataLoader:
             if seasons:
                 df = df[df["saison"].isin(seasons)]
 
-            logger.info(f"Charge {len(df)} lignes depuis {parquet_file}")
+            logger.info("Charge %d lignes depuis %s", len(df), parquet_file)
             return df
 
         except Exception as e:
-            logger.error(f"Erreur chargement donnees: {e}")
+            logger.error("Erreur chargement donnees: %s", e)
             return None

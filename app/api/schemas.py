@@ -1,12 +1,16 @@
-# app/api/schemas.py
-"""
-Schemas Pydantic - Validation des donnees (ISO 25012)
+"""Module: schemas.py - Validation des donnees.
 
 Tous les modeles de requetes/reponses sont definis ici.
 Validation stricte des entrees pour eviter injections.
 
-@see ISO 25012 - Qualite des donnees
-@see ISO 27034 - Input validation (CWE-20)
+ISO Compliance:
+- ISO/IEC 5259:2024 - Data Quality for ML (schema validation)
+- ISO/IEC 25012 - Data Quality (exactitude, coherence)
+- ISO/IEC 27034 - Secure Coding (input validation, CWE-20)
+- ISO/IEC 5055 - Code Quality (types stricts)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from datetime import datetime
@@ -31,12 +35,14 @@ class PlayerInput(BaseModel):
     is_muted: bool = Field(False, description="Joueur mute")
     matches_played: int | None = Field(None, ge=0, description="Matchs joues")
 
+    _FFE_ID_LENGTH = 6  # Format: 1 lettre + 5 chiffres
+
     @field_validator("ffe_id")
     @classmethod
     def validate_ffe_id(cls, v: str) -> str:
-        """Valide le format FFE ID (lettre + 5 chiffres)."""
+        """Validate FFE ID format (letter + 5 digits)."""
         v = v.upper().strip()
-        if len(v) != 6 or not v[0].isalpha() or not v[1:].isdigit():
+        if len(v) != cls._FFE_ID_LENGTH or not v[0].isalpha() or not v[1:].isdigit():
             raise ValueError("FFE ID doit etre au format A12345")
         return v
 

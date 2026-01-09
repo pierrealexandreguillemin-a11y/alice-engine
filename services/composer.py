@@ -1,13 +1,18 @@
-# services/composer.py
-"""
-CE - Composition Engine
+"""Module: composer.py - CE (Composition Engine).
 
 Service d'optimisation de la composition utilisateur.
 Logique metier pure, sans I/O direct (SRP).
 
-@description Optimise la composition pour maximiser le score attendu
+ISO Compliance:
+- ISO/IEC 42001:2023 - AI Management System (optimisation tracable)
+- ISO/IEC 42010 - Architecture (Service layer, SRP)
+- ISO/IEC 25010 - System Quality (fiabilite, performance)
+- ISO/IEC 23894:2023 - AI Risk Management (scenarios)
+
 @see CDC_ALICE.md - F.2 Optimisation de Composition
-@see ISO 42010 - Service layer
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 import logging
@@ -44,8 +49,7 @@ class CompositionResult:
 
 
 class ComposerService:
-    """
-    Service CE (Composition Engine).
+    """Service CE (Composition Engine).
 
     Responsabilite: Optimiser la composition utilisateur
     pour maximiser le score attendu contre l'adversaire predit.
@@ -66,8 +70,7 @@ class ComposerService:
         predicted_opponents: list[dict[str, Any]],
         constraints: dict[str, Any] | None = None,
     ) -> CompositionResult:
-        """
-        Optimise la composition pour maximiser le score attendu.
+        """Optimise la composition pour maximiser le score attendu.
 
         @param available_players: Joueurs disponibles avec Elo
         @param predicted_opponents: Adversaires predits par echiquier
@@ -139,8 +142,7 @@ class ComposerService:
         player_elo: int,
         opponent_elo: int,
     ) -> tuple[float, float, float]:
-        """
-        Calcule les probabilites victoire/nulle/defaite via formule Elo.
+        """Compute win/draw/loss probabilities using Elo formula.
 
         @param player_elo: Elo du joueur
         @param opponent_elo: Elo de l'adversaire
@@ -178,8 +180,7 @@ class ComposerService:
         player_elo: int,
         opponent_elo: int,
     ) -> float:
-        """
-        Calcule le score attendu (0-1) pour un matchup.
+        """Compute expected score (0-1) for a matchup.
 
         @see CDC_ALICE.md - Formule Elo
         """
@@ -193,8 +194,7 @@ class ComposerService:
         constraints: dict[str, Any] | None = None,
         count: int = 3,
     ) -> list[CompositionResult]:
-        """
-        Genere des compositions alternatives.
+        """Genere des compositions alternatives.
 
         @param count: Nombre d'alternatives a generer
 

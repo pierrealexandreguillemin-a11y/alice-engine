@@ -1,12 +1,16 @@
-# app/api/routes.py
-"""
-Routes API - Controller Layer (SRP)
+"""Module: routes.py - Controller Layer (SRP).
 
-Responsabilite unique: Gestion HTTP (validation, serialisation)
+Responsabilite unique: Gestion HTTP (validation, serialisation).
 La logique metier est deleguee aux services.
 
-@see ISO 42010 - Architecture (Controller)
-@see ISO 27034 - Input validation
+ISO Compliance:
+- ISO/IEC 27001 - Information Security (authentification, autorisation)
+- ISO/IEC 27034 - Secure Coding (input validation, CWE-20)
+- ISO/IEC 42010 - Architecture (Controller layer, SRP)
+- ISO/IEC 25010 - System Quality (securite, fiabilite)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from fastapi import APIRouter, Header, HTTPException
@@ -37,9 +41,8 @@ router = APIRouter(prefix="/api/v1", tags=["ALICE"])
         500: {"model": ErrorResponse, "description": "Internal error"},
     },
 )
-async def predict_lineup(request: PredictRequest):
-    """
-    Endpoint principal - Prediction de composition adverse et optimisation.
+async def predict_lineup(request: PredictRequest) -> PredictResponse:
+    """Predict opponent lineup and optimize user composition.
 
     1. ALI (Adversarial Lineup Inference): Predit la composition adverse
     2. CE (Composition Engine): Optimise la composition utilisateur
@@ -75,9 +78,8 @@ async def predict_lineup(request: PredictRequest):
     "/models/{club_id}",
     response_model=ModelInfoResponse,
 )
-async def get_model_info(club_id: str):
-    """
-    Information sur le modele utilise pour un club.
+async def get_model_info(club_id: str) -> ModelInfoResponse:
+    """Return model information for a club.
 
     @param club_id: ID FFE du club
     @returns: Type de modele, version, metriques
@@ -101,9 +103,8 @@ async def get_model_info(club_id: str):
 async def trigger_training(
     request: TrainRequest,
     x_api_key: str | None = Header(None),
-):
-    """
-    Declencher un re-entrainement du modele (protege par API key).
+) -> TrainResponse:
+    """Trigger model retraining (protected by API key).
 
     @param request: Configuration d'entrainement
     @param x_api_key: Cle API requise

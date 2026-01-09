@@ -78,6 +78,12 @@ ignore = [
     "TCH001", "TCH003", "TCH004",  # type imports flexibility
     "ANN101", "ANN102",  # self/cls annotation (redundant in Python)
 ]
+"app/**/*.py" = [
+    "ANN101", "ANN102",  # self/cls annotation (redundant in Python)
+]
+"services/**/*.py" = [
+    "ANN101", "ANN102",  # self/cls annotation (redundant in Python)
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "services"]
