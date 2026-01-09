@@ -40,7 +40,7 @@ from scripts.features.reliability import (
     extract_club_reliability,
     extract_player_reliability,
 )
-from scripts.features.standings import extract_team_enjeu_features
+from scripts.features.standings import calculate_standings, extract_team_enjeu_features
 
 
 def extract_all_features(
@@ -60,6 +60,9 @@ def extract_all_features(
     -------
         Dict[nom_feature, DataFrame] avec toutes les features calculees
     """
+    # Calcul classement pour zones enjeu (ISO 5259 - position reelle)
+    standings = calculate_standings(df_history_played)
+
     features = {
         "club_reliability": extract_club_reliability(df_history),
         "player_reliability": extract_player_reliability(df_history),
@@ -67,7 +70,7 @@ def extract_all_features(
         "board_position": calculate_board_position(df_history_played),
         "color_perf": calculate_color_performance(df_history_played),
         "ffe_regulatory": extract_ffe_regulatory_features(df_history_played),
-        "team_enjeu": extract_team_enjeu_features(df_history_played),
+        "team_enjeu": extract_team_enjeu_features(df_history_played, standings),
     }
 
     if include_advanced:
