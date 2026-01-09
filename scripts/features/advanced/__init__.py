@@ -2,15 +2,16 @@
 
 Ce package implémente les features avancées identifiées par recherche web:
 - Head-to-head (H2H) historique
-- Fatigue / jours de repos
-- Performance domicile vs extérieur
 - Performance sous pression (matchs décisifs)
 - Trajectoire Elo (progression/régression)
+
+NOTE: Features supprimées (non pertinentes pour échecs):
+- fatigue.py: Fatigue physique non applicable (échecs = cognitif)
+- home_away.py: Confusion conceptuelle domicile/couleur (voir color_perf.py)
 
 Sources:
 - AI Sports Predictions 2025 (ainewshub.org)
 - EloMetrics IEEE 2025
-- Home Advantage Research (Taylor & Francis)
 - Sports Prediction PMC
 
 Conformité:
@@ -19,15 +20,11 @@ Conformité:
 """
 
 from scripts.features.advanced.elo_trajectory import calculate_elo_trajectory
-from scripts.features.advanced.fatigue import calculate_fatigue_rest_days
 from scripts.features.advanced.h2h import calculate_head_to_head
-from scripts.features.advanced.home_away import calculate_home_away_performance
 from scripts.features.advanced.pressure import calculate_pressure_performance
 
 __all__ = [
     "calculate_head_to_head",
-    "calculate_fatigue_rest_days",
-    "calculate_home_away_performance",
     "calculate_pressure_performance",
     "calculate_elo_trajectory",
 ]

@@ -18,9 +18,7 @@ import pytest
 
 from scripts.features.advanced import (
     calculate_elo_trajectory,
-    calculate_fatigue_rest_days,
     calculate_head_to_head,
-    calculate_home_away_performance,
     calculate_pressure_performance,
 )
 from scripts.features.performance import (
@@ -591,42 +589,6 @@ class TestCalculateHeadToHead:
 
 
 # ==============================================================================
-# TESTS CALCULATE_FATIGUE_REST_DAYS
-# ==============================================================================
-
-
-class TestCalculateFatigueRestDays:
-    """Tests pour calculate_fatigue_rest_days()."""
-
-    def test_fatigue_basic(self, sample_dated_games: pd.DataFrame) -> None:
-        """Test calcul fatigue basique."""
-        result = calculate_fatigue_rest_days(sample_dated_games)
-
-        assert not result.empty
-        assert "jours_repos" in result.columns
-        assert "fatigue_level" in result.columns
-
-    def test_fatigue_levels(self, sample_dated_games: pd.DataFrame) -> None:
-        """Test que les niveaux de fatigue sont corrects."""
-        result = calculate_fatigue_rest_days(sample_dated_games)
-
-        # Filtrer Joueur Test
-        joueur_result = result[result["joueur_nom"] == "Joueur Test"]
-
-        # Vérifie qu'on a les différents niveaux
-        levels = joueur_result["fatigue_level"].unique()
-        assert "inconnu" in levels  # Premier match
-        assert "fatigue" in levels  # 1 jour après
-        assert "repose" in levels  # 8 jours après
-
-    def test_fatigue_no_date_column(self) -> None:
-        """Test sans colonne date."""
-        df = pd.DataFrame({"blanc_nom": ["A"], "noir_nom": ["B"]})
-        result = calculate_fatigue_rest_days(df)
-        assert result.empty
-
-
-# ==============================================================================
 # TESTS CALCULATE_ELO_TRAJECTORY
 # ==============================================================================
 
@@ -711,56 +673,6 @@ class TestCalculatePressurePerformance:
     def test_pressure_empty_df(self) -> None:
         """Test avec DataFrame vide."""
         result = calculate_pressure_performance(pd.DataFrame())
-        assert result.empty
-
-
-# ==============================================================================
-# TESTS CALCULATE_HOME_AWAY_PERFORMANCE
-# ==============================================================================
-
-
-class TestCalculateHomeAwayPerformance:
-    """Tests pour calculate_home_away_performance()."""
-
-    def test_home_away_basic(self) -> None:
-        """Test performance domicile/extérieur basique."""
-        games = []
-        # Domicile (échiquiers impairs pour blancs)
-        for i in range(10):
-            games.append(
-                {
-                    "echiquier": 1,  # Impair = domicile
-                    "blanc_nom": "Joueur HA",
-                    "noir_nom": f"Adv H{i}",
-                    "resultat_blanc": 1.0,
-                    "resultat_noir": 0.0,
-                    "type_resultat": "victoire_blanc",
-                }
-            )
-        # Extérieur (échiquiers pairs pour blancs)
-        for i in range(10):
-            games.append(
-                {
-                    "echiquier": 2,  # Pair = extérieur
-                    "blanc_nom": "Joueur HA",
-                    "noir_nom": f"Adv A{i}",
-                    "resultat_blanc": 0.5,
-                    "resultat_noir": 0.5,
-                    "type_resultat": "nulle",
-                }
-            )
-
-        df = pd.DataFrame(games)
-        result = calculate_home_away_performance(df, min_games=5)
-
-        assert not result.empty
-        ha_row = result[result["joueur_nom"] == "Joueur HA"]
-        assert len(ha_row) == 1
-        assert ha_row["home_away_pref"].values[0] == "domicile"
-
-    def test_home_away_empty_df(self) -> None:
-        """Test avec DataFrame vide."""
-        result = calculate_home_away_performance(pd.DataFrame())
         assert result.empty
 
 

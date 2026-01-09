@@ -18,15 +18,12 @@ import pandas as pd
 
 from scripts.features.advanced import (
     calculate_elo_trajectory,
-    calculate_fatigue_rest_days,
     calculate_head_to_head,
-    calculate_home_away_performance,
     calculate_pressure_performance,
 )
 from scripts.features.ffe_features import extract_ffe_regulatory_features
 from scripts.features.merge_helpers import (
     merge_club_reliability,
-    merge_fatigue_features,
     merge_h2h_features,
     merge_player_features,
     merge_team_enjeu,
@@ -77,8 +74,6 @@ def extract_all_features(
         features.update(
             {
                 "h2h": calculate_head_to_head(df_history_played),
-                "fatigue": calculate_fatigue_rest_days(df_history_played),
-                "home_away": calculate_home_away_performance(df_history_played),
                 "pressure": calculate_pressure_performance(df_history_played),
                 "trajectory": calculate_elo_trajectory(df_history_played),
             }
@@ -146,12 +141,6 @@ def merge_all_features(
             features.get("pressure", pd.DataFrame()),
             ["clutch_factor", "pressure_type"],
         )
-        result = merge_player_features(
-            result,
-            features.get("home_away", pd.DataFrame()),
-            ["avantage_domicile", "home_away_pref"],
-        )
-        result = merge_fatigue_features(result, features.get("fatigue", pd.DataFrame()))
         result = merge_h2h_features(result, features.get("h2h", pd.DataFrame()))
 
     return result

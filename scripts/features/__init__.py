@@ -14,9 +14,7 @@ Modules:
 
 from scripts.features.advanced import (
     calculate_elo_trajectory,
-    calculate_fatigue_rest_days,
     calculate_head_to_head,
-    calculate_home_away_performance,
     calculate_pressure_performance,
 )
 from scripts.features.ffe_features import (
@@ -57,8 +55,6 @@ __all__ = [
     "extract_team_enjeu_features",
     # Advanced
     "calculate_head_to_head",
-    "calculate_fatigue_rest_days",
-    "calculate_home_away_performance",
     "calculate_pressure_performance",
     "calculate_elo_trajectory",
     # FFE Features

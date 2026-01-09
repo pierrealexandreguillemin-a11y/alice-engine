@@ -188,7 +188,7 @@ class TestExtractAllFeatures:
         result = extract_all_features(sample_history, sample_history_played, include_advanced=True)
 
         # Features avancees attendues
-        advanced_keys = ["h2h", "fatigue", "home_away", "pressure", "trajectory"]
+        advanced_keys = ["h2h", "pressure", "trajectory"]
         for key in advanced_keys:
             assert key in result, f"Feature avancee manquante: {key}"
 
@@ -212,10 +212,10 @@ class TestExtractAllFeatures:
     def test_feature_count_with_advanced(
         self, sample_history: pd.DataFrame, sample_history_played: pd.DataFrame
     ) -> None:
-        """Test nombre de features avec avancees = 12."""
+        """Test nombre de features avec avancees = 10."""
         result = extract_all_features(sample_history, sample_history_played, include_advanced=True)
-        # 7 base + 5 avancees = 12
-        assert len(result) == 12
+        # 7 base + 3 avancees = 10 (fatigue et home_away supprimees)
+        assert len(result) == 10
 
 
 # ==============================================================================

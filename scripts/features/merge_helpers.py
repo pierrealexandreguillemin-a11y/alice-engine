@@ -131,46 +131,6 @@ def merge_team_enjeu(
     return result
 
 
-def merge_fatigue_features(
-    result: pd.DataFrame,
-    fatigue: pd.DataFrame,
-) -> pd.DataFrame:
-    """Merge features de fatigue.
-
-    Args:
-    ----
-        result: DataFrame cible
-        fatigue: DataFrame fatigue joueurs
-
-    Returns:
-    -------
-        DataFrame avec features mergées
-    """
-    if fatigue.empty or "date" not in result.columns:
-        return result
-
-    result["_date_parsed"] = pd.to_datetime(result["date"], errors="coerce")
-    fatigue["_date_parsed"] = pd.to_datetime(fatigue["date_match"], errors="coerce")
-
-    for color in ["blanc", "noir"]:
-        nom_col = f"{color}_nom"
-        if nom_col not in result.columns:
-            continue
-        fatigue_cols = ["jours_repos", "fatigue_level"]
-        merge_df = fatigue.rename(columns={c: f"{c}_{color}" for c in fatigue_cols})
-        result = result.merge(
-            merge_df[["joueur_nom", "_date_parsed"] + [f"{c}_{color}" for c in fatigue_cols]],
-            left_on=[nom_col, "_date_parsed"],
-            right_on=["joueur_nom", "_date_parsed"],
-            how="left",
-        )
-        if "joueur_nom" in result.columns:
-            result = result.drop(columns=["joueur_nom"])
-
-    result = result.drop(columns=["_date_parsed"], errors="ignore")
-    return result
-
-
 def merge_h2h_features(
     result: pd.DataFrame,
     h2h: pd.DataFrame,
