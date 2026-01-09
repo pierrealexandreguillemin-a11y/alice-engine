@@ -1,6 +1,9 @@
 # Development dependencies - Alice-Engine
 # Equivalent Python complet des outils Husky/lint-staged de chess-app
-# Version: 2.0 - ZERO TOLERANCE + GRAPHS + ISO DOCS
+# Version: 3.0 - FULL ISO COVERAGE + ML LIFECYCLE + MONITORING
+
+# === TASK RUNNER (cross-platform, remplace Make) ===
+invoke>=2.2.0
 
 # === HOOKS & QUALITY ===
 pre-commit>=3.7.0
