@@ -3,7 +3,27 @@
 ## Setup DevOps
 
 Hooks pre-commit Python équivalents aux hooks Husky de `C:\Dev\chess-app`.
-Conformité ISO 25010, 27001, 5055, 42010, 29119.
+
+### Conformité ISO
+
+**Normes Générales:**
+- ISO 25010 (Qualité système)
+- ISO 27001 (Sécurité)
+- ISO 27034 (Secure coding)
+- ISO 5055 (Qualité code)
+- ISO 42010 (Architecture)
+- ISO 29119 (Tests)
+- ISO 15289 (Documentation)
+
+**Normes ML/AI (ALICE Engine):**
+- ISO/IEC 42001:2023 - AI Management System (Model Card, Traçabilité)
+- ISO/IEC 23894:2023 - AI Risk Management
+- ISO/IEC 5259:2024 - Data Quality for ML (Lineage, Validation)
+- ISO/IEC 25059:2023 - AI Quality Model
+- ISO/IEC 24029 - Neural Network Robustness
+- ISO/IEC TR 24027 - Bias in AI
+
+Voir `iso-standards-reference.md` pour détails et mapping fichiers → normes.
 
 ## Fichiers clés
 

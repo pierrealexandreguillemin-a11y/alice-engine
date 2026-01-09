@@ -2,6 +2,8 @@
 
 ## Normes Actives
 
+### Normes Générales Logiciel
+
 | Norme | Focus | Priorité |
 |-------|-------|----------|
 | **ISO 27001** | ISMS, gestion risques sécurité | 🔴 Critique |
@@ -18,6 +20,32 @@
 | **ISO 26514** | Information utilisateur logiciel | 🟠 Important |
 | **ISO 26515** | Documentation en environnement agile | 🟡 Utile |
 | **ISO 25065** | UX/Accessibilité | 🟡 Utile |
+
+### Normes ML/AI (ALICE Engine)
+
+| Norme | Focus | Priorité | Exigences Clés |
+|-------|-------|----------|----------------|
+| **ISO/IEC 42001:2023** | AI Management System (certifiable) | 🔴 Critique | Model Card, Traçabilité, Gouvernance AI |
+| **ISO/IEC 23894:2023** | AI Risk Management | 🔴 Critique | Évaluation risques AI, Mitigation biais |
+| **ISO/IEC 5259:2024** | Data Quality for ML | 🔴 Critique | Qualité données entraînement, Lineage |
+| **ISO/IEC 25059:2023** | AI Quality Model | 🟠 Important | Métriques qualité modèles, Benchmarks |
+| **ISO/IEC 24029** | Neural Network Robustness | 🟠 Important | Tests adversariaux, Robustesse |
+| **ISO/IEC TR 24027** | Bias in AI | 🟠 Important | Détection/mitigation biais, Fairness |
+
+### Matrice Exigences ML/AI
+
+| Norme | Exigence | Implémentation ALICE |
+|-------|----------|---------------------|
+| ISO 42001 | Model Card | `ProductionModelCard` dans `model_registry.py` |
+| ISO 42001 | Traçabilité | Git commit tracking, versioning modèles |
+| ISO 42001 | Explicabilité | Feature importance SHAP/permutation |
+| ISO 5259 | Qualité données | `DataLineage`, `validate_dataframe_schema()` |
+| ISO 5259 | Lineage | `compute_data_lineage()` train/valid/test |
+| ISO 27001 | Intégrité | SHA-256 checksums, HMAC signatures |
+| ISO 27001 | Confidentialité | Chiffrement AES-256-GCM |
+| ISO 27001 | Auditabilité | Logs, retention policy, drift reports |
+| ISO 23894 | Risques AI | Drift monitoring PSI, alertes seuils |
+| ISO 24027 | Biais | Métriques fairness par catégorie (à implémenter) |
 
 ---
 
@@ -435,4 +463,77 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 
 ---
 
-*Dernière MAJ: 2026-01-08 | ALICE Engine v0.3.0*
+---
+
+## Mapping Fichiers → Normes ISO
+
+### Scripts ML/AI
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/model_registry.py` | ISO 42001, 5259, 27001 | Model Card, Lineage, Intégrité, Chiffrement |
+| `scripts/feature_engineering.py` | ISO 5259, 42001 | Qualité features, Traçabilité transformations |
+| `scripts/ffe_rules_features.py` | ISO 5259, 25012 | Validation règles métier, Qualité données |
+| `scripts/train_models_parallel.py` | ISO 42001, 23894 | Gouvernance training, Gestion risques |
+| `scripts/ensemble_stacking.py` | ISO 42001, 25059 | Métriques qualité, Explicabilité |
+| `scripts/evaluate_models.py` | ISO 25059, 29119 | Benchmarks, Tests modèles |
+| `scripts/parse_dataset.py` | ISO 5259, 25012 | Parsing qualité, Validation schéma |
+
+### Services
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `services/inference.py` | ISO 42001, 27001 | Prédictions traçables, Sécurité API |
+| `services/data_loader.py` | ISO 5259, 25012 | Chargement données validées |
+| `services/composer.py` | ISO 25010, 5055 | Qualité code, Architecture |
+
+### API
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `app/api/routes.py` | ISO 27001, 27034 | Sécurité endpoints, Input validation |
+| `app/api/schemas.py` | ISO 5259, 25012 | Validation schémas, Types stricts |
+| `app/config.py` | ISO 27001 | Gestion secrets, Configuration sécurisée |
+
+### Tests
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `tests/test_model_registry.py` | ISO 29119, 42001 | Tests intégrité, coverage |
+| `tests/test_feature_engineering.py` | ISO 29119, 5259 | Tests features, validation |
+| `tests/test_ffe_rules_features.py` | ISO 29119, 25012 | Tests règles métier |
+
+### Documentation
+
+| Dossier/Fichier | Normes Applicables | Type ISO 15289 |
+|-----------------|-------------------|----------------|
+| `docs/requirements/CDC_ALICE.md` | ISO 15289 | ConOps |
+| `docs/requirements/FEATURE_SPECIFICATION.md` | ISO 5259, 15289 | SyRS |
+| `docs/architecture/` | ISO 42010, 15289 | AD |
+| `docs/api/` | ISO 26514, 15289 | IDD |
+| `docs/iso/IMPLEMENTATION_STATUS.md` | ISO 15289 | QR |
+
+---
+
+## En-têtes Fichiers Python (Template)
+
+Chaque fichier Python doit inclure un docstring avec les normes applicables:
+
+```python
+"""
+Module: nom_module.py
+Description: Description du module
+
+ISO Compliance:
+- ISO/IEC 42001:2023 - AI Management System (Model Card, Traçabilité)
+- ISO/IEC 5259:2024 - Data Quality for ML (Lineage, Validation)
+- ISO/IEC 27001 - Information Security (Intégrité, Chiffrement)
+
+Author: ALICE Engine Team
+Last Updated: YYYY-MM-DD
+"""
+```
+
+---
+
+*Dernière MAJ: 2026-01-09 | ALICE Engine v0.4.0*

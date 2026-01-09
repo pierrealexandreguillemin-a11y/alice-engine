@@ -1,9 +1,16 @@
 # Cahier des Charges : ALICE
 ## Adversarial Lineup Inference & Composition Engine
 
-**Version** : 1.0.0
-**Date** : 30 décembre 2025
-**Statut** : Nouveau projet - Phase de création
+> **Document Type**: Concept of Operations (ConOps) - ISO 15289
+> **Version**: 1.0.0
+> **Date**: 30 décembre 2025
+> **Statut**: Nouveau projet - Phase de création
+>
+> **Normes ISO Applicables**:
+> - ISO/IEC 42001:2023 - AI Management System
+> - ISO/IEC 5259:2024 - Data Quality for ML
+> - ISO/IEC 23894:2023 - AI Risk Management
+> - ISO 25010 - System Quality Model
 
 ---
 
