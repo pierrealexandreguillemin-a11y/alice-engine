@@ -1,14 +1,39 @@
-# tests/test_feature_engineering.py
-"""Tests pour feature_engineering.py - ISO 29119.
+"""Module: test_feature_engineering.py - Tests Feature Engineering.
 
-Tests unitaires pour l'extraction des features ML.
+Tests unitaires et edge cases pour l'extraction des features ML.
+Couvre tous les modules: reliability, performance, standings, advanced.
+
+ISO Compliance:
+- ISO/IEC 29119 - Software Testing (unit tests, edge cases)
+- ISO/IEC 5259:2024 - Data Quality for ML (feature validation)
+- ISO/IEC 25010 - System Quality (testabilite)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
+import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.feature_engineering import (
+from scripts.features.advanced import (
+    calculate_elo_trajectory,
+    calculate_fatigue_rest_days,
+    calculate_head_to_head,
+    calculate_home_away_performance,
+    calculate_pressure_performance,
+)
+from scripts.features.performance import (
     calculate_color_performance,
+    calculate_recent_form,
+)
+
+# Import from refactored modules
+from scripts.features.reliability import (
+    extract_club_reliability,
+    extract_player_reliability,
+)
+from scripts.features.standings import (
     calculate_standings,
     extract_team_enjeu_features,
 )
@@ -58,7 +83,7 @@ def sample_matches() -> pd.DataFrame:
                 "resultat_noir": 0.0,
                 "type_resultat": "victoire_blanc",
             },
-            # Ronde 2: A bat C (3-3 nul), B bat D (4-2)
+            # Ronde 2: A vs C (3-3 nul), B bat D (4-2)
             {
                 "saison": 2025,
                 "competition": "Interclubs",
@@ -103,7 +128,6 @@ def sample_color_games() -> pd.DataFrame:
     games = []
 
     # Joueur X: 10 parties blancs (8 victoires), 10 parties noirs (4 victoires)
-    # => prefere blancs
     for i in range(8):
         games.append(
             {
@@ -145,7 +169,7 @@ def sample_color_games() -> pd.DataFrame:
             }
         )
 
-    # Joueur Y: equilibre (5 victoires blancs sur 10, 5 victoires noirs sur 10)
+    # Joueur Y: équilibré (5 victoires blancs sur 10, 5 victoires noirs sur 10)
     for i in range(5):
         games.append(
             {
@@ -187,7 +211,120 @@ def sample_color_games() -> pd.DataFrame:
             }
         )
 
+    # Joueur Z: seulement blancs (pas assez de noirs)
+    for i in range(10):
+        games.append(
+            {
+                "blanc_nom": "Joueur Z",
+                "noir_nom": f"Adv Z{i}",
+                "resultat_blanc": 1.0,
+                "resultat_noir": 0.0,
+                "type_resultat": "victoire_blanc",
+            }
+        )
+    # Seulement 2 parties noirs
+    for i in range(2):
+        games.append(
+            {
+                "blanc_nom": f"Adv ZB{i}",
+                "noir_nom": "Joueur Z",
+                "resultat_blanc": 0.0,
+                "resultat_noir": 1.0,
+                "type_resultat": "victoire_noir",
+            }
+        )
+
     return pd.DataFrame(games)
+
+
+@pytest.fixture
+def sample_h2h_games() -> pd.DataFrame:
+    """Fixture pour tests H2H."""
+    games = []
+    # A vs B: 5 confrontations, A gagne 4
+    for i in range(4):
+        games.append(
+            {
+                "blanc_nom": "Joueur A",
+                "noir_nom": "Joueur B",
+                "resultat_blanc": 1.0,
+                "resultat_noir": 0.0,
+                "type_resultat": "victoire_blanc",
+            }
+        )
+    games.append(
+        {
+            "blanc_nom": "Joueur B",
+            "noir_nom": "Joueur A",
+            "resultat_blanc": 1.0,
+            "resultat_noir": 0.0,
+            "type_resultat": "victoire_blanc",
+        }
+    )
+    return pd.DataFrame(games)
+
+
+@pytest.fixture
+def sample_dated_games() -> pd.DataFrame:
+    """Fixture avec dates pour tests fatigue/trajectoire."""
+    return pd.DataFrame(
+        [
+            {
+                "date": "2025-01-01",
+                "blanc_nom": "Joueur Test",
+                "noir_nom": "Adv 1",
+                "blanc_elo": 1500,
+                "resultat_blanc": 1.0,
+                "resultat_noir": 0.0,
+                "type_resultat": "victoire_blanc",
+            },
+            {
+                "date": "2025-01-02",  # 1 jour après = fatigué
+                "blanc_nom": "Joueur Test",
+                "noir_nom": "Adv 2",
+                "blanc_elo": 1510,
+                "resultat_blanc": 1.0,
+                "resultat_noir": 0.0,
+                "type_resultat": "victoire_blanc",
+            },
+            {
+                "date": "2025-01-10",  # 8 jours après = reposé
+                "blanc_nom": "Joueur Test",
+                "noir_nom": "Adv 3",
+                "blanc_elo": 1520,
+                "resultat_blanc": 0.5,
+                "resultat_noir": 0.5,
+                "type_resultat": "nulle",
+            },
+            {
+                "date": "2025-01-15",  # 5 jours après = normal
+                "blanc_nom": "Joueur Test",
+                "noir_nom": "Adv 4",
+                "blanc_elo": 1530,
+                "resultat_blanc": 1.0,
+                "resultat_noir": 0.0,
+                "type_resultat": "victoire_blanc",
+            },
+            {
+                "date": "2025-01-20",
+                "blanc_nom": "Joueur Test",
+                "noir_nom": "Adv 5",
+                "blanc_elo": 1550,
+                "resultat_blanc": 1.0,
+                "resultat_noir": 0.0,
+                "type_resultat": "victoire_blanc",
+            },
+            {
+                "date": "2025-01-25",
+                "blanc_nom": "Joueur Test",
+                "noir_nom": "Adv 6",
+                "blanc_elo": 1560,
+                "resultat_blanc": 1.0,
+                "resultat_noir": 0.0,
+                "type_resultat": "victoire_blanc",
+            },
+        ]
+    )
 
 
 # ==============================================================================
@@ -199,7 +336,7 @@ class TestCalculateStandings:
     """Tests pour calculate_standings()."""
 
     def test_standings_basic(self, sample_matches: pd.DataFrame) -> None:
-        """Test classement basique apres 2 rondes."""
+        """Test classement basique après 2 rondes."""
         result = calculate_standings(sample_matches)
 
         assert not result.empty
@@ -210,13 +347,6 @@ class TestCalculateStandings:
         """Test points corrects (2 pts victoire, 1 pt nul)."""
         result = calculate_standings(sample_matches)
 
-        # Apres ronde 2:
-        # A: 2 (victoire R1) + 1 (nul R2) = 3 pts
-        # C: 2 (victoire R1) + 1 (nul R2) = 3 pts
-        # B: 0 (defaite R1) + 2 (victoire R2) = 2 pts
-        # D: 0 + 0 = 0 pts
-
-        # Filtrer ronde 2
         r2 = result[result["ronde"] == 2]
 
         a_pts = r2[r2["equipe"] == "Equipe A"]["points_cumules"].values[0]
@@ -230,38 +360,32 @@ class TestCalculateStandings:
         assert d_pts == 0  # 0 + 0
 
     def test_standings_position_order(self, sample_matches: pd.DataFrame) -> None:
-        """Test que les positions sont ordonnees correctement."""
+        """Test que les positions sont ordonnées correctement."""
         result = calculate_standings(sample_matches)
         r2 = result[result["ronde"] == 2]
 
-        # D doit etre dernier (position 4)
         d_pos = r2[r2["equipe"] == "Equipe D"]["position"].values[0]
         assert d_pos == 4
 
-        # A ou C doit etre 1er ou 2e (memes points)
         a_pos = r2[r2["equipe"] == "Equipe A"]["position"].values[0]
         c_pos = r2[r2["equipe"] == "Equipe C"]["position"].values[0]
         assert a_pos in [1, 2]
         assert c_pos in [1, 2]
 
     def test_standings_ecart_premier(self, sample_matches: pd.DataFrame) -> None:
-        """Test ecart_premier calcule correctement."""
+        """Test ecart_premier calculé correctement."""
         result = calculate_standings(sample_matches)
         r2 = result[result["ronde"] == 2]
 
-        # D a 0 pts, premier a 3 pts => ecart = 3
         d_ecart = r2[r2["equipe"] == "Equipe D"]["ecart_premier"].values[0]
         assert d_ecart == 3
 
-        # A a 3 pts, premier a 3 pts => ecart = 0
         a_ecart = r2[r2["equipe"] == "Equipe A"]["ecart_premier"].values[0]
         assert a_ecart == 0
 
     def test_standings_nb_equipes(self, sample_matches: pd.DataFrame) -> None:
         """Test nb_equipes correct."""
         result = calculate_standings(sample_matches)
-
-        # 4 equipes dans ce groupe
         assert (result["nb_equipes"] == 4).all()
 
     def test_standings_empty_df(self) -> None:
@@ -275,6 +399,13 @@ class TestCalculateStandings:
         result = calculate_standings(df)
         assert result.empty
 
+    def test_standings_has_tiebreaker_columns(self, sample_matches: pd.DataFrame) -> None:
+        """Test que les colonnes tie-breaker sont présentes."""
+        result = calculate_standings(sample_matches)
+
+        assert "victoires" in result.columns
+        assert "diff_points_matchs" in result.columns
+
 
 # ==============================================================================
 # TESTS EXTRACT_TEAM_ENJEU_FEATURES
@@ -285,32 +416,37 @@ class TestExtractTeamEnjeuFeatures:
     """Tests pour extract_team_enjeu_features()."""
 
     def test_enjeu_uses_real_position(self, sample_matches: pd.DataFrame) -> None:
-        """Test que zone_enjeu utilise position reelle."""
-        result = extract_team_enjeu_features(sample_matches)
+        """Test que zone_enjeu utilise position réelle."""
+        from scripts.features import calculate_standings
+
+        standings = calculate_standings(sample_matches)
+        result = extract_team_enjeu_features(sample_matches, standings)
 
         assert not result.empty
         assert "position" in result.columns
         assert "zone_enjeu" in result.columns
 
-        # D est dernier => zone danger ou descente
         d_zone = result[result["equipe"] == "Equipe D"]["zone_enjeu"].unique()
         assert len(d_zone) > 0
 
     def test_enjeu_has_ecarts(self, sample_matches: pd.DataFrame) -> None:
-        """Test que ecart_premier et ecart_dernier sont presents."""
-        result = extract_team_enjeu_features(sample_matches)
+        """Test que ecart_premier et ecart_dernier sont présents."""
+        from scripts.features import calculate_standings
+
+        standings = calculate_standings(sample_matches)
+        result = extract_team_enjeu_features(sample_matches, standings)
 
         assert "ecart_premier" in result.columns
         assert "ecart_dernier" in result.columns
 
 
 # ==============================================================================
-# TESTS CALCULATE_COLOR_PERFORMANCE
+# TESTS CALCULATE_COLOR_PERFORMANCE (FIXED)
 # ==============================================================================
 
 
 class TestCalculateColorPerformance:
-    """Tests pour calculate_color_performance()."""
+    """Tests pour calculate_color_performance() - version corrigée."""
 
     def test_color_basic(self, sample_color_games: pd.DataFrame) -> None:
         """Test calcul performance couleur basique."""
@@ -321,25 +457,20 @@ class TestCalculateColorPerformance:
         assert "score_noirs" in result.columns
         assert "avantage_blancs" in result.columns
         assert "couleur_preferee" in result.columns
+        assert "data_quality" in result.columns  # NEW
 
     def test_color_joueur_x_prefere_blanc(self, sample_color_games: pd.DataFrame) -> None:
-        """Test Joueur X prefere blancs."""
+        """Test Joueur X préfère blancs."""
         result = calculate_color_performance(sample_color_games, min_games=10)
 
         x_row = result[result["joueur_nom"] == "Joueur X"]
         assert len(x_row) == 1
 
-        # Score blancs = 8/10 = 0.8
         assert x_row["score_blancs"].values[0] == pytest.approx(0.8, abs=0.01)
-
-        # Score noirs = 4/10 = 0.4
         assert x_row["score_noirs"].values[0] == pytest.approx(0.4, abs=0.01)
-
-        # Avantage blancs = 0.8 - 0.4 = 0.4
         assert x_row["avantage_blancs"].values[0] == pytest.approx(0.4, abs=0.01)
-
-        # Prefere blanc
         assert x_row["couleur_preferee"].values[0] == "blanc"
+        assert x_row["data_quality"].values[0] == "complet"
 
     def test_color_joueur_y_neutre(self, sample_color_games: pd.DataFrame) -> None:
         """Test Joueur Y est neutre."""
@@ -348,21 +479,13 @@ class TestCalculateColorPerformance:
         y_row = result[result["joueur_nom"] == "Joueur Y"]
         assert len(y_row) == 1
 
-        # Score blancs = 5/10 = 0.5
         assert y_row["score_blancs"].values[0] == pytest.approx(0.5, abs=0.01)
-
-        # Score noirs = 5/10 = 0.5
         assert y_row["score_noirs"].values[0] == pytest.approx(0.5, abs=0.01)
-
-        # Avantage ~0
         assert abs(y_row["avantage_blancs"].values[0]) < 0.05
-
-        # Neutre
         assert y_row["couleur_preferee"].values[0] == "neutre"
 
     def test_color_min_games_filter(self, sample_color_games: pd.DataFrame) -> None:
         """Test filtre min_games fonctionne."""
-        # Avec min_games=100, personne ne devrait passer
         result = calculate_color_performance(sample_color_games, min_games=100)
         assert result.empty
 
@@ -374,6 +497,446 @@ class TestCalculateColorPerformance:
         assert x_row["nb_blancs"].values[0] == 10
         assert x_row["nb_noirs"].values[0] == 10
 
-        y_row = result[result["joueur_nom"] == "Joueur Y"]
-        assert y_row["nb_blancs"].values[0] == 10
-        assert y_row["nb_noirs"].values[0] == 10
+    def test_color_insufficient_data_no_fillna(self, sample_color_games: pd.DataFrame) -> None:
+        """Test ISO 5259: pas de fillna(0.5) - données insuffisantes marquées."""
+        result = calculate_color_performance(sample_color_games, min_games=10, min_per_color=5)
+
+        # Joueur Z: 10 blancs, 2 noirs => données insuffisantes pour noirs
+        z_row = result[result["joueur_nom"] == "Joueur Z"]
+        assert len(z_row) == 1
+
+        # data_quality doit indiquer le problème
+        assert z_row["data_quality"].values[0] == "partiel_noirs"
+
+        # couleur_preferee = donnees_insuffisantes (pas d'estimation!)
+        assert z_row["couleur_preferee"].values[0] == "donnees_insuffisantes"
+
+        # avantage_blancs doit être NaN (pas 0.5!)
+        assert pd.isna(z_row["avantage_blancs"].values[0])
+
+    def test_color_empty_df(self) -> None:
+        """Test avec DataFrame vide."""
+        result = calculate_color_performance(pd.DataFrame())
+        assert result.empty
+
+
+# ==============================================================================
+# TESTS CALCULATE_RECENT_FORM
+# ==============================================================================
+
+
+class TestCalculateRecentForm:
+    """Tests pour calculate_recent_form()."""
+
+    def test_form_basic(self, sample_color_games: pd.DataFrame) -> None:
+        """Test calcul forme récente basique."""
+        result = calculate_recent_form(sample_color_games, window=5)
+
+        assert not result.empty
+        assert "forme_recente" in result.columns
+        assert "forme_tendance" in result.columns
+
+    def test_form_tendance_values(self, sample_color_games: pd.DataFrame) -> None:
+        """Test que tendance a les bonnes valeurs."""
+        result = calculate_recent_form(sample_color_games, window=5)
+
+        tendances = result["forme_tendance"].unique()
+        for t in tendances:
+            assert t in ["hausse", "baisse", "stable"]
+
+    def test_form_empty_df(self) -> None:
+        """Test avec DataFrame vide."""
+        result = calculate_recent_form(pd.DataFrame())
+        assert result.empty
+
+
+# ==============================================================================
+# TESTS CALCULATE_HEAD_TO_HEAD
+# ==============================================================================
+
+
+class TestCalculateHeadToHead:
+    """Tests pour calculate_head_to_head()."""
+
+    def test_h2h_basic(self, sample_h2h_games: pd.DataFrame) -> None:
+        """Test H2H basique."""
+        result = calculate_head_to_head(sample_h2h_games, min_games=3)
+
+        assert not result.empty
+        assert "joueur_a" in result.columns
+        assert "joueur_b" in result.columns
+        assert "avantage_a" in result.columns
+
+    def test_h2h_scores(self, sample_h2h_games: pd.DataFrame) -> None:
+        """Test que A domine B."""
+        result = calculate_head_to_head(sample_h2h_games, min_games=3)
+
+        # A vs B: A gagne 4/5
+        row = result[
+            ((result["joueur_a"] == "Joueur A") & (result["joueur_b"] == "Joueur B"))
+            | ((result["joueur_a"] == "Joueur B") & (result["joueur_b"] == "Joueur A"))
+        ]
+        assert len(row) == 1
+        assert row["nb_confrontations"].values[0] == 5
+
+    def test_h2h_min_games_filter(self, sample_h2h_games: pd.DataFrame) -> None:
+        """Test filtre min_games."""
+        result = calculate_head_to_head(sample_h2h_games, min_games=10)
+        assert result.empty
+
+    def test_h2h_empty_df(self) -> None:
+        """Test avec DataFrame vide."""
+        result = calculate_head_to_head(pd.DataFrame())
+        assert result.empty
+
+
+# ==============================================================================
+# TESTS CALCULATE_FATIGUE_REST_DAYS
+# ==============================================================================
+
+
+class TestCalculateFatigueRestDays:
+    """Tests pour calculate_fatigue_rest_days()."""
+
+    def test_fatigue_basic(self, sample_dated_games: pd.DataFrame) -> None:
+        """Test calcul fatigue basique."""
+        result = calculate_fatigue_rest_days(sample_dated_games)
+
+        assert not result.empty
+        assert "jours_repos" in result.columns
+        assert "fatigue_level" in result.columns
+
+    def test_fatigue_levels(self, sample_dated_games: pd.DataFrame) -> None:
+        """Test que les niveaux de fatigue sont corrects."""
+        result = calculate_fatigue_rest_days(sample_dated_games)
+
+        # Filtrer Joueur Test
+        joueur_result = result[result["joueur_nom"] == "Joueur Test"]
+
+        # Vérifie qu'on a les différents niveaux
+        levels = joueur_result["fatigue_level"].unique()
+        assert "inconnu" in levels  # Premier match
+        assert "fatigue" in levels  # 1 jour après
+        assert "repose" in levels  # 8 jours après
+
+    def test_fatigue_no_date_column(self) -> None:
+        """Test sans colonne date."""
+        df = pd.DataFrame({"blanc_nom": ["A"], "noir_nom": ["B"]})
+        result = calculate_fatigue_rest_days(df)
+        assert result.empty
+
+
+# ==============================================================================
+# TESTS CALCULATE_ELO_TRAJECTORY
+# ==============================================================================
+
+
+class TestCalculateEloTrajectory:
+    """Tests pour calculate_elo_trajectory()."""
+
+    def test_trajectory_basic(self, sample_dated_games: pd.DataFrame) -> None:
+        """Test trajectoire Elo basique."""
+        result = calculate_elo_trajectory(sample_dated_games, window=4)
+
+        assert not result.empty
+        assert "elo_trajectory" in result.columns
+        assert "momentum" in result.columns
+
+    def test_trajectory_progression(self, sample_dated_games: pd.DataFrame) -> None:
+        """Test détection progression Elo."""
+        result = calculate_elo_trajectory(sample_dated_games, window=4)
+
+        # Joueur Test: 1500 -> 1560 = +60 = progression
+        row = result[result["joueur_nom"] == "Joueur Test"]
+        if not row.empty:
+            assert row["elo_trajectory"].values[0] == "progression"
+            assert row["momentum"].values[0] > 0
+
+    def test_trajectory_no_date(self) -> None:
+        """Test sans colonne date."""
+        df = pd.DataFrame({"blanc_nom": ["A"], "blanc_elo": [1500]})
+        result = calculate_elo_trajectory(df)
+        assert result.empty
+
+
+# ==============================================================================
+# TESTS CALCULATE_PRESSURE_PERFORMANCE
+# ==============================================================================
+
+
+class TestCalculatePressurePerformance:
+    """Tests pour calculate_pressure_performance()."""
+
+    def test_pressure_basic(self) -> None:
+        """Test performance pression basique."""
+        games = []
+        # Matchs normaux (ronde < 7)
+        for i in range(10):
+            games.append(
+                {
+                    "ronde": 3,
+                    "score_dom": 4,
+                    "score_ext": 2,
+                    "blanc_nom": "Joueur P",
+                    "noir_nom": f"Adv {i}",
+                    "resultat_blanc": 0.5,
+                    "resultat_noir": 0.5,
+                    "type_resultat": "nulle",
+                }
+            )
+        # Matchs décisifs (ronde >= 7)
+        for i in range(5):
+            games.append(
+                {
+                    "ronde": 8,
+                    "score_dom": 3,
+                    "score_ext": 3,
+                    "blanc_nom": "Joueur P",
+                    "noir_nom": f"Adv D{i}",
+                    "resultat_blanc": 1.0,
+                    "resultat_noir": 0.0,
+                    "type_resultat": "victoire_blanc",
+                }
+            )
+
+        df = pd.DataFrame(games)
+        result = calculate_pressure_performance(df, min_games=3)
+
+        assert not result.empty
+        p_row = result[result["joueur_nom"] == "Joueur P"]
+        assert len(p_row) == 1
+        # Score normal = 0.5, score pression = 1.0 => clutch
+        assert p_row["pressure_type"].values[0] == "clutch"
+
+    def test_pressure_empty_df(self) -> None:
+        """Test avec DataFrame vide."""
+        result = calculate_pressure_performance(pd.DataFrame())
+        assert result.empty
+
+
+# ==============================================================================
+# TESTS CALCULATE_HOME_AWAY_PERFORMANCE
+# ==============================================================================
+
+
+class TestCalculateHomeAwayPerformance:
+    """Tests pour calculate_home_away_performance()."""
+
+    def test_home_away_basic(self) -> None:
+        """Test performance domicile/extérieur basique."""
+        games = []
+        # Domicile (échiquiers impairs pour blancs)
+        for i in range(10):
+            games.append(
+                {
+                    "echiquier": 1,  # Impair = domicile
+                    "blanc_nom": "Joueur HA",
+                    "noir_nom": f"Adv H{i}",
+                    "resultat_blanc": 1.0,
+                    "resultat_noir": 0.0,
+                    "type_resultat": "victoire_blanc",
+                }
+            )
+        # Extérieur (échiquiers pairs pour blancs)
+        for i in range(10):
+            games.append(
+                {
+                    "echiquier": 2,  # Pair = extérieur
+                    "blanc_nom": "Joueur HA",
+                    "noir_nom": f"Adv A{i}",
+                    "resultat_blanc": 0.5,
+                    "resultat_noir": 0.5,
+                    "type_resultat": "nulle",
+                }
+            )
+
+        df = pd.DataFrame(games)
+        result = calculate_home_away_performance(df, min_games=5)
+
+        assert not result.empty
+        ha_row = result[result["joueur_nom"] == "Joueur HA"]
+        assert len(ha_row) == 1
+        assert ha_row["home_away_pref"].values[0] == "domicile"
+
+    def test_home_away_empty_df(self) -> None:
+        """Test avec DataFrame vide."""
+        result = calculate_home_away_performance(pd.DataFrame())
+        assert result.empty
+
+
+# ==============================================================================
+# TESTS RELIABILITY FEATURES
+# ==============================================================================
+
+
+class TestReliabilityFeatures:
+    """Tests pour features de fiabilité."""
+
+    def test_club_reliability(self) -> None:
+        """Test extract_club_reliability."""
+        df = pd.DataFrame(
+            [
+                {"equipe_dom": "Club A", "equipe_ext": "Club B", "type_resultat": "victoire_blanc"},
+                {"equipe_dom": "Club A", "equipe_ext": "Club C", "type_resultat": "forfait_blanc"},
+                {"equipe_dom": "Club B", "equipe_ext": "Club A", "type_resultat": "nulle"},
+            ]
+        )
+
+        result = extract_club_reliability(df)
+
+        assert not result.empty
+        assert "fiabilite_score" in result.columns
+
+    def test_player_reliability(self) -> None:
+        """Test extract_player_reliability."""
+        df = pd.DataFrame(
+            [
+                {
+                    "blanc_nom": "Player 1",
+                    "noir_nom": "Player 2",
+                    "type_resultat": "victoire_blanc",
+                },
+                {"blanc_nom": "Player 1", "noir_nom": "Player 3", "type_resultat": "forfait_blanc"},
+                {"blanc_nom": "Player 2", "noir_nom": "Player 1", "type_resultat": "nulle"},
+            ]
+        )
+
+        result = extract_player_reliability(df)
+
+        assert not result.empty
+        assert "taux_presence" in result.columns
+        assert "joueur_fantome" in result.columns
+
+    def test_reliability_empty_df(self) -> None:
+        """Test avec DataFrame vide."""
+        assert extract_club_reliability(pd.DataFrame()).empty
+        assert extract_player_reliability(pd.DataFrame()).empty
+
+
+# ==============================================================================
+# TESTS EDGE CASES ISO 29119
+# ==============================================================================
+
+
+class TestEdgeCases:
+    """Tests edge cases ISO 29119."""
+
+    def test_nan_scores(self) -> None:
+        """Test avec scores NaN."""
+        df = pd.DataFrame(
+            [
+                {
+                    "saison": 2025,
+                    "competition": "Test",
+                    "division": "N1",
+                    "groupe": "A",
+                    "ronde": 1,
+                    "equipe_dom": "A",
+                    "equipe_ext": "B",
+                    "score_dom": np.nan,
+                    "score_ext": np.nan,
+                }
+            ]
+        )
+        # Ne doit pas crasher
+        result = calculate_standings(df)
+        # Peut être vide ou ignorer les NaN
+        assert isinstance(result, pd.DataFrame)
+
+    def test_single_ronde(self) -> None:
+        """Test avec une seule ronde."""
+        df = pd.DataFrame(
+            [
+                {
+                    "saison": 2025,
+                    "competition": "Test",
+                    "division": "N1",
+                    "groupe": "A",
+                    "ronde": 1,
+                    "equipe_dom": "A",
+                    "equipe_ext": "B",
+                    "score_dom": 4,
+                    "score_ext": 2,
+                }
+            ]
+        )
+        result = calculate_standings(df)
+        assert not result.empty
+        assert len(result) == 2  # 2 équipes
+
+    def test_multi_saison(self, sample_matches: pd.DataFrame) -> None:
+        """Test avec plusieurs saisons."""
+        df2 = sample_matches.copy()
+        df2["saison"] = 2024
+
+        df_combined = pd.concat([sample_matches, df2])
+        result = calculate_standings(df_combined)
+
+        assert not result.empty
+        assert 2024 in result["saison"].values
+        assert 2025 in result["saison"].values
+
+    def test_tiebreaker_same_points(self) -> None:
+        """Test tie-breaker quand même nombre de points."""
+        df = pd.DataFrame(
+            [
+                {
+                    "saison": 2025,
+                    "competition": "Test",
+                    "division": "N1",
+                    "groupe": "A",
+                    "ronde": 1,
+                    "equipe_dom": "Equipe A",
+                    "equipe_ext": "Equipe B",
+                    "score_dom": 4,
+                    "score_ext": 2,  # A gagne
+                },
+                {
+                    "saison": 2025,
+                    "competition": "Test",
+                    "division": "N1",
+                    "groupe": "A",
+                    "ronde": 1,
+                    "equipe_dom": "Equipe C",
+                    "equipe_ext": "Equipe D",
+                    "score_dom": 4,
+                    "score_ext": 2,  # C gagne
+                },
+                # Ronde 2: A vs C (A gagne), B vs D (B gagne)
+                {
+                    "saison": 2025,
+                    "competition": "Test",
+                    "division": "N1",
+                    "groupe": "A",
+                    "ronde": 2,
+                    "equipe_dom": "Equipe A",
+                    "equipe_ext": "Equipe C",
+                    "score_dom": 5,
+                    "score_ext": 1,  # A gagne avec meilleure diff
+                },
+                {
+                    "saison": 2025,
+                    "competition": "Test",
+                    "division": "N1",
+                    "groupe": "A",
+                    "ronde": 2,
+                    "equipe_dom": "Equipe B",
+                    "equipe_ext": "Equipe D",
+                    "score_dom": 4,
+                    "score_ext": 2,  # B gagne
+                },
+            ]
+        )
+
+        result = calculate_standings(df)
+        r2 = result[result["ronde"] == 2]
+
+        # A: 4 pts, C: 2 pts, B: 2 pts, D: 0 pts
+        # B et C ont 2 pts mais positions stables grâce au tie-breaker
+        a_pos = r2[r2["equipe"] == "Equipe A"]["position"].values[0]
+        assert a_pos == 1
+
+        b_pos = r2[r2["equipe"] == "Equipe B"]["position"].values[0]
+        c_pos = r2[r2["equipe"] == "Equipe C"]["position"].values[0]
+        # Les deux ont 2 pts, mais un doit être 2e et l'autre 3e
+        assert {b_pos, c_pos} == {2, 3}

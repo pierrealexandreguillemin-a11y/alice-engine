@@ -1,7 +1,14 @@
-# tests/test_train_models_parallel.py
-"""Tests pour train_models_parallel.py - ISO 29119.
+"""Module: test_train_models_parallel.py - Tests Training Pipeline.
 
 Tests unitaires du pipeline d'entrainement parallele.
+
+ISO Compliance:
+- ISO/IEC 29119 - Software Testing (unit tests, coverage)
+- ISO/IEC 42001:2023 - AI Management (training validation)
+- ISO/IEC 23894:2023 - AI Risk Management (training risks)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from pathlib import Path
@@ -12,7 +19,7 @@ import pytest
 import yaml
 
 from scripts.ml_types import ModelMetrics
-from scripts.train_models_parallel import (
+from scripts.training import (
     compute_all_metrics,
     get_default_hyperparameters,
     load_hyperparameters,

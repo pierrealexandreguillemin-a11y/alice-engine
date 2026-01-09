@@ -1,14 +1,22 @@
-"""
+"""Module: test_ffe_rules_features.py - Tests Regles FFE.
+
 Tests unitaires pour le module ffe_rules_features.
+66 tests couvrant toutes les regles FFE.
 
-Conformite ISO/IEC 29119 (Tests logiciels).
+ISO Compliance:
+- ISO/IEC 29119 - Software Testing (unit tests, coverage)
+- ISO/IEC 25012 - Data Quality (validation regles metier)
+- ISO/IEC 5259:2024 - Data Quality for ML (business rules)
 
-Ces tests couvrent:
+Couverture:
 - Detection type competition
 - Calcul joueur brule
 - Verification noyau
 - Zones d'enjeu
 - Validation composition
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from __future__ import annotations

@@ -1,7 +1,14 @@
-# tests/test_ensemble_stacking.py
-"""Tests pour ensemble_stacking.py - ISO 29119.
+"""Module: test_ensemble_stacking.py - Tests Stacking Ensemble.
 
 Tests unitaires du stacking ensemble avec soft voting.
+
+ISO Compliance:
+- ISO/IEC 29119 - Software Testing (unit tests, coverage)
+- ISO/IEC 42001:2023 - AI Management (ensemble validation)
+- ISO/IEC 25059:2023 - AI Quality Model (metriques)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from pathlib import Path
@@ -11,13 +18,9 @@ import pandas as pd
 import pytest
 import yaml
 
-from scripts.ensemble_stacking import (
-    MODEL_NAMES,
-    StackingMetrics,
-    compute_soft_voting,
-    load_hyperparameters,
-    prepare_features,
-)
+from scripts.ensemble import MODEL_NAMES, StackingMetrics, compute_soft_voting
+from scripts.ensemble_stacking import load_hyperparameters
+from scripts.training import prepare_features
 
 
 class TestComputeSoftVoting:

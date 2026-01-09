@@ -1,7 +1,15 @@
-# tests/test_model_registry.py
-"""Tests pour model_registry.py - ISO 29119.
+"""Module: test_model_registry.py - Tests Model Registry.
 
-Tests unitaires pour la normalisation des modèles production.
+Tests unitaires pour la normalisation des modeles production.
+74 tests couvrant integrite, signatures, drift, chiffrement.
+
+ISO Compliance:
+- ISO/IEC 29119 - Software Testing (unit tests, coverage)
+- ISO/IEC 42001:2023 - AI Management (model validation)
+- ISO/IEC 27001 - Information Security (security tests)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from pathlib import Path

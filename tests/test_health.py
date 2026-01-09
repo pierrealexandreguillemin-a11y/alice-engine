@@ -1,8 +1,13 @@
-# tests/test_health.py
-"""
-Tests endpoint /health - ISO 29119
+"""Module: test_health.py - Tests Health Endpoint.
 
-Premier test: Valider que l'API demarre correctement.
+Tests endpoint /health - validation demarrage API.
+
+ISO Compliance:
+- ISO/IEC 29119 - Software Testing (integration tests)
+- ISO/IEC 25010 - System Quality (disponibilite)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 import pytest
@@ -13,8 +18,7 @@ from app.main import app
 
 @pytest.mark.asyncio
 async def test_health_endpoint_returns_200():
-    """
-    Test: GET /health retourne 200.
+    """Test: GET /health retourne 200.
 
     @see ISO 25010 - Fiabilite
     """
@@ -27,9 +31,7 @@ async def test_health_endpoint_returns_200():
 
 @pytest.mark.asyncio
 async def test_health_endpoint_returns_healthy_status():
-    """
-    Test: GET /health contient status=healthy.
-    """
+    """Test: GET /health contient status=healthy."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health")
@@ -42,9 +44,7 @@ async def test_health_endpoint_returns_healthy_status():
 
 @pytest.mark.asyncio
 async def test_root_endpoint_returns_service_info():
-    """
-    Test: GET / retourne les informations du service.
-    """
+    """Test: GET / retourne les informations du service."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/")

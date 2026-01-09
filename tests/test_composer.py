@@ -1,8 +1,14 @@
-# tests/test_composer.py
-"""
-Tests ComposerService (CE) - ISO 29119
+"""Module: test_composer.py - Tests ComposerService (CE).
 
 Tests unitaires pour la logique d'optimisation.
+
+ISO Compliance:
+- ISO/IEC 29119 - Software Testing (unit tests, coverage)
+- ISO/IEC 42001:2023 - AI Management (optimization validation)
+- ISO/IEC 25010 - System Quality (fiabilite)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from services.composer import ComposerService
@@ -16,38 +22,28 @@ class TestComposerService:
         self.service = ComposerService()
 
     def test_calculate_expected_score_equal_elo(self):
-        """
-        Test: Score attendu = 0.5 pour Elos egaux.
-        """
+        """Test: Score attendu = 0.5 pour Elos egaux."""
         score = self.service.calculate_expected_score(1500, 1500)
         assert 0.45 <= score <= 0.55  # Proche de 0.5
 
     def test_calculate_expected_score_higher_elo_wins(self):
-        """
-        Test: Score attendu > 0.5 si notre Elo est superieur.
-        """
+        """Test: Score attendu > 0.5 si notre Elo est superieur."""
         score = self.service.calculate_expected_score(1800, 1500)
         assert score > 0.5
 
     def test_calculate_expected_score_lower_elo_loses(self):
-        """
-        Test: Score attendu < 0.5 si notre Elo est inferieur.
-        """
+        """Test: Score attendu < 0.5 si notre Elo est inferieur."""
         score = self.service.calculate_expected_score(1500, 1800)
         assert score < 0.5
 
     def test_calculate_probabilities_sum_to_one(self):
-        """
-        Test: Probabilites win + draw + loss = 1.
-        """
+        """Test: Probabilites win + draw + loss = 1."""
         win, draw, loss = self.service.calculate_probabilities(1600, 1500)
         total = win + draw + loss
         assert 0.99 <= total <= 1.01  # Tolerance flottants
 
     def test_optimize_returns_correct_team_size(self):
-        """
-        Test: Optimisation retourne le bon nombre de joueurs.
-        """
+        """Test: Optimisation retourne le bon nombre de joueurs."""
         players = [
             {"ffe_id": f"A{i:05d}", "name": f"Player {i}", "elo": 1500 + i * 50} for i in range(10)
         ]
@@ -62,9 +58,7 @@ class TestComposerService:
         assert len(result.lineup) == 8
 
     def test_optimize_respects_elo_order(self):
-        """
-        Test: Joueurs tries par Elo decroissant.
-        """
+        """Test: Joueurs tries par Elo decroissant."""
         players = [
             {"ffe_id": "A00001", "name": "Low", "elo": 1400},
             {"ffe_id": "A00002", "name": "High", "elo": 1800},
@@ -82,9 +76,7 @@ class TestComposerService:
         assert elos == sorted(elos, reverse=True)
 
     def test_optimize_calculates_total_score(self):
-        """
-        Test: Score total est calcule.
-        """
+        """Test: Score total est calcule."""
         players = [{"ffe_id": "A00001", "elo": 1600}]
         opponents = [{"elo": 1500}]
 
