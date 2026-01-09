@@ -281,7 +281,7 @@ class TestModulesConfiguration:
         ruff_mods = [m for m in MODULES if m["name"] == "ruff"]
         assert len(ruff_mods) == 1
         assert "ISO 25010" in ruff_mods[0]["iso"]
-        assert ruff_mods[0]["check"] == "ruff --version"
+        assert ruff_mods[0]["check"] == "python -m ruff --version"
 
     def test_module_pytest_config(self) -> None:
         """Test configuration module Pytest."""
