@@ -1,0 +1,310 @@
+# CI/CD Pipeline - Alice-Engine
+# Standards: ISO 5055, 25010, 27001, 29119, 42010, 15289
+#
+# Triggers:
+#   - PR → Quality + Tests
+#   - Push main → Quality + Tests + Artifacts
+#   - Release → Full + ISO Docs commit
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  release:
+    types: [published]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ============================================
+  # QUALITY: Lint, Types, Security (ISO 5055 + 27001)
+  # ============================================
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy bandit[toml]
+          pip install types-requests pydantic
+
+      - name: Ruff Lint (ISO 5055)
+        run: ruff check app/ services/ scripts/ --output-format=github
+
+      - name: Ruff Format Check
+        run: ruff format --check app/ services/ scripts/
+
+      - name: MyPy (ISO 5055)
+        run: mypy app/ services/ --ignore-missing-imports
+        continue-on-error: true  # Progressive adoption
+
+      - name: Bandit Security (ISO 27001)
+        run: bandit -r app/ services/ -c pyproject.toml -f json -o bandit-report.json || true
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 30
+
+  # ============================================
+  # TESTS: Pytest + Coverage (ISO 29119)
+  # ============================================
+  tests:
+    name: Tests & Coverage
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run Tests (ISO 29119)
+        run: |
+          pytest tests/ \
+            --cov=app --cov=services --cov=scripts \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-fail-under=55 \
+            --junitxml=test-results.xml \
+            -v --tb=short
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 30
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results.xml
+          retention-days: 30
+
+      - name: Coverage Comment (PR only)
+        if: github.event_name == 'pull_request'
+        uses: orgoro/coverage@v3.2
+        with:
+          coverageFile: coverage.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          thresholdAll: 0.55
+        continue-on-error: true
+
+  # ============================================
+  # SECURITY: Vulnerability Audit (ISO 27001)
+  # ============================================
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pip-audit
+
+      - name: pip-audit (ISO 27001)
+        run: pip-audit --strict --local -f json -o audit-report.json || true
+
+      - name: Upload Audit Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-report
+          path: audit-report.json
+          retention-days: 30
+
+  # ============================================
+  # COMPLEXITY: Metrics (ISO 25010)
+  # ============================================
+  complexity:
+    name: Complexity Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install radon xenon
+
+      - name: Radon Complexity Report
+        run: |
+          radon cc app/ services/ -a -s --json > complexity-report.json
+          radon mi app/ services/ --json > maintainability-report.json
+
+      - name: Xenon Quality Gate (ISO 25010)
+        run: xenon --max-absolute=B --max-modules=B --max-average=A app/ services/
+
+      - name: Upload Complexity Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: complexity-reports
+          path: |
+            complexity-report.json
+            maintainability-report.json
+          retention-days: 30
+
+  # ============================================
+  # ARTIFACTS: Architecture & Graphs (ISO 42010)
+  # ============================================
+  artifacts:
+    name: Generate Artifacts
+    runs-on: ubuntu-latest
+    needs: [quality, tests]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Graphviz
+        run: sudo apt-get install -y graphviz
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Architecture Health (ISO 42010)
+        run: python -m scripts.analyze_architecture
+
+      - name: Generate Graphs (ISO 42010)
+        run: python -m scripts.generate_graphs
+        continue-on-error: true  # Graphviz peut échouer sur certains modules
+
+      - name: Upload Architecture Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-artifacts
+          path: |
+            reports/architecture-health.json
+            reports/complexity/
+            graphs/
+          retention-days: 90
+
+  # ============================================
+  # ISO DOCS: Update & Commit (ISO 15289)
+  # Runs only on release
+  # ============================================
+  iso-docs:
+    name: Update ISO Documentation
+    runs-on: ubuntu-latest
+    needs: [quality, tests, artifacts]
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.target_commitish }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Generate ISO Documentation (ISO 15289)
+        run: python -m scripts.update_iso_docs
+
+      - name: Download Architecture Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: architecture-artifacts
+          path: ./
+
+      - name: Commit ISO Documentation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add docs/iso/ reports/ graphs/
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "docs: update ISO documentation for ${{ github.event.release.tag_name }} [skip ci]"
+            git push origin HEAD:${{ github.event.release.target_commitish }}
+          fi
+
+  # ============================================
+  # SUMMARY: Job Status
+  # ============================================
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [quality, tests, security]
+    if: always()
+    steps:
+      - name: Check Results
+        run: |
+          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Quality | ${{ needs.quality.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if critical jobs failed
+        if: needs.quality.result == 'failure' || needs.tests.result == 'failure'
+        run: exit 1

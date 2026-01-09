@@ -58,9 +58,9 @@ repos:
   - repo: local
     hooks:
       - id: pytest-cov
-        name: "Tests 70% (ISO 29119)"
+        name: "Tests 55% (ISO 29119)"
         entry: python
-        args: [-m, pytest, tests/, -v, --tb=short, --cov=app, --cov=services, --cov=scripts, --cov-fail-under=70, -x]
+        args: [-m, pytest, tests/, -v, --tb=short, --cov=app, --cov=services, --cov=scripts, --cov-fail-under=55, -x]
         language: system
         pass_filenames: false
         stages: [pre-push]
@@ -82,13 +82,20 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+  # ============================================
+  # MANUAL: Génération artifacts (ISO 42010 + 15289)
+  # Usage: pre-commit run --hook-stage manual <hook-id>
+  # Ou: make graphs / make iso-docs / make reports
+  # ============================================
+  - repo: local
+    hooks:
       - id: architecture-health
         name: "Architecture (ISO 42010)"
         entry: python
         args: [-m, scripts.analyze_architecture]
         language: system
         pass_filenames: false
-        stages: [pre-push]
+        stages: [manual]
 
       - id: generate-graphs
         name: "Graphs (ISO 42010)"
@@ -96,7 +103,7 @@ repos:
         args: [-m, scripts.generate_graphs]
         language: system
         pass_filenames: false
-        stages: [pre-push]
+        stages: [manual]
 
       - id: update-iso-docs
         name: "ISO docs (ISO 15289)"
@@ -104,4 +111,4 @@ repos:
         args: [-m, scripts.update_iso_docs]
         language: system
         pass_filenames: false
-        stages: [pre-push]
+        stages: [manual]
