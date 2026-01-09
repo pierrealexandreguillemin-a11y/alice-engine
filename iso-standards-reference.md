@@ -126,20 +126,29 @@ Chaque document technique doit contenir :
 ## Architecture SRP
 
 ```
-feature/
-├── feature.controller.ts   # Routes, HTTP uniquement
-├── feature.service.ts      # Logique métier pure
-├── feature.repository.ts   # Accès données uniquement
-├── feature.validator.ts    # Validation Zod
-├── feature.types.ts        # Interfaces/Types
-└── feature.test.ts         # Tests unitaires
+app/
+├── api/
+│   ├── routes.py           # Routes FastAPI, HTTP uniquement
+│   └── schemas.py          # Validation Pydantic (request/response)
+├── config.py               # Configuration centralisée
+└── main.py                 # Point d'entrée FastAPI
+
+services/
+├── inference.py            # Logique métier ALI (pure, testable)
+├── composer.py             # Logique métier CE (pure, testable)
+└── data_loader.py          # Repository - accès données uniquement
+
+scripts/
+├── model_registry.py       # Gestion modèles ML
+├── feature_engineering.py  # Pipeline features
+└── ffe_rules_features.py   # Règles métier FFE
 ```
 
 **Règles :**
 - 1 fichier = 1 responsabilité
-- Controller → Service → Repository (jamais l'inverse)
-- Service = pur, testable, sans I/O direct
-- Repository = seul à toucher MongoDB
+- Routes → Services → DataLoader (jamais l'inverse)
+- Services = purs, testables, sans I/O direct
+- DataLoader = seul à toucher MongoDB/fichiers
 
 ---
 
@@ -151,90 +160,124 @@ feature/
       ╱──────╲
      ╱ Intég. ╲     15%  — API routes, DB memory
     ╱──────────╲
-   ╱  Unitaires ╲   80%  — Vitest, logique pure
+   ╱  Unitaires ╲   80%  — Pytest, logique pure
   ╱──────────────╲
 ```
 
 | Type | Cible | Outil |
 |------|-------|-------|
-| Unit | Services, Flat-Six rules | Vitest |
-| Intégration | Routes API, DB | Supertest + mongodb-memory-server |
+| Unit | Services, FFE rules, ML pipelines | Pytest |
+| Intégration | Routes FastAPI, DB | Pytest + httpx + mongomock |
 | E2E | Workflows complets | Playwright |
-| Accessibilité | WCAG 2.1 AA | axe-core |
-| Sécurité | OWASP Top 10 | ZAP DAST |
+| Sécurité | OWASP Top 10 | Bandit + pip-audit |
+| Complexité | Cyclomatic | Xenon (max B) |
 
 ---
 
 ## Checklist Sécurité (27034)
 
-- [ ] Input validation (Zod)
-- [ ] Output encoding
-- [ ] Auth/Authz chaque route
-- [ ] SQL/NoSQL injection (mongo-sanitize)
-- [ ] XSS (Helmet CSP)
-- [ ] CSRF tokens
-- [ ] Rate limiting
-- [ ] Secrets en env vars
-- [ ] Logs sans données sensibles
-- [ ] Dépendances à jour
+- [x] Input validation (Pydantic)
+- [x] Output encoding (FastAPI auto)
+- [ ] Auth/Authz chaque route (JWT)
+- [x] NoSQL injection (Pydantic + motor)
+- [x] Rate limiting (slowapi)
+- [x] Secrets en env vars (.env + pydantic-settings)
+- [x] Logs sans données sensibles (structlog)
+- [x] Dépendances à jour (pip-audit pre-push)
+- [x] Secrets détection (gitleaks pre-commit)
+- [x] Static analysis (Bandit, Ruff S rules)
 
 ---
 
 ## Qualité Code (5055)
 
 ```bash
-# Avant chaque commit
-npm run lint          # 0 erreurs
-npm run typecheck     # 0 erreurs
-npm run test          # 100% pass
-npm audit             # 0 critical/high
+# Pre-commit (automatique)
+ruff check .          # 0 erreurs lint
+ruff format .         # Format uniforme
+mypy app/ services/   # 0 erreurs types
+bandit -r app/        # 0 vulnérabilités
+
+# Pre-push (automatique)
+pytest --cov-fail-under=70   # Coverage minimum
+xenon --max-absolute=B       # Complexité max
+pip-audit --strict           # 0 vulns dépendances
 ```
 
 **CWE prioritaires :**
-- CWE-89: Injection
-- CWE-79: XSS
+- CWE-89: Injection (SQL/NoSQL)
 - CWE-287: Auth bypass
 - CWE-522: Credentials faibles
-- CWE-798: Hardcoded secrets
+- CWE-798: Hardcoded secrets (gitleaks)
+- CWE-502: Deserialization (pickle)
 
 ---
 
-## Qualité Données (25012)
+## Qualité Données (25012 + 5259)
 
 | Critère | Implémentation |
 |---------|----------------|
-| Exactitude | Validation Zod stricte |
-| Complétude | Required fields + defaults |
-| Cohérence | Transactions MongoDB |
-| Unicité | Indexes unique (ffeId, email) |
-| Traçabilité | createdAt, updatedAt, audit logs |
+| Exactitude | Validation Pydantic v2 stricte |
+| Complétude | Required fields + `Field(default=...)` |
+| Cohérence | motor async + mongomock tests |
+| Unicité | Indexes unique (ffeId, clubId) |
+| Traçabilité | `DataLineage` dans `model_registry.py` |
+| Lineage | `compute_data_lineage()` train/valid/test |
+| Schema | `validate_dataframe_schema()` |
 
 ---
 
 ## Multi-tenant (25019)
 
-```typescript
-// TOUJOURS filtrer par clubId
-const players = await Player.find({ clubId: req.user.clubId });
+```python
+# TOUJOURS filtrer par clubId (isolation tenant)
+async def get_players(club_id: str, db: AsyncIOMotorDatabase) -> list[Player]:
+    return await db.players.find({"clubId": club_id}).to_list(None)
 
-// JAMAIS
-const players = await Player.find({ _id: id }); // ❌ Fuite données
+# JAMAIS - fuite de données inter-clubs
+async def get_player_bad(player_id: str, db: AsyncIOMotorDatabase):
+    return await db.players.find_one({"_id": player_id})  # ❌ Pas de clubId
 ```
+
+**Règles CDC_ALICE.md §2.2 :**
+- Isolation stricte par `clubId`
+- Modèle global par défaut
+- Modèle spécifique par club si >50-100 matchs historiques
 
 ---
 
-## JSDoc Standard
+## Docstring Standard (Google Style)
 
-```typescript
-/**
- * @description Valide composition via Flat-Six
- * @param {string} compositionId - ID MongoDB
- * @param {string} clubId - Isolation tenant
- * @returns {Promise<ValidationResult>}
- * @throws {NotFoundError} Composition inexistante
- * @throws {ValidationError} Règles FFE violées
- * @see ISO 25010 - Fiabilité
- */
+```python
+def predict_lineup(
+    club_id: str,
+    opponent_club_id: str,
+    round_number: int,
+) -> PredictionResult:
+    """Prédit la composition adverse probable (ALI).
+
+    Analyse l'historique des compositions adverses pour estimer
+    la probabilité de présence de chaque joueur.
+
+    Args:
+        club_id: Identifiant FFE du club utilisateur (isolation tenant).
+        opponent_club_id: Identifiant FFE du club adverse.
+        round_number: Numéro de la ronde (1-11 typiquement).
+
+    Returns:
+        PredictionResult contenant les joueurs probables avec probabilités.
+
+    Raises:
+        ClubNotFoundError: Club adverse inexistant.
+        InsufficientDataError: Historique insuffisant (<10 matchs).
+
+    ISO Compliance:
+        - ISO/IEC 42001:2023 - AI Management (traçabilité prédictions)
+        - ISO/IEC 5259:2024 - Data Quality (validation entrées)
+
+    See Also:
+        CDC_ALICE.md §2.1 F.1 - Prédiction de Composition Adverse
+    """
 ```
 
 ---
@@ -242,23 +285,32 @@ const players = await Player.find({ _id: id }); // ❌ Fuite données
 ## Commandes Rapides
 
 ```bash
+# Installation
+make install              # pip install -r requirements.txt + dev
+make hooks                # pre-commit install (tous hooks)
+
 # Dev
-npm run dev
+uvicorn app.main:app --reload
 
 # Tests
-npm run test              # Unitaires
-npm run test:integration  # Intégration
-npm run test:e2e          # E2E
-npm run test:coverage     # Couverture
+make test                 # pytest tests/
+make test-cov             # pytest --cov --cov-fail-under=70
 
-# Qualité
-npm run lint
-npm run typecheck
-npm audit
-npm run security:check    # Snyk
+# Qualité (pre-commit)
+make quality              # ruff + mypy + bandit
+make lint                 # ruff check + format
+make typecheck            # mypy
 
-# Build
-npm run build
+# Sécurité (pre-push)
+pip-audit --strict        # Vulnérabilités dépendances
+xenon --max-absolute=B    # Complexité cyclomatique
+
+# Artefacts
+make graphs               # Génère graphs/dependencies.svg
+make iso-docs             # MAJ docs/iso/IMPLEMENTATION_STATUS.md
+
+# Validation complète
+make all                  # install + quality + test-cov + graphs
 ```
 
 ---

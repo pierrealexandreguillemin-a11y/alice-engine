@@ -1,6 +1,6 @@
 # IMPLEMENTATION DEVOPS - STATUT ISO
 
-**Date de mise a jour:** 2026-01-09 04:55
+**Date de mise a jour:** 2026-01-09 17:12
 **Generateur:** scripts/update_iso_docs.py (automatique)
 
 ---
@@ -8,10 +8,10 @@
 ## SCORE DEVOPS GLOBAL
 
 ```
-Score actuel: 5/100
+Score actuel: 79/100
 
-Modules installes:   1/19
-Modules manquants:   18
+Modules installes:   15/19
+Modules manquants:   4
 ```
 
 ---
@@ -23,12 +23,12 @@ Couvre: Maintenabilite, Fiabilite, Securite, Performance
 
 | Outil | Status | Version |
 |-------|--------|---------|
-| ruff |  | non installe |
-| mypy |  | non installe |
-| black |  | non installe |
-| isort |  | non installe |
-| radon |  | non installe |
-| xenon |  | non installe |
+| ruff |  | ruff 0.14.10 |
+| mypy |  | mypy 1.18.2 (compiled: yes) |
+| black |  | python -m black, 25.9.0 (compiled: yes) |
+| isort |  | _                 _ |
+| radon |  | 6.0.1 |
+| xenon |  | installed |
 
 ### ISO 27001 / ISO 27034 - Securite
 Protection OWASP Top 10, Secret scanning
@@ -36,9 +36,9 @@ Protection OWASP Top 10, Secret scanning
 | Outil | Status | Version |
 |-------|--------|---------|
 
-| bandit |  | non installe |
-| safety |  | non installe |
-| pip-audit |  | non installe |
+| bandit |  | __main__.py 1.9.2 |
+| safety |  | C:\Python313\python.exe: No module named safety |
+| pip-audit |  | pip-audit 2.10.0 |
 | gitleaks |  | 8.30.0 |
 
 ### ISO 29119 - Tests Logiciels
@@ -47,9 +47,9 @@ Pyramide de tests, Coverage enforcement
 | Outil | Status | Version |
 |-------|--------|---------|
 
-| pytest |  | non installe |
-| pytest-cov |  | non installe |
-| pytest-asyncio |  | File "<string>", line 1 |
+| pytest |  | pytest 8.4.2 |
+| pytest-cov |  | installed |
+| pytest-asyncio |  | installed |
 
 ### ISO 42010 - Architecture
 Visualisation dependances, Detection cycles
@@ -57,8 +57,8 @@ Visualisation dependances, Detection cycles
 | Outil | Status | Version |
 |-------|--------|---------|
 
-| pydeps |  | non installe |
-| import-linter |  | non installe |
+| pydeps |  | installed |
+| import-linter |  | Traceback (most recent call last): |
 ---
 
 ## METRIQUES QUALITE ACTUELLES
@@ -76,51 +76,37 @@ Visualisation dependances, Detection cycles
 
 | Module | Categorie | Statut | Version | Norme ISO |
 |--------|-----------|--------|---------|-----------|
+| pydeps | Architecture |  | installed | ISO 42010 |
+| commitizen | Commits |  | 4.11.0 | ISO 12207 |
+| radon | Complexite |  | 6.0.1 | ISO 25010, ISO 5055 |
+| xenon | Complexite |  | installed | ISO 25010 |
+| pytest-cov | Coverage |  | installed | ISO 29119 |
+| black | Formatage |  | python -m black, 25.9.0 (compiled: yes) | ISO 25010 |
+| isort | Formatage |  | _                 _ | ISO 25010 |
+| pre-commit | Git Hooks |  | pre-commit 4.3.0 | ISO 12207 |
+| ruff | Qualite Code |  | ruff 0.14.10 | ISO 25010, ISO 5055 |
 | gitleaks | Secrets |  | 8.30.0 | ISO 27001 (P0-CRITICAL) |
-| pdoc | API Docs |  | non installe | ISO 26514 |
-| pydeps | Architecture |  | non installe | ISO 42010 |
-| import-linter | Architecture |  | non installe | ISO 42010 |
-| commitizen | Commits |  | non installe | ISO 12207 |
-| radon | Complexite |  | non installe | ISO 25010, ISO 5055 |
-| xenon | Complexite |  | non installe | ISO 25010 |
-| pytest-cov | Coverage |  | non installe | ISO 29119 |
-| mkdocs | Documentation |  | non installe | ISO 26514 |
-| black | Formatage |  | non installe | ISO 25010 |
-| isort | Formatage |  | non installe | ISO 25010 |
-| pre-commit | Git Hooks |  | non installe | ISO 12207 |
-| ruff | Qualite Code |  | non installe | ISO 25010, ISO 5055 |
-| bandit | Securite |  | non installe | ISO 27001, ISO 27034, OWASP |
-| safety | Securite |  | non installe | ISO 27001 |
-| pip-audit | Securite |  | non installe | ISO 27001 |
-| pytest | Tests |  | non installe | ISO 29119 |
-| pytest-asyncio | Tests Async |  | File "<string>", line 1 | ISO 29119 |
-| mypy | Type Safety |  | non installe | ISO 25010, ISO 5055 |
+| bandit | Securite |  | __main__.py 1.9.2 | ISO 27001, ISO 27034, OWASP |
+| pip-audit | Securite |  | pip-audit 2.10.0 | ISO 27001 |
+| pytest | Tests |  | pytest 8.4.2 | ISO 29119 |
+| pytest-asyncio | Tests Async |  | installed | ISO 29119 |
+| mypy | Type Safety |  | mypy 1.18.2 (compiled: yes) | ISO 25010, ISO 5055 |
+| pdoc | API Docs |  | Traceback (most recent call last): | ISO 26514 |
+| import-linter | Architecture |  | Traceback (most recent call last): | ISO 42010 |
+| mkdocs | Documentation |  | C:\Python313\python.exe: No module named mkdocs | ISO 26514 |
+| safety | Securite |  | C:\Python313\python.exe: No module named safety | ISO 27001 |
 ---
 
 ## MODULES MANQUANTS (actions requises)
 
 
-- **ruff** (Qualite Code) - ISO 25010, ISO 5055
-- **mypy** (Type Safety) - ISO 25010, ISO 5055
-- **black** (Formatage) - ISO 25010
-- **isort** (Formatage) - ISO 25010
-- **bandit** (Securite) - ISO 27001, ISO 27034, OWASP
 - **safety** (Securite) - ISO 27001
-- **pip-audit** (Securite) - ISO 27001
-- **pytest** (Tests) - ISO 29119
-- **pytest-cov** (Coverage) - ISO 29119
-- **pytest-asyncio** (Tests Async) - ISO 29119
-- **radon** (Complexite) - ISO 25010, ISO 5055
-- **xenon** (Complexite) - ISO 25010
-- **pydeps** (Architecture) - ISO 42010
 - **import-linter** (Architecture) - ISO 42010
-- **pre-commit** (Git Hooks) - ISO 12207
-- **commitizen** (Commits) - ISO 12207
 - **mkdocs** (Documentation) - ISO 26514
 - **pdoc** (API Docs) - ISO 26514
 
 ```bash
-pip install ruff mypy black isort bandit safety pip-audit pytest pytest-cov pytest-asyncio radon xenon pydeps import-linter pre-commit commitizen mkdocs pdoc
+pip install safety import-linter mkdocs pdoc
 ```
 
 ---
@@ -147,5 +133,5 @@ make all
 ---
 
 **Genere automatiquement par:** scripts/update_iso_docs.py
-**Derniere mise a jour:** 2026-01-09 04:55
-**Score DevOps:** 5/100
+**Derniere mise a jour:** 2026-01-09 17:12
+**Score DevOps:** 79/100
