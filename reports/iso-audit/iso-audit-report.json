@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-01-09T12:46:31.332030",
+  "compliant": true,
+  "stats": {
+    "iso_5055": {
+      "total_files": 97,
+      "compliant_files": 97,
+      "largest_files": [
+        [
+          "scripts\\model_registry\\versioning.py",
+          291
+        ],
+        [
+          "scripts\\parse_dataset.py",
+          288
+        ],
+        [
+          "scripts\\model_registry\\validation.py",
+          287
+        ],
+        [
+          "scripts\\model_registry\\security_encryption.py",
+          275
+        ],
+        [
+          "scripts\\iso_audit\\auditors.py",
+          272
+        ],
+        [
+          "scripts\\ensemble\\stacking.py",
+          263
+        ],
+        [
+          "scripts\\model_registry\\drift.py",
+          261
+        ],
+        [
+          "scripts\\train_models_parallel.py",
+          259
+        ],
+        [
+          "scripts\\model_registry\\artifacts.py",
+          248
+        ],
+        [
+          "scripts\\feature_engineering.py",
+          237
+        ]
+      ]
+    },
+    "iso_15289": {
+      "required_docs": 7,
+      "found_docs": 7,
+      "compliant": true
+    },
+    "iso_5259": {
+      "files_checked": 3
+    },
+    "iso_25010": {
+      "srp_violations": 0,
+      "worst_files": []
+    }
+  },
+  "violations": [],
+  "summary": {
+    "total": 0,
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  }
+}
