@@ -42,8 +42,8 @@ def detect_circular_imports(deps: dict[str, list[str]]) -> list[list[str]]:
                 module_deps[file_module].add(imp)
 
     cycles = []
-    for module in module_deps:
-        for dep in module_deps[module]:
+    for module, mod_dependencies in module_deps.items():
+        for dep in mod_dependencies:
             if module in module_deps.get(dep, set()):
                 cycle = sorted([module, dep])
                 if cycle not in cycles:
