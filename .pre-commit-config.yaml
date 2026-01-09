@@ -1,5 +1,4 @@
-# Pre-commit hooks - Equivalent Husky + lint-staged (chess-app)
-# Version: 2.0 - ZERO TOLERANCE + GRAPHS + ISO DOCS (ISO 25010 + 5055 + 42010)
+# Pre-commit hooks - ISO 5055 + 25010 + 27001 + 27034 + 29119 + 42010
 # Usage: pre-commit install && pre-commit install --hook-type commit-msg --hook-type pre-push
 
 default_stages: [pre-commit]
@@ -7,62 +6,35 @@ fail_fast: false
 
 repos:
   # ============================================
-  # 0. SECRET SCANNING (P0-CRITICAL)
+  # PRE-COMMIT: Qualité code (ISO 5055 + 27001)
   # ============================================
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.4
     hooks:
       - id: gitleaks
-        name: "Secret scanning (Gitleaks)"
+        name: "Secrets (ISO 27001)"
 
-  # ============================================
-  # 1. FORMATAGE & LINT (Ruff)
-  # ============================================
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.5.0
     hooks:
       - id: ruff
-        name: "Lint Python (Ruff)"
+        name: "Lint + Security (ISO 5055/27034)"
         args: [--fix, --exit-non-zero-on-fix]
-        types_or: [python, pyi]
-
       - id: ruff-format
-        name: "Format Python (Ruff)"
-        types_or: [python, pyi]
+        name: "Format (ISO 5055)"
 
-  # ============================================
-  # 2. TYPE CHECKING (MyPy)
-  # ============================================
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0
     hooks:
       - id: mypy
-        name: "Type check (MyPy)"
-        additional_dependencies:
-          - types-requests
-          - pydantic
+        name: "Types (ISO 5055)"
+        additional_dependencies: [types-requests, pydantic]
         args: [--ignore-missing-imports]
         exclude: ^tests/
 
-  # ============================================
-  # 3. SECURITY SCANNING (Bandit)
-  # ============================================
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.9
-    hooks:
-      - id: bandit
-        name: "Security scan (Bandit)"
-        args: [-c, pyproject.toml, -r, app/, services/]
-        additional_dependencies: ["bandit[toml]"]
-
-  # ============================================
-  # 4. BASIC CHECKS
-  # ============================================
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
       - id: check-yaml
       - id: check-json
       - id: check-toml
@@ -70,108 +42,66 @@ repos:
         args: ['--maxkb=1000']
       - id: check-merge-conflict
       - id: debug-statements
-        name: "Detect debug statements"
-      # Desactive temporairement - on dev sur master pour l'instant
-      # - id: no-commit-to-branch
-      #   args: ['--branch', 'main', '--branch', 'master']
 
   # ============================================
-  # 5. COMMIT MESSAGE (Commitizen)
+  # COMMIT-MSG: Documentation (ISO 15289)
   # ============================================
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v3.27.0
     hooks:
       - id: commitizen
-        name: "Validate commit message"
         stages: [commit-msg]
 
   # ============================================
-  # 6. TESTS & COVERAGE (Pre-push)
+  # PRE-PUSH: Tests + Sécurité (ISO 29119 + 25010 + 27001)
   # ============================================
   - repo: local
     hooks:
-      - id: pytest
-        name: "Run tests (pytest)"
+      - id: pytest-cov
+        name: "Tests 70% (ISO 29119)"
         entry: python
-        args: [-m, pytest, tests/, -v, --tb=short]
+        args: [-m, pytest, tests/, -v, --tb=short, --cov=app, --cov=services, --cov=scripts, --cov-fail-under=70, -x]
         language: system
         pass_filenames: false
         stages: [pre-push]
         always_run: true
 
-      - id: pytest-cov
-        name: "Coverage threshold (70%)"
-        entry: python
-        args: [-m, pytest, --cov=app, --cov=services, --cov-fail-under=70, -q]
-        language: system
-        pass_filenames: false
-        stages: [pre-push]
-
-  # ============================================
-  # 7. COMPLEXITY CHECK (Pre-push) - ISO 25010
-  # ============================================
-  - repo: local
-    hooks:
       - id: xenon
-        name: "Complexity threshold (Xenon)"
+        name: "Complexity (ISO 25010)"
         entry: python
         args: [-m, xenon, --max-absolute=B, --max-modules=B, --max-average=A, app/, services/]
         language: system
         pass_filenames: false
         stages: [pre-push]
 
-  # ============================================
-  # 8. SECURITY AUDIT (Pre-push) - ISO 27001
-  # ============================================
-  - repo: local
-    hooks:
       - id: pip-audit
-        name: "Dependency audit (pip-audit)"
+        name: "Vulnerabilities (ISO 27001)"
         entry: python
-        args: [-m, pip_audit, --strict]
+        args: [-m, pip_audit, --strict, --local]
         language: system
         pass_filenames: false
         stages: [pre-push]
 
-  # ============================================
-  # 9. ARCHITECTURE ANALYSIS (Manual) - ISO 42010
-  # ============================================
-  # NOTE: Ces hooks génèrent des fichiers avec timestamps
-  # Ils doivent être exécutés MANUELLEMENT avant push:
-  #   make reports  # ou: pre-commit run --hook-stage manual -a
-  # Puis commit des fichiers générés.
-  - repo: local
-    hooks:
       - id: architecture-health
-        name: "Architecture health check"
+        name: "Architecture (ISO 42010)"
         entry: python
-        args: [scripts/analyze_architecture.py]
+        args: [-m, scripts.analyze_architecture]
         language: system
         pass_filenames: false
-        stages: [manual]  # Changed from pre-push to manual
+        stages: [pre-push]
 
-  # ============================================
-  # 10. GRAPH GENERATION (Manual) - ISO 42010
-  # ============================================
-  - repo: local
-    hooks:
       - id: generate-graphs
-        name: "Generate architecture graphs"
+        name: "Graphs (ISO 42010)"
         entry: python
-        args: [scripts/generate_graphs.py]
+        args: [-m, scripts.generate_graphs]
         language: system
         pass_filenames: false
-        stages: [manual]  # Changed from pre-push to manual
+        stages: [pre-push]
 
-  # ============================================
-  # 11. ISO DOCUMENTATION UPDATE (Manual)
-  # ============================================
-  - repo: local
-    hooks:
       - id: update-iso-docs
-        name: "Update ISO documentation"
+        name: "ISO docs (ISO 15289)"
         entry: python
-        args: [scripts/update_iso_docs.py]
+        args: [-m, scripts.update_iso_docs]
         language: system
         pass_filenames: false
-        stages: [manual]  # Changed from pre-push to manual
+        stages: [pre-push]

@@ -8,8 +8,6 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from sklearn.metrics import accuracy_score, roc_auc_score
-
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -33,6 +31,8 @@ def evaluate_model(
     -------
         Dictionary with evaluation metrics
     """
+    from sklearn.metrics import accuracy_score, roc_auc_score  # Lazy import
+
     start = time.time()
     y_pred_proba = model.predict_proba(X)[:, 1]
     inference_time = time.time() - start

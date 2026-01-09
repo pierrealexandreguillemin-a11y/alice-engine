@@ -12,9 +12,13 @@ Last Updated: 2026-01-09
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+
+if TYPE_CHECKING:
+    from sklearn.preprocessing import LabelEncoder
 
 NUMERIC_FEATURES: list[str] = [
     "blanc_elo",
@@ -117,6 +121,8 @@ def _encode_categorical_features(
     fit_encoders: bool,
 ) -> pd.DataFrame:
     """Encode les features catégorielles."""
+    from sklearn.preprocessing import LabelEncoder  # Lazy import
+
     X_cat_encoded = pd.DataFrame()
 
     for col in CATEGORICAL_FEATURES:

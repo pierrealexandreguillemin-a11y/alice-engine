@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 
 from scripts.evaluation.constants import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
@@ -30,6 +29,8 @@ def prepare_features(
     -------
         X, y, label_encoders
     """
+    from sklearn.preprocessing import LabelEncoder  # Lazy import
+
     df = df.copy()
 
     # Target: resultat blanc (0=defaite, 0.5=nulle, 1=victoire)

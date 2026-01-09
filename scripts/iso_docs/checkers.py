@@ -19,10 +19,12 @@ def check_installed(cmd: str) -> tuple[bool, str]:
             timeout=10,
             shell=True,  # Required for "python -m" and quoted args on Windows
         )
+        if result.returncode != 0:
+            return False, "non installe"
         version = result.stdout.strip() or result.stderr.strip()
         # Extract version number
         version = version.split("\n")[0][:50] if version else "installed"
-        return result.returncode == 0, version
+        return True, version
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False, "non installe"
 

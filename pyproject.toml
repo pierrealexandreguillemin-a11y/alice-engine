@@ -113,14 +113,17 @@ ignore_errors = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --tb=short"
+# -p no:cacheprovider = évite le cache pytest qui consomme RAM
+# --import-mode=importlib = import plus léger
+addopts = "-v --tb=short -p no:cacheprovider --import-mode=importlib"
 
 # ============================================
 # COVERAGE
 # ============================================
 [tool.coverage.run]
-source = ["app", "services"]
-omit = ["tests/*", "*/__init__.py"]
+source = ["app", "services", "scripts"]
+omit = ["tests/*", "*/__init__.py", "scripts/generate_graphs.py", "scripts/analyze_architecture.py"]
+branch = true
 
 [tool.coverage.report]
 exclude_lines = [

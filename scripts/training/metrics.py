@@ -7,16 +7,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sklearn.metrics import (
-    accuracy_score,
-    confusion_matrix,
-    f1_score,
-    log_loss,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
-
 from scripts.ml_types import ModelMetrics
 
 if TYPE_CHECKING:
@@ -30,6 +20,16 @@ def compute_all_metrics(
     y_proba: NDArray[np.float64],
 ) -> ModelMetrics:
     """Calcule toutes les metriques conformes ISO 25010."""
+    from sklearn.metrics import (  # Lazy import
+        accuracy_score,
+        confusion_matrix,
+        f1_score,
+        log_loss,
+        precision_score,
+        recall_score,
+        roc_auc_score,
+    )
+
     cm = confusion_matrix(y_true, y_pred)
 
     return ModelMetrics(

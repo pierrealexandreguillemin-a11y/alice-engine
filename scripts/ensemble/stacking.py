@@ -1,18 +1,26 @@
-"""Stacking Ensemble Logic - ISO 5055.
+"""Module: stacking.py - Stacking Ensemble avec OOF predictions et meta-learner.
 
-Ce module contient la logique de création du stacking ensemble.
+Ce module crée un ensemble stacking (Level 0 + Level 1).
+Mode séquentiel par défaut pour économiser la RAM (gc.collect après chaque modèle).
+
+ISO Compliance:
+- ISO/IEC 42001:2023 - AI Management System (Métriques qualité, Explicabilité)
+- ISO/IEC 25059:2023 - AI Quality Model (Benchmarks ensemble)
+- ISO/IEC 23894:2023 - AI Risk Management (Gestion ressources mémoire)
+- ISO/IEC 5055 - Code Quality (0 CWE critiques)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from __future__ import annotations
 
+import gc
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression, RidgeClassifier
-from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import StratifiedKFold
 
 from scripts.ensemble.oof import compute_oof_for_model
 from scripts.ensemble.types import StackingMetrics, StackingResult
@@ -21,6 +29,7 @@ from scripts.ensemble.voting import MODEL_NAMES, compute_soft_voting
 if TYPE_CHECKING:
     import pandas as pd
     from numpy.typing import NDArray
+    from sklearn.model_selection import StratifiedKFold
 
     from scripts.ml_types import MLClassifier
 
@@ -36,9 +45,12 @@ def create_stacking_ensemble(
     config: dict[str, object],
     n_folds: int = 5,
     *,
-    parallel: bool = True,
+    parallel: bool = False,  # Sequential by default (RAM optimized)
 ) -> StackingResult:
     """Cree un ensemble stacking avec out-of-fold predictions."""
+    from sklearn.metrics import roc_auc_score  # Lazy import
+    from sklearn.model_selection import StratifiedKFold  # Lazy import
+
     logger.info("\n" + "=" * 60)
     logger.info(f"STACKING ENSEMBLE - {n_folds}-Fold CV")
     logger.info("=" * 60)
@@ -185,8 +197,9 @@ def _compute_oof_sequential(
     test_matrix: NDArray[np.float64],
     model_aucs: dict[str, float],
 ) -> None:
-    """Compute OOF sequentially."""
+    """Compute OOF sequentially (RAM optimized)."""
     for idx, name in enumerate(MODEL_NAMES):
+        logger.info(f"  [{name}] Computing OOF predictions...")
         _, oof_preds, test_preds, oof_auc = compute_oof_for_model(
             name,
             X_train_np,
@@ -199,6 +212,8 @@ def _compute_oof_sequential(
         oof_matrix[:, idx] = oof_preds
         test_matrix[:, idx] = test_preds
         model_aucs[name] = oof_auc
+        logger.info(f"  [{name}] OOF AUC: {oof_auc:.4f}")
+        gc.collect()  # Free memory after each model
 
 
 def _train_meta_learner(
@@ -209,6 +224,8 @@ def _train_meta_learner(
     config: dict[str, object],
 ) -> tuple[MLClassifier, float, float, NDArray[np.float64]]:
     """Train meta-learner on OOF predictions."""
+    from sklearn.metrics import roc_auc_score  # Lazy import
+
     logger.info("\n[Level 1] Training meta-learner...")
 
     meta_model = _create_meta_model(config)
@@ -230,6 +247,8 @@ def _train_meta_learner(
 
 def _create_meta_model(config: dict[str, object]) -> MLClassifier:
     """Create meta-learner model from config."""
+    from sklearn.linear_model import LogisticRegression, RidgeClassifier  # Lazy import
+
     stacking_config = config.get("stacking", {})
     if not isinstance(stacking_config, dict):
         stacking_config = {}
@@ -273,6 +292,8 @@ def _compute_metrics(
     test_matrix: NDArray[np.float64],
 ) -> StackingMetrics:
     """Compute final metrics."""
+    from sklearn.metrics import roc_auc_score  # Lazy import
+
     # Single model test AUCs
     single_models: dict[str, dict[str, float]] = {}
     for idx, name in enumerate(MODEL_NAMES):

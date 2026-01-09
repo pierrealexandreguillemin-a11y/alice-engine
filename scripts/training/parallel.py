@@ -1,12 +1,22 @@
-"""Entraînement parallèle des modèles - ISO 5055.
+"""Module: parallel.py - Entraînement séquentiel des modèles ML.
 
-Ce module contient les fonctions d'exécution parallèle.
+Ce module entraîne les modèles un par un pour économiser la RAM.
+Chaque modèle est entraîné puis libéré avant le suivant via gc.collect().
+
+ISO Compliance:
+- ISO/IEC 42001:2023 - AI Management System (Gouvernance training)
+- ISO/IEC 23894:2023 - AI Risk Management (Gestion ressources mémoire)
+- ISO/IEC 5055 - Code Quality (0 CWE critiques)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-09
 """
 
 from __future__ import annotations
 
+import gc
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from scripts.ml_types import ModelMetrics, ModelResults, TrainingResult
@@ -26,34 +36,56 @@ def train_all_models_parallel(
     cat_features: list[str],
     config: dict[str, object],
 ) -> ModelResults:
-    """Entraine CatBoost, XGBoost et LightGBM en parallele."""
+    """Entraine CatBoost, XGBoost et LightGBM séquentiellement (économie RAM)."""
     results: ModelResults = {}
 
     logger.info("\n" + "=" * 60)
-    logger.info("PARALLEL TRAINING - 3 MODELS")
+    logger.info("SEQUENTIAL TRAINING - 3 MODELS (RAM optimized)")
     logger.info("=" * 60)
 
-    catboost_config = _get_model_config(config, "catboost")
-    xgboost_config = _get_model_config(config, "xgboost")
-    lightgbm_config = _get_model_config(config, "lightgbm")
+    # Définir les tâches d'entraînement
+    tasks: list[tuple[str, Callable[[], TrainingResult]]] = [
+        (
+            "CatBoost",
+            lambda: train_catboost(
+                X_train,
+                y_train,
+                X_valid,
+                y_valid,
+                cat_features,
+                _get_model_config(config, "catboost"),
+            ),
+        ),
+        (
+            "XGBoost",
+            lambda: train_xgboost(
+                X_train,
+                y_train,
+                X_valid,
+                y_valid,
+                _get_model_config(config, "xgboost"),
+            ),
+        ),
+        (
+            "LightGBM",
+            lambda: train_lightgbm(
+                X_train,
+                y_train,
+                X_valid,
+                y_valid,
+                cat_features,
+                _get_model_config(config, "lightgbm"),
+            ),
+        ),
+    ]
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = _submit_training_tasks(
-            executor,
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-            cat_features,
-            catboost_config,
-            xgboost_config,
-            lightgbm_config,
-        )
-
-        for future in as_completed(futures):
-            name = futures[future]
-            result = _handle_training_result(future, name)
-            results[name] = result
+    # Entraîner chaque modèle séquentiellement
+    for name, train_fn in tasks:
+        logger.info(f"\n[{name}] Starting training...")
+        result = _train_single_model(name, train_fn)
+        results[name] = result
+        # Libérer la mémoire entre chaque modèle
+        gc.collect()
 
     return results
 
@@ -66,53 +98,11 @@ def _get_model_config(config: dict[str, object], model_name: str) -> dict[str, o
     return model_config
 
 
-def _submit_training_tasks(
-    executor: ThreadPoolExecutor,
-    X_train: pd.DataFrame,
-    y_train: pd.Series,
-    X_valid: pd.DataFrame,
-    y_valid: pd.Series,
-    cat_features: list[str],
-    catboost_config: dict[str, object],
-    xgboost_config: dict[str, object],
-    lightgbm_config: dict[str, object],
-) -> dict[object, str]:
-    """Soumet les tâches d'entraînement à l'executor."""
-    return {
-        executor.submit(
-            train_catboost,
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-            cat_features,
-            catboost_config,  # type: ignore[arg-type]
-        ): "CatBoost",
-        executor.submit(
-            train_xgboost,
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-            xgboost_config,  # type: ignore[arg-type]
-        ): "XGBoost",
-        executor.submit(
-            train_lightgbm,
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-            cat_features,
-            lightgbm_config,  # type: ignore[arg-type]
-        ): "LightGBM",
-    }
-
-
-def _handle_training_result(future: object, name: str) -> TrainingResult:
-    """Gère le résultat d'une tâche d'entraînement."""
+def _train_single_model(name: str, train_fn: Callable[[], TrainingResult]) -> TrainingResult:
+    """Entraîne un seul modèle avec gestion d'erreur."""
     try:
-        result = future.result()  # type: ignore[union-attr]
-        logger.info(f"[{name}] Completed successfully")
+        result = train_fn()
+        logger.info(f"[{name}] Completed - AUC: {result.metrics.auc_roc:.4f}")
         return result
     except Exception as e:
         logger.exception(f"[{name}] FAILED: {e}")

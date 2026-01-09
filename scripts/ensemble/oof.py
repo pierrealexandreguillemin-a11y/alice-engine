@@ -10,7 +10,6 @@ import time
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sklearn.metrics import roc_auc_score
 
 from scripts.ensemble.model_factory import (
     create_catboost_model,
@@ -81,6 +80,8 @@ def compute_oof_for_model(
     test_preds: NDArray[np.float64] = test_preds_folds.mean(axis=1)
 
     # OOF AUC
+    from sklearn.metrics import roc_auc_score  # Lazy import
+
     oof_auc = float(roc_auc_score(y_train, oof_preds))
     elapsed = time.time() - start_time
 
