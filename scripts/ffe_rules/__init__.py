@@ -1,37 +1,24 @@
-#!/usr/bin/env python3
-"""Features reglementaires FFE pour ALICE - Backward Compatibility.
+"""Package FFE Rules - ISO 5055.
 
-Ce module re-exporte les fonctions du package scripts.ffe_rules
-pour maintenir la compatibilite avec le code existant.
-
-Pour les nouveaux developpements, preferez importer directement depuis:
-    from scripts.ffe_rules import TypeCompetition, detecter_type_competition
-
-Conformite ISO/IEC 5055 (modularite), ISO 25010 (maintenabilite).
+Ce package contient les regles FFE refactorisees en modules:
+- types.py: Types, Enums, dataclasses
+- competition.py: Detection type, regles par competition
+- brulage.py: Regles brulage et noyau
+- zones.py: Zones d'enjeu, mouvements joueurs
+- validation.py: Validation composition
+- features.py: Calcul features ML
 """
 
-from __future__ import annotations
-
-# Re-export tout depuis le nouveau package
-from scripts.ffe_rules import (
-    Equipe,
-    FeaturesReglementaires,
-    HistoriqueJoueur,
-    Joueur,
-    MouvementJoueur,
-    NiveauCompetition,
-    ReglesCompetition,
-    Sexe,
-    TypeCompetition,
-    calculer_ecart_objectif,
-    calculer_features_joueur,
+from scripts.ffe_rules.brulage import (
     calculer_pct_noyau,
-    calculer_zone_enjeu,
-    detecter_mouvement_joueur,
-    detecter_type_competition,
     est_brule,
-    get_niveau_equipe,
     get_noyau,
+    matchs_avant_brulage,
+    valide_noyau,
+)
+from scripts.ffe_rules.competition import (
+    detecter_type_competition,
+    get_niveau_equipe,
     get_regles_a02,
     get_regles_competition,
     get_regles_coupe,
@@ -42,9 +29,24 @@ from scripts.ffe_rules import (
     get_regles_parite,
     get_regles_regionale,
     get_regles_scolaire,
-    matchs_avant_brulage,
-    valide_noyau,
-    valider_composition,
+)
+from scripts.ffe_rules.features import calculer_features_joueur
+from scripts.ffe_rules.types import (
+    Equipe,
+    FeaturesReglementaires,
+    HistoriqueJoueur,
+    Joueur,
+    MouvementJoueur,
+    NiveauCompetition,
+    ReglesCompetition,
+    Sexe,
+    TypeCompetition,
+)
+from scripts.ffe_rules.validation import valider_composition
+from scripts.ffe_rules.zones import (
+    calculer_ecart_objectif,
+    calculer_zone_enjeu,
+    detecter_mouvement_joueur,
 )
 
 __all__ = [
