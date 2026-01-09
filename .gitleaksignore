@@ -1,0 +1,5 @@
+# Gitleaks ignore - ISO 27001 exceptions
+# Fingerprints of known false positives
+
+# API_CONTRACT.md - "YOUR_API_KEY" placeholder in documentation
+docs/api/API_CONTRACT.md:curl-auth-header:492

@@ -4,7 +4,8 @@ Ce module definit les dataclasses pour les resultats:
 - ModelMetrics: Metriques d'un modele
 - TrainingResult: Resultat d'entrainement
 - StackingResult: Resultat du stacking
-- ModelRegistry: Registre des modeles
+
+Note: Le registre de production est dans scripts.model_registry (ISO 42001).
 
 Conformite:
 - ISO/IEC 5055 (Code Quality)
@@ -13,8 +14,7 @@ Conformite:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -93,14 +93,3 @@ class StackingResult:
     best_single_auc: float
     use_stacking: bool
     n_folds: int
-
-
-@dataclass
-class ModelRegistry:
-    """Registre des modeles sauvegardes."""
-
-    version: str
-    version_dir: Path
-    models: dict[str, Path] = field(default_factory=dict)
-    metadata_path: Path | None = None
-    encoders_path: Path | None = None
