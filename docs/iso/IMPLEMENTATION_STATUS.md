@@ -1,6 +1,6 @@
 # IMPLEMENTATION DEVOPS - STATUT ISO
 
-**Date de mise a jour:** 2026-01-09 17:12
+**Date de mise a jour:** 2026-01-09 21:24
 **Generateur:** scripts/update_iso_docs.py (automatique)
 
 ---
@@ -37,7 +37,7 @@ Protection OWASP Top 10, Secret scanning
 |-------|--------|---------|
 
 | bandit |  | __main__.py 1.9.2 |
-| safety |  | C:\Python313\python.exe: No module named safety |
+| safety |  | non installe |
 | pip-audit |  | pip-audit 2.10.0 |
 | gitleaks |  | 8.30.0 |
 
@@ -58,15 +58,15 @@ Visualisation dependances, Detection cycles
 |-------|--------|---------|
 
 | pydeps |  | installed |
-| import-linter |  | Traceback (most recent call last): |
+| import-linter |  | non installe |
 ---
 
 ## METRIQUES QUALITE ACTUELLES
 
 | Metrique | Valeur Actuelle | Seuil ISO | Statut |
 |----------|-----------------|-----------|--------|
-| Test Coverage | N/A | >80% (ISO 29119) |  |
-| Complexite Moyenne | N/A | <B (ISO 25010) |  |
+| Test Coverage | 67% | >80% (ISO 29119) |  |
+| Complexite Moyenne | A (1.9534883720930232) | <B (ISO 25010) |  |
 | Vulnerabilites deps | A verifier | 0 (ISO 27001) |  |
 | Imports circulaires | A verifier | 0 (ISO 42010) |  |
 
@@ -91,10 +91,10 @@ Visualisation dependances, Detection cycles
 | pytest | Tests |  | pytest 8.4.2 | ISO 29119 |
 | pytest-asyncio | Tests Async |  | installed | ISO 29119 |
 | mypy | Type Safety |  | mypy 1.18.2 (compiled: yes) | ISO 25010, ISO 5055 |
-| pdoc | API Docs |  | Traceback (most recent call last): | ISO 26514 |
-| import-linter | Architecture |  | Traceback (most recent call last): | ISO 42010 |
-| mkdocs | Documentation |  | C:\Python313\python.exe: No module named mkdocs | ISO 26514 |
-| safety | Securite |  | C:\Python313\python.exe: No module named safety | ISO 27001 |
+| pdoc | API Docs |  | non installe | ISO 26514 |
+| import-linter | Architecture |  | non installe | ISO 42010 |
+| mkdocs | Documentation |  | non installe | ISO 26514 |
+| safety | Securite |  | non installe | ISO 27001 |
 ---
 
 ## MODULES MANQUANTS (actions requises)
@@ -133,5 +133,5 @@ make all
 ---
 
 **Genere automatiquement par:** scripts/update_iso_docs.py
-**Derniere mise a jour:** 2026-01-09 17:12
+**Derniere mise a jour:** 2026-01-09 21:24
 **Score DevOps:** 79/100
