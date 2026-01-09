@@ -123,15 +123,27 @@ class TestLoadModel:
         assert result is False
         assert not service.is_loaded
 
-    def test_load_model_with_path_succeeds(self, service_with_path: InferenceService) -> None:
-        """Test load_model avec chemin (TODO: implementation)."""
-        # Note: Le modele n'est pas vraiment charge car TODO
-        # Mais la logique de base est testee
+    def test_load_model_stub_sets_is_loaded(self, service_with_path: InferenceService) -> None:
+        """Test load_model stub (implementation TODO).
+
+        ATTENTION: L'implementation actuelle est un stub qui:
+        - Ne charge pas vraiment le modele
+        - Ne verifie pas l'existence du fichier
+        - Retourne toujours True si model_path est defini
+
+        Ce test documente ce comportement temporaire.
+        TODO: Quand implementation reelle, ce test doit verifier:
+        - Fichier inexistant -> False
+        - Fichier invalide -> False
+        - Modele CatBoost valide -> True
+        """
         result = service_with_path.load_model()
 
-        # Actuellement retourne True car pas d'erreur (fichier non verifie)
+        # Stub actuel retourne True sans verification fichier
         assert result is True
         assert service_with_path.is_loaded
+        # IMPORTANT: model est toujours None (stub)
+        assert service_with_path.model is None
 
 
 # ==============================================================================

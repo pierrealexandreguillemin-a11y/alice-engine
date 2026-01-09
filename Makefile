@@ -163,19 +163,19 @@ reports: architecture graphs iso-docs
 
 graphs:
 	@echo "Generation graphs architecture..."
-	$(PYTHON) scripts/generate_graphs.py
+	$(PYTHON) -m scripts.generate_graphs
 	@echo ""
 	@echo "Graphs generes dans: graphs/"
 
 architecture:
 	@echo "Analyse sante architecture..."
-	$(PYTHON) scripts/analyze_architecture.py
+	$(PYTHON) -m scripts.analyze_architecture
 	@echo ""
 	@echo "Rapport: reports/architecture-health.json"
 
 iso-docs:
 	@echo "MAJ documentation ISO..."
-	$(PYTHON) scripts/update_iso_docs.py
+	$(PYTHON) -m scripts.update_iso_docs
 	@echo ""
 	@echo "Documentation: docs/iso/IMPLEMENTATION_STATUS.md"
 
@@ -184,13 +184,13 @@ iso-docs:
 # ============================================
 iso-audit:
 	@echo "Audit conformite ISO..."
-	$(PYTHON) scripts/audit_iso_conformity.py --fix
+	$(PYTHON) -m scripts.audit_iso_conformity --fix
 	@echo ""
 	@echo "Rapport: reports/iso-audit/"
 
 validate-iso:
 	@echo "Validation ISO stricte..."
-	$(PYTHON) scripts/audit_iso_conformity.py --strict
+	$(PYTHON) -m scripts.audit_iso_conformity --strict
 	@echo ""
 	@echo "Audit ISO passe!"
 

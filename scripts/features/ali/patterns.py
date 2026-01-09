@@ -6,6 +6,7 @@ pour prédire leur présence future.
 Features (DOCUMENTÉES ISO 5259):
 - role_type: Classification du rôle dans l'équipe
   - 'titulaire': Joue > 70% des rondes, position stable
+  - 'rotation': Joue 30-70% des rondes, rotation régulière
   - 'remplacant': Joue < 30% des rondes, utilisé ponctuellement
   - 'polyvalent': Joue sur plusieurs échiquiers différents (std > 2)
 - echiquier_prefere: Échiquier modal (le plus fréquent)
@@ -97,7 +98,7 @@ def calculate_selection_patterns(df: pd.DataFrame) -> pd.DataFrame:
                 elif taux_presence < 0.3:
                     role = "remplacant"
                 else:
-                    role = "titulaire"  # 30-70% = titulaire avec rotation
+                    role = "rotation"  # 30-70% = joueur en rotation régulière
 
                 pattern_data.append(
                     {

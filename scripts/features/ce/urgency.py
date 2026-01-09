@@ -145,6 +145,12 @@ def _classify_urgency(
 ) -> str:
     """Classifie le niveau d'urgence.
 
+    Classification (DOCUMENTÉE ISO 5259):
+    - 'critique': Dernière ronde + objectif en jeu (maintien ou montée)
+    - 'haute': 2-3 rondes restantes + situation tendue
+    - 'normale': Situation contrôlée
+    - 'aucune': Objectif assuré ou hors course
+
     Returns
     -------
         Niveau d'urgence: 'critique', 'haute', 'normale', 'aucune'
@@ -153,18 +159,18 @@ def _classify_urgency(
     if maintien_assure and position > 4:
         return "aucune"
 
-    # Critique si dernière chance
+    # Critique si dernière chance (1 ronde ou moins)
     if rondes_restantes <= 1:
-        if not maintien_assure and position > nb_equipes - 2:
-            return "critique"
-        if montee_possible and position <= 2:
+        en_danger = not maintien_assure and (position > nb_equipes - 2 or ecart_dernier <= 2)
+        en_course = (montee_possible and position <= 2) or (ecart_premier <= 2 and position <= 4)
+        if en_danger or en_course:
             return "critique"
 
-    # Haute si situation tendue
+    # Haute si situation tendue (2-3 rondes)
     if rondes_restantes <= 3:
-        if ecart_dernier <= 2 and not maintien_assure:
-            return "haute"
-        if ecart_premier <= 2 and position <= 4:
+        danger_proche = ecart_dernier <= 2 and not maintien_assure
+        course_proche = ecart_premier <= 2 and position <= 4
+        if danger_proche or course_proche:
             return "haute"
 
     # Normale par défaut

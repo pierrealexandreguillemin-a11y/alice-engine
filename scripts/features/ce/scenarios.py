@@ -72,7 +72,6 @@ def calculate_scenario_features(standings: pd.DataFrame) -> pd.DataFrame:
         saison = row.get("saison", 2025)
         ronde = row.get("ronde", 1)
         position = row["position"]
-        points = row["points_cumules"]
         nb_equipes = row["nb_equipes"]
         ecart_premier = row.get("ecart_premier", 0)
         ecart_dernier = row.get("ecart_dernier", 0)
@@ -83,7 +82,6 @@ def calculate_scenario_features(standings: pd.DataFrame) -> pd.DataFrame:
             nb_equipes=nb_equipes,
             ecart_premier=ecart_premier,
             ecart_dernier=ecart_dernier,
-            points=points,
         )
 
         scenario_data.append(
@@ -109,11 +107,17 @@ def _classify_scenario(
     nb_equipes: int,
     ecart_premier: int,
     ecart_dernier: int,
-    points: int,
 ) -> tuple[str, float]:
     """Classifie le scénario d'une équipe.
 
-    Returns
+    Args:
+    ----
+        position: Position au classement (1 = premier)
+        nb_equipes: Nombre total d'équipes dans le groupe
+        ecart_premier: Écart de points avec le premier
+        ecart_dernier: Écart de points avec le dernier
+
+    Returns:
     -------
         Tuple (scenario, urgence_score)
     """
