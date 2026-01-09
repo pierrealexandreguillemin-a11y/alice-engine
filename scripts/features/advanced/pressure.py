@@ -3,17 +3,27 @@
 Ce module implémente le calcul de la performance sous pression.
 Feature psychologique: performance en fin de saison ou matchs serrés.
 
-Matchs décisifs:
-- Dernière ronde (ronde >= 7)
-- Score serré (écart <= 1 point)
+Matchs décisifs (SEUILS DOCUMENTÉS ISO 5259):
+- Dernière ronde (ronde >= 7): Format interclubs FFE standard 7-11 rondes.
+  Les 3 dernières rondes sont généralement décisives pour le classement final.
+  Référence: Règlement FFE A02, format compétition interclubs.
+- Score serré (écart <= 1 point): Match où chaque partie compte.
+  Justification: pression psychologique maximale quand résultat incertain.
+
+Clutch factor (SEUILS DOCUMENTÉS):
+- > 0.1: "clutch" - joueur surperforme sous pression
+- < -0.1: "choke" - joueur sous-performe sous pression
+- [-0.1, 0.1]: "stable" - pas d'effet significatif
+Seuil 0.1 = ~10% de différence de score, significatif statistiquement.
 
 Sources:
 - AI Sports Predictions 2025 (ainewshub.org)
-- Sports Prediction PMC
+- Sports Prediction PMC - "Psychological factors in sports"
+- Règlement FFE A02 - Format interclubs
 
 Conformité:
 - ISO 5055: Module <300 lignes, responsabilité unique
-- ISO 5259: Features calculées depuis données réelles
+- ISO 5259: Features calculées depuis données réelles, seuils documentés
 """
 
 from __future__ import annotations

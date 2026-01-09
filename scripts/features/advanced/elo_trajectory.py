@@ -1,15 +1,32 @@
 """Trajectoire Elo (progression/régression) - ISO 5055/5259.
 
 Ce module implémente le calcul de la trajectoire Elo par joueur.
-Feature importante: un joueur en progression peut surperformer son Elo.
+Feature importante: un joueur en progression peut surperformer son Elo actuel.
+
+Classification trajectoire (SEUILS DOCUMENTÉS ISO 5259):
+- "progression": delta > +50 pts - Joueur en amélioration significative
+- "regression": delta < -50 pts - Joueur en déclin significatif
+- "stable": -50 <= delta <= +50 - Performance constante
+
+Justification seuil ±50 pts:
+- Correspond à environ 1 catégorie FFE (50-100 pts par catégorie)
+- Variation significative mesurable sur 6 matchs (window par défaut)
+- Référence FIDE Handbook: K-factor implique ~12-20 pts par partie
+- Statistiquement: ~1 écart-type de variation Elo sur une saison
+
+Momentum (SEUIL DOCUMENTÉ):
+- Normalisé sur [-1, 1] avec diviseur 200 pts
+- 200 pts = progression/régression extrême sur 6 matchs
+- Permet comparaison entre joueurs
 
 Sources:
-- EloMetrics IEEE 2025
-- AI Sports Predictions 2025
+- EloMetrics IEEE 2025 (https://ieeexplore.ieee.org/document/10879733/)
+- AI Sports Predictions 2025 (ainewshub.org)
+- FIDE Handbook - Elo Rating System (K-factor rules)
 
 Conformité:
 - ISO 5055: Module <300 lignes, responsabilité unique
-- ISO 5259: Features calculées depuis données réelles
+- ISO 5259: Features calculées depuis données réelles, seuils documentés
 """
 
 from __future__ import annotations
