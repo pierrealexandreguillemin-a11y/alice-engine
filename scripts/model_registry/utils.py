@@ -18,8 +18,10 @@ import subprocess  # nosec B404 - subprocess used for internal dev tools only
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 from scripts.model_registry.dataclasses import DataLineage, EnvironmentInfo
 
@@ -35,6 +37,8 @@ def compute_file_checksum(file_path: Path) -> str:
 
 def compute_dataframe_hash(df: pd.DataFrame) -> str:
     """Calcule un hash déterministe d'un DataFrame."""
+    import pandas as pd  # Lazy import - évite chargement au niveau module
+
     return hashlib.sha256(pd.util.hash_pandas_object(df, index=True).values.tobytes()).hexdigest()[
         :16
     ]
@@ -149,6 +153,8 @@ def compute_data_lineage(
     target_col: str = "resultat_blanc",
 ) -> DataLineage:
     """Calcule la traçabilité des données."""
+    import pandas as pd  # Lazy import - évite chargement au niveau module
+
     # Distribution de la cible
     train_target = train_df[target_col] if target_col in train_df.columns else pd.Series()
     target_dist = {

@@ -14,8 +14,10 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 from scripts.model_registry.drift_dataclasses import (
     ACCURACY_DROP_THRESHOLD,
@@ -108,6 +110,7 @@ def compute_drift_metrics(
     -------
         DriftMetrics pour cette ronde
     """
+    import pandas as pd  # Lazy import
     from sklearn.metrics import accuracy_score, roc_auc_score
 
     timestamp = datetime.now().isoformat()

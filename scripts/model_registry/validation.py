@@ -14,8 +14,10 @@ import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,8 @@ def _validate_required_columns(
 
 def _validate_numeric_columns(df: pd.DataFrame, numeric: set[str]) -> list[str]:
     """Valide que les colonnes sont numériques."""
+    import pandas as pd  # Lazy import
+
     errors = []
     for col in numeric & set(df.columns):
         if not pd.api.types.is_numeric_dtype(df[col]):
@@ -124,6 +128,8 @@ def validate_dataframe_schema(
     -------
         SchemaValidationResult avec statut et messages
     """
+    import pandas as pd  # Lazy import
+
     errors: list[str] = []
     warnings: list[str] = []
 
