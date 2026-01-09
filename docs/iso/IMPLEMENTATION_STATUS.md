@@ -1,6 +1,6 @@
 # IMPLEMENTATION DEVOPS - STATUT ISO
 
-**Date de mise a jour:** 2026-01-09 21:24
+**Date de mise a jour:** 2026-01-09 23:47
 **Generateur:** scripts/update_iso_docs.py (automatique)
 
 ---
@@ -65,7 +65,7 @@ Visualisation dependances, Detection cycles
 
 | Metrique | Valeur Actuelle | Seuil ISO | Statut |
 |----------|-----------------|-----------|--------|
-| Test Coverage | 67% | >80% (ISO 29119) |  |
+| Test Coverage | 91% | >80% (ISO 29119) |  |
 | Complexite Moyenne | A (1.9534883720930232) | <B (ISO 25010) |  |
 | Vulnerabilites deps | A verifier | 0 (ISO 27001) |  |
 | Imports circulaires | A verifier | 0 (ISO 42010) |  |
@@ -133,5 +133,5 @@ make all
 ---
 
 **Genere automatiquement par:** scripts/update_iso_docs.py
-**Derniere mise a jour:** 2026-01-09 21:24
+**Derniere mise a jour:** 2026-01-09 23:47
 **Score DevOps:** 79/100
