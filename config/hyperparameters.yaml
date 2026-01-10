@@ -264,3 +264,83 @@ drift_thresholds:
     critical: 0.25              # Changement significatif (action requise)
   accuracy_drop: 0.05           # 5% drop = alerte
   elo_shift: 50                 # 50 points ELO = alerte
+
+# =============================================================================
+# AUTOGLUON - AutoML Framework (ISO 42001)
+# Documentation: https://auto.gluon.ai/stable/tutorials/tabular/
+#
+# JUSTIFICATIONS AUTOGLUON:
+# - preset='extreme': Inclut TabPFN-2.5, tous les boosters, neural nets
+# - time_limit=3600: 1 heure permet exploration complete
+# - num_bag_folds=5: Coherent avec K-Fold CV global
+# - num_stack_levels=2: Multi-layer stacking optimal
+#
+# Sources:
+# - https://auto.gluon.ai/stable/api/autogluon.tabular.TabularPredictor.fit.html
+# - https://priorlabs.ai/technical-reports/tabpfn-2-5-model-report
+# =============================================================================
+autogluon:
+  # Presets: 'medium_quality', 'high_quality', 'best_quality', 'extreme'
+  presets: "extreme"            # Inclut TabPFN-2.5 + tous modeles
+  time_limit: 3600              # 1 heure max
+  eval_metric: "roc_auc"        # Coherent avec baseline
+
+  # Stacking configuration
+  num_bag_folds: 5              # K-Fold bagging (coherent global)
+  num_stack_levels: 2           # 2 niveaux de stacking
+
+  # TabPFN configuration (Foundation Model)
+  tabpfn:
+    enabled: true               # Activer TabPFN-2.5
+    n_ensemble_configurations: 16  # Nombre de configurations ensemble
+
+  # Models a inclure explicitement
+  models:
+    include:
+      - TabPFN                  # Foundation model (rank 2 benchmarks)
+      - CatBoost                # Coherent avec baseline
+      - XGBoost                 # Coherent avec baseline
+      - LightGBM                # Coherent avec baseline
+      - NeuralNetFastAI         # Neural network
+      - RandomForest            # Ensemble trees
+      - ExtraTrees              # Extra randomized trees
+
+  # Reproducibilite
+  random_seed: 42
+
+  # Verbosity (0=silent, 1=info, 2=debug)
+  verbosity: 2
+
+# =============================================================================
+# STATISTICAL COMPARISON - McNemar 5x2cv (ISO 24029/29119)
+# Documentation: Dietterich (1998) - Approximate Statistical Tests
+#
+# JUSTIFICATIONS:
+# - McNemar 5x2cv: Type I error acceptable, puissant pour classifieurs couteux
+# - alpha=0.05: Seuil standard significativite statistique
+# - bootstrap_samples=1000: Intervalles de confiance robustes
+# - effect_size_threshold=0.05: 5% difference pratique minimale
+#
+# Sources:
+# - Dietterich, T.G. (1998) NCBI
+# - https://machinelearningmastery.com/mcnemars-test-for-machine-learning/
+# =============================================================================
+statistical_comparison:
+  # Methode de comparaison
+  method: "mcnemar_5x2cv"       # Dietterich 1998
+  alpha: 0.05                   # Seuil significativite
+
+  # Cross-validation
+  n_splits: 5                   # 5 iterations x 2-fold
+
+  # Bootstrap pour intervalles de confiance
+  bootstrap_samples: 1000       # Nombre echantillons bootstrap
+
+  # Taille d'effet minimale (pratique)
+  effect_size_threshold: 0.05   # 5% difference = significatif pratiquement
+
+  # Cohen's d interpretation
+  cohens_d:
+    small: 0.2
+    medium: 0.5
+    large: 0.8
