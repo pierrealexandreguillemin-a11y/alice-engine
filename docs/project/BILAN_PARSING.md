@@ -1,9 +1,9 @@
 # Bilan Parsing Dataset FFE
 
-> **Version**: 0.2.0
-> **Date**: 3 Janvier 2026
+> **Version**: 0.3.0
+> **Date**: 10 Janvier 2026
 > **Script**: `scripts/parse_dataset.py`
-> **Norme**: ISO 25012 - Qualite des donnees
+> **Norme**: ISO 25012 - Qualite des donnees, ISO/IEC 5259:2024 - Data Quality for ML
 
 ---
 
@@ -19,6 +19,87 @@ Le parsing du dataset FFE (2.4 GB HTML) a ete realise avec succes le 3 janvier 2
 | **Joueurs licencies** | 35,320 |
 | **Duree parsing** | ~48 minutes |
 | **Taille sortie** | 35.8 MB (Parquet) |
+
+---
+
+## 1bis. ERRATA CRITIQUE - Bug type_resultat (corrigé v0.3.0)
+
+> **Découvert**: 10 Janvier 2026
+> **Corrigé**: 10 Janvier 2026
+> **Sévérité**: CRITIQUE (ISO 5259 - Data Quality)
+> **Impact**: ~41% des données historiques
+
+### Description du bug
+
+Un bug dans le parsing des échiquiers causait une **incohérence entre `type_resultat` et `resultat_blanc/noir`** quand le joueur domicile jouait avec les Noirs.
+
+#### Cause racine
+
+Fichier: `scripts/parse_dataset/ronde.py` lignes 149-157
+
+```python
+# CODE AVANT CORRECTION (BUGUÉ)
+if couleur_dom == "B":
+    blanc, noir = joueur_dom, joueur_ext
+    equipe_blanc = current_match.equipe_dom
+    equipe_noir = current_match.equipe_ext
+else:
+    blanc, noir = joueur_ext, joueur_dom
+    equipe_blanc = current_match.equipe_ext
+    equipe_noir = current_match.equipe_dom
+    score_blanc, score_noir = score_noir, score_blanc  # ✓ Scores inversés
+    # ⚠️ BUG: type_resultat NON inversé!
+```
+
+#### Exemple concret
+
+```
+HTML source: | 2 N | MARTIN 1500 | 1 - 0 | DUPONT 1600 | 2 B |
+                     DOM=Noir              EXT=Blanc
+
+Réalité FFE:
+  - DOM (MARTIN, Noir) gagne → victoire_noir
+  - EXT (DUPONT, Blanc) perd
+
+Données AVANT correction:
+  - resultat_blanc = 0.0 ✓
+  - resultat_noir = 1.0 ✓
+  - type_resultat = "victoire_blanc" ❌ FAUX
+
+Données APRÈS correction:
+  - resultat_blanc = 0.0 ✓
+  - resultat_noir = 1.0 ✓
+  - type_resultat = "victoire_noir" ✓
+```
+
+### Validation réglementaire
+
+Bug confirmé par croisement avec les documents officiels FFE 2025-26:
+
+| Document | Article | Validation |
+|----------|---------|------------|
+| A02_2025_26_Championnat_France_Clubs.pdf | Art. 3.2 Couleurs | DOM = Blancs impairs, Noirs pairs |
+| feuille_de_match_N2.pdf | Structure | Score DOM-EXT, pas Blanc-Noir |
+
+### Statistiques d'impact
+
+| Métrique | Valeur |
+|----------|--------|
+| Échiquiers affectés | ~710,000 (~41%) |
+| Période concernée | 2002-2026 (toutes données) |
+| Types affectés | victoire_blanc, victoire_noir, forfait_*, ajournement_* |
+
+### Correction appliquée
+
+1. Ajout de `_invert_type_resultat()` dans `ronde.py`
+2. Inversion de `type_resultat` quand `couleur_dom == "N"`
+3. Régénération complète de `echiquiers.parquet`
+4. Validation avec schéma Pandera strict (ISO 5259)
+
+### Tests ajoutés (ISO 29119)
+
+- `test_invert_type_resultat_*` - 8 cas de test
+- `test_parse_echiquier_dom_noir_*` - 4 cas de test
 
 ---
 
