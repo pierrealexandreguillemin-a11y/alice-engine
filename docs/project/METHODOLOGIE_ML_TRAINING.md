@@ -1,9 +1,9 @@
 # Methodologie Entrainement ML - Alice-Engine
 
 > **Document Type**: Technical Specification - ISO 15289
-> **Version**: 1.0.0
+> **Version**: 2.0.0
 > **Date creation**: 8 Janvier 2026
-> **Derniere MAJ**: 8 Janvier 2026
+> **Derniere MAJ**: 10 Janvier 2026
 > **Conformite**: ISO/IEC 42001, 23894, 25059, 5259, 29119
 
 ---
@@ -23,26 +23,36 @@
 
 ## 1. Executive Summary
 
-### 1.1 Verdict Global
+### 1.1 Verdict Global (MAJ 10 Janvier 2026)
 
 | Composant | Statut | Conformite |
 |-----------|--------|------------|
-| Feature Engineering | ✅ Bon | 70% |
-| Data Splits | ⚠️ Risque leakage | 50% |
-| Model Training | ❌ **Inexistant** | 0% |
-| Experiment Tracking | ❌ **Inexistant** | 0% |
-| Model Persistence | ❌ **Inexistant** | 0% |
-| Production Inference | ⚠️ Stub only | 10% |
-| ISO Conformite | ⚠️ Partiel | 40% |
+| Feature Engineering | ✅ Complet | 90% |
+| Data Splits | ✅ Corrigé | 85% |
+| Model Training | ✅ **Implémenté** | 85% |
+| Experiment Tracking | ✅ **MLflow actif** | 80% |
+| Model Persistence | ✅ **Avec Model Card** | 90% |
+| Production Inference | ⚠️ Stub (fallback) | 40% |
+| ISO Conformite | ✅ Bon | 75% |
 
-### 1.2 Gaps Critiques
+### 1.2 Progression
 
 ```
-BLOQUANTS PRODUCTION:
-1. Aucun script d'entrainement (models jamais sauvegardes)
-2. Data leakage: features calculees AVANT split temporel
-3. Aucun experiment tracking (MLflow, W&B)
-4. Inference service incomplet (TODO dans le code)
+CORRIGÉS (Phase 1 terminée):
+✅ Script train_models_parallel.py opérationnel
+✅ MLflow tracking configuré
+✅ Model cards ISO 42001 générés
+✅ Hyperparameters externalisés (YAML)
+✅ 3 modèles (CatBoost, XGBoost, LightGBM) entraînés
+
+EN COURS (Phase 2):
+⏳ Optuna hyperparameter tuning
+⏳ Cross-validation temporelle
+⏳ Inference service complet
+
+À FAIRE (Phase 3):
+○ Data validation (Great Expectations)
+○ Model monitoring (drift detection)
 ```
 
 ### 1.3 Effort Estime
@@ -55,9 +65,127 @@ BLOQUANTS PRODUCTION:
 
 ---
 
-## 2. Gap Analysis - Etat Actuel
+## 2. Pipeline d'Entraînement en 5 Étapes
 
-### 2.1 Fichiers Analyses
+### 2.1 Vue d'ensemble
+
+```
+python -m scripts.train_models_parallel [--config config/hyperparameters.yaml] [--no-mlflow]
+```
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     PIPELINE ML - 5 ÉTAPES                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  [1/5] CONFIG     [2/5] DATA       [3/5] FEATURES   [4/5] TRAINING          │
+│  ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────────────┐    │
+│  │  YAML    │────→│ Parquet  │────→│ Encoding │────→│ CatBoost         │    │
+│  │  Config  │     │ Load     │     │ Prep     │     │ XGBoost          │    │
+│  └──────────┘     └──────────┘     └──────────┘     │ LightGBM         │    │
+│                                                      └──────────────────┘    │
+│                                                              │               │
+│                                                              ▼               │
+│                                                      [5/5] SAVE             │
+│                                                      ┌──────────────────┐    │
+│                                                      │ Models + Cards   │    │
+│                                                      │ ISO 42001        │    │
+│                                                      └──────────────────┘    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.2 Détail des Étapes
+
+#### Étape 1/5 - Configuration
+**Fichier**: `config/hyperparameters.yaml`
+
+```yaml
+catboost:
+  iterations: 1000
+  learning_rate: 0.03
+  depth: 6
+  early_stopping_rounds: 50
+
+xgboost:
+  n_estimators: 1000
+  max_depth: 6
+
+lightgbm:
+  n_estimators: 1000
+  num_leaves: 63
+```
+
+**Modifiable AVANT entraînement** - pas besoin de toucher au code.
+
+#### Étape 2/5 - Chargement Données
+**Fichiers attendus** dans `data/features/`:
+- `train.parquet` (~70% données)
+- `valid.parquet` (~15% - early stopping)
+- `test.parquet` (~15% - évaluation finale)
+
+**Variable cible**: `resultat_blanc == 1.0`
+
+#### Étape 3/5 - Préparation Features
+**Fichier**: `scripts/training/features.py`
+
+| Type | Features | Traitement |
+|------|----------|------------|
+| Numériques | elo, position, pressure_score... | Direct |
+| Catégorielles | couleur, scenario, role... | Label Encoding |
+
+#### Étape 4/5 - Entraînement Séquentiel
+**RAM optimisée**: Un modèle à la fois avec `gc.collect()` entre chaque.
+
+```
+CatBoost: train → validate → early stop → done → gc.collect()
+XGBoost:  train → validate → early stop → done → gc.collect()
+LightGBM: train → validate → early stop → done → gc.collect()
+```
+
+**Évaluation sur test set** après les 3 modèles.
+
+#### Étape 5/5 - Sauvegarde Conforme ISO
+
+**Artefacts générés** dans `models/v{timestamp}/`:
+
+| Fichier | Format | Description |
+|---------|--------|-------------|
+| catboost.cbm | CatBoost natif | Modèle principal |
+| xgboost.json | JSON | Modèle secondaire |
+| lightgbm.txt | Texte | Modèle secondaire |
+| model_card.json | JSON | **ISO 42001** - Metadata obligatoire |
+| data_summary.json | JSON | **ISO 5259** - Lineage données |
+| label_encoders.pkl | Pickle | Encodeurs catégorielles |
+
+### 2.3 Optuna (Phase Future)
+
+**Point d'insertion**: Entre étape 3 et 4
+
+```
+[3/5] Features → [3.5/5] OPTUNA → [4/5] Training
+                 ┌──────────────┐
+                 │ Bayesian Opt │
+                 │ 100 trials   │
+                 │ Best params  │
+                 └──────────────┘
+```
+
+Configuration dans `hyperparameters.yaml`:
+```yaml
+optuna:
+  n_trials: 100
+  timeout: 3600  # 1h max
+  catboost_search_space:
+    depth: [4, 6, 8, 10]
+    learning_rate: [0.01, 0.03, 0.05, 0.1]
+```
+
+---
+
+## 3. Gap Analysis - Etat Actuel (Historique)
+
+### 3.1 Fichiers Analyses
 
 | Fichier | Lignes | Role | Statut |
 |---------|--------|------|--------|

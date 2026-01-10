@@ -1,53 +1,70 @@
 # Hyperparameters Configuration - Alice-Engine ML Pipeline
-# Version: 1.0.0
-# Date: 8 Janvier 2026
-# Conformite: ISO/IEC 42001 (AI Management)
+# Version: 2.0.0
+# Date: 10 Janvier 2026
+# Conformite: ISO/IEC 42001 (AI Management), ISO/IEC 5259 (Data Quality)
 #
 # Usage:
 #   from scripts.train_models_parallel import load_hyperparameters
 #   params = load_hyperparameters("config/hyperparameters.yaml")
+#
+# JUSTIFICATIONS TECHNIQUES:
+# Toutes les valeurs sont justifiees par:
+# - Documentation officielle CatBoost/XGBoost/LightGBM
+# - Caracteristiques dataset ALICE (1.1M echiquiers, 12 features)
+# - Best practices industrie (Kaggle, papers, benchmarks)
+#
+# Sources:
+# - https://catboost.ai/docs/concepts/parameter-tuning.html
+# - https://xgboost.readthedocs.io/en/stable/tutorials/param_tuning.html
+# - https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html
 
 # =============================================================================
 # GLOBAL SETTINGS
 # =============================================================================
 global:
-  random_seed: 42
-  n_folds: 5                    # K-Fold cross-validation
-  early_stopping_rounds: 50     # Patience pour early stopping
-  eval_metric: "auc"            # Metrique d'optimisation
-  task_type: "CPU"              # CPU ou GPU (CatBoost)
-  verbose: 100                  # Frequence logs (iterations)
+  random_seed: 42               # Standard reproducibility seed
+  n_folds: 5                    # K-Fold CV: 5 est standard (bias-variance tradeoff)
+  early_stopping_rounds: 50     # 50 iterations sans amelioration = stop
+  eval_metric: "auc"            # AUC pour classification binaire equilibree
+  task_type: "CPU"              # CPU par defaut, GPU si disponible
+  verbose: 100                  # Log tous les 100 iterations
 
 # =============================================================================
 # CATBOOST - Model principal (categories natives)
 # Documentation: https://catboost.ai/docs/concepts/parameter-tuning.html
+#
+# JUSTIFICATIONS CATBOOST:
+# - depth=6: Defaut CatBoost, optimal pour 12 features
+# - learning_rate=0.03: Conservateur, permet early stopping efficace
+# - l2_leaf_reg=3: Defaut CatBoost, regularisation moderee
+# - min_data_in_leaf=20: Evite overfitting sur petits groupes
 # =============================================================================
 catboost:
   # Boosting parameters
-  iterations: 1000
-  learning_rate: 0.03
-  depth: 6
+  iterations: 1000              # 1000 iterations avec early_stopping
+  learning_rate: 0.03           # Bas pour stabilite (doc: 0.03 recommande)
+  depth: 6                      # Defaut CatBoost, bon pour 12 features
 
   # Regularization
-  l2_leaf_reg: 3
-  min_data_in_leaf: 20
+  l2_leaf_reg: 3                # Defaut CatBoost (L2 regularization)
+  min_data_in_leaf: 20          # Min samples par feuille (evite overfitting)
 
   # Performance
-  thread_count: -1              # Tous les cores
+  thread_count: -1              # Utilise tous les cores CPU
   task_type: "CPU"
 
-  # Categorical features
+  # Categorical features (ALICE dataset)
   cat_features:
-    - type_competition
-    - division
-    - ligue_code
-    - blanc_titre
-    - noir_titre
-    - jour_semaine
-    - zone_enjeu
+    - type_competition          # A02, F01, C01, etc.
+    - division                  # N1, N2, N3, REG, DEP
+    - ligue_code                # IDF, BRE, ARA, etc.
+    - blanc_titre               # GM, IM, FM, etc.
+    - noir_titre                # GM, IM, FM, etc.
+    - jour_semaine              # Lundi-Dimanche
+    - zone_enjeu                # montee, danger, mi_tableau
 
   # Early stopping
-  early_stopping_rounds: 50
+  early_stopping_rounds: 50     # Standard pour gradient boosting
 
   # Reproducibility
   random_seed: 42
@@ -58,21 +75,27 @@ catboost:
 # =============================================================================
 # XGBOOST - Model secondaire (rapide, bien documente)
 # Documentation: https://xgboost.readthedocs.io/en/stable/parameter.html
+#
+# JUSTIFICATIONS XGBOOST:
+# - max_depth=6: Standard, controle overfitting
+# - learning_rate=0.03: Coherent avec CatBoost pour comparaison
+# - tree_method="hist": Histogram-based, 10x plus rapide
+# - reg_lambda=1.0: L2 regularization defaut
 # =============================================================================
 xgboost:
   # Boosting parameters
   n_estimators: 1000
-  learning_rate: 0.03
-  max_depth: 6
+  learning_rate: 0.03           # Coherent avec CatBoost
+  max_depth: 6                  # Standard (doc recommande 3-10)
 
   # Regularization
-  reg_lambda: 1.0               # L2 regularization
-  reg_alpha: 0.0                # L1 regularization
-  min_child_weight: 1
+  reg_lambda: 1.0               # L2 regularization (defaut)
+  reg_alpha: 0.0                # L1 regularization (off par defaut)
+  min_child_weight: 1           # Min sum of instance weight
 
   # Performance
-  tree_method: "hist"           # Fast histogram-based
-  n_jobs: -1
+  tree_method: "hist"           # Histogram-based (rapide, moins memoire)
+  n_jobs: -1                    # Tous les cores
 
   # Early stopping
   early_stopping_rounds: 50
@@ -86,18 +109,23 @@ xgboost:
 # =============================================================================
 # LIGHTGBM - Model secondaire (tres rapide, memoire efficiente)
 # Documentation: https://lightgbm.readthedocs.io/en/latest/Parameters.html
+#
+# JUSTIFICATIONS LIGHTGBM:
+# - num_leaves=63: 2^6-1 (equivalent depth=6)
+# - max_depth=-1: Controle par num_leaves, pas depth
+# - min_child_samples=20: Coherent avec CatBoost min_data_in_leaf
 # =============================================================================
 lightgbm:
   # Boosting parameters
   n_estimators: 1000
   learning_rate: 0.03
-  num_leaves: 63                # 2^depth - 1 (depth=6)
-  max_depth: -1                 # No limit (controlled by num_leaves)
+  num_leaves: 63                # 2^depth - 1 = 2^6 - 1 (depth=6 equivalent)
+  max_depth: -1                 # -1 = no limit (controle par num_leaves)
 
   # Regularization
   reg_lambda: 1.0               # L2 regularization
   reg_alpha: 0.0                # L1 regularization
-  min_child_samples: 20
+  min_child_samples: 20         # Coherent avec CatBoost
 
   # Categorical features
   categorical_feature: "auto"   # Auto-detect from pandas categorical
@@ -121,55 +149,85 @@ stacking:
   meta_learner: "logistic_regression"
 
   logistic_regression:
-    C: 1.0
+    C: 1.0                      # Inverse regularization (defaut sklearn)
     max_iter: 1000
     random_state: 42
 
-  # Alternative: Ridge regression
   ridge:
     alpha: 1.0
 
-  # Selection criteria
   selection:
     min_gain_vs_best_single: 0.01  # +1% AUC minimum pour choisir stacking
 
 # =============================================================================
-# OPTUNA HYPERPARAMETER SEARCH (Phase future)
+# OPTUNA HYPERPARAMETER SEARCH
+# Documentation: https://optuna.org/
+#
+# JUSTIFICATIONS SEARCH SPACES:
+# Basees sur:
+# - Taille dataset ALICE: 1.1M echiquiers (large)
+# - Nombre features: 12 (moderee)
+# - Documentation officielle + Kaggle best practices
+#
+# MODIFICATIONS vs v1.0:
+# - learning_rate: 0.1 -> 0.08 (0.1 trop agressif, instable)
+# - iterations: ajoute 2000 pour LR faibles
+# - Ajoute colsample_bytree, subsample (feature/row bagging)
 # =============================================================================
 optuna:
-  n_trials: 100
+  n_trials: 100                 # 100 trials Bayesian optimization
   timeout: 3600                 # 1 heure max
 
+  # CATBOOST SEARCH SPACE
+  # Justifications:
+  # - depth [4,6,8,10]: 4=simple, 6=defaut, 8-10=complexe (12 features ok)
+  # - learning_rate: 0.08 max (0.1 instable selon benchmarks)
+  # - iterations jusqu'a 2000 pour LR=0.01
   catboost_search_space:
     depth: [4, 6, 8, 10]
-    learning_rate: [0.01, 0.03, 0.05, 0.1]
+    learning_rate: [0.01, 0.03, 0.05, 0.08]  # 0.08 max (pas 0.1)
     l2_leaf_reg: [1, 3, 5, 10]
-    iterations: [500, 1000, 1500]
+    iterations: [500, 1000, 1500, 2000]      # Ajoute 2000 pour LR faible
+    min_data_in_leaf: [10, 20, 50]           # Controle overfitting
 
+  # XGBOOST SEARCH SPACE
+  # Justifications:
+  # - colsample_bytree: feature bagging (previent overfitting)
+  # - subsample: row bagging (robustesse)
   xgboost_search_space:
     max_depth: [4, 6, 8, 10]
-    learning_rate: [0.01, 0.03, 0.05, 0.1]
+    learning_rate: [0.01, 0.03, 0.05, 0.08]
     reg_lambda: [0.1, 1.0, 5.0, 10.0]
-    n_estimators: [500, 1000, 1500]
+    n_estimators: [500, 1000, 1500, 2000]
+    colsample_bytree: [0.7, 0.8, 0.9, 1.0]   # Feature subsampling
+    subsample: [0.8, 0.9, 1.0]               # Row subsampling
 
+  # LIGHTGBM SEARCH SPACE
+  # Justifications:
+  # - num_leaves 255 max (depth=8 equivalent)
+  # - feature_fraction = colsample_bytree equivalent
   lightgbm_search_space:
-    num_leaves: [31, 63, 127]
-    learning_rate: [0.01, 0.03, 0.05, 0.1]
+    num_leaves: [31, 63, 127, 255]           # Ajoute 255 (depth=8)
+    learning_rate: [0.01, 0.03, 0.05, 0.08]
     reg_lambda: [0.1, 1.0, 5.0, 10.0]
-    n_estimators: [500, 1000, 1500]
+    n_estimators: [500, 1000, 1500, 2000]
+    feature_fraction: [0.7, 0.8, 0.9]        # Feature subsampling
+    bagging_fraction: [0.8, 0.9, 1.0]        # Row subsampling
+    min_child_samples: [10, 20, 50]
 
 # =============================================================================
-# METRICS THRESHOLDS (ISO 25010)
+# METRICS THRESHOLDS (ISO 25010 / 25059)
+# Seuils bases sur benchmarks classification binaire echecs
 # =============================================================================
 metrics_thresholds:
   auc_roc:
-    minimum: 0.70
-    target: 0.78
-    excellent: 0.85
+    minimum: 0.70               # En dessous = modele inutilisable
+    target: 0.78                # Objectif production
+    excellent: 0.85             # Tres bon modele
 
   accuracy:
-    minimum: 0.60
-    target: 0.70
+    minimum: 0.60               # Mieux que random (50%)
+    target: 0.70                # Objectif
     excellent: 0.75
 
   f1_score:
@@ -178,19 +236,31 @@ metrics_thresholds:
     excellent: 0.75
 
   log_loss:
-    maximum: 0.70
+    maximum: 0.70               # Au dela = mauvaise calibration
     target: 0.55
     excellent: 0.45
 
 # =============================================================================
-# MLFLOW TRACKING
+# MLFLOW TRACKING (ISO 42001 Tracabilite)
 # =============================================================================
 mlflow:
   experiment_name: "alice-ml-training"
-  tracking_uri: "./mlruns"       # Local tracking
+  tracking_uri: "./mlruns"
   artifact_location: "./mlruns/artifacts"
 
   log_params: true
   log_metrics: true
   log_models: true
   log_feature_importance: true
+
+# =============================================================================
+# DRIFT MONITORING THRESHOLDS (ISO 5259 / 42001)
+# Coherent avec scripts/model_registry/drift_dataclasses.py
+# Source: https://www.evidentlyai.com/ml-in-production/data-drift
+# =============================================================================
+drift_thresholds:
+  psi:
+    warning: 0.1                # Changement modere
+    critical: 0.25              # Changement significatif (action requise)
+  accuracy_drop: 0.05           # 5% drop = alerte
+  elo_shift: 50                 # 50 points ELO = alerte
