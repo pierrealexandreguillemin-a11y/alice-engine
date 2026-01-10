@@ -46,6 +46,8 @@ ignore = [
     "E501",   # line too long (gere par line-length)
     "S101",   # assert (ok pour tests)
     "B008",   # function call in default arg (ok pour FastAPI Depends)
+    "ANN101", # Missing type annotation for self (non-standard)
+    "ANN102", # Missing type annotation for cls (non-standard)
     "ANN401", # Any disallowed - elimine manuellement
     "D100",   # Missing docstring in public module
     "D104",   # Missing docstring in public package
