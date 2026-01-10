@@ -28,6 +28,7 @@ from scripts.parse_dataset import (
     JoueurLicencie,
     Match,
     Metadata,
+    _invert_type_resultat,
     extract_metadata_from_path,
     joueur_to_dict,
     parse_board_number,
@@ -962,3 +963,240 @@ class TestEdgeCases:
         for m_cat in male_cats:
             f_cat = m_cat[:-1] + "F"
             assert f_cat in female_cats, f"Catégorie féminine manquante: {f_cat}"
+
+
+# ==============================================================================
+# TESTS _invert_type_resultat (ISO 5259 - Data Quality)
+# ==============================================================================
+
+
+class TestInvertTypeResultat:
+    """Tests pour _invert_type_resultat - correction bug type_resultat.
+
+    ISO 5259: Cohérence données - type_resultat doit correspondre aux scores.
+    Bug découvert 10/01/2026: type_resultat n'était pas inversé quand DOM joue Noir.
+    """
+
+    def test_victoire_blanc_to_noir(self) -> None:
+        """Test inversion victoire_blanc -> victoire_noir."""
+        assert _invert_type_resultat("victoire_blanc") == "victoire_noir"
+
+    def test_victoire_noir_to_blanc(self) -> None:
+        """Test inversion victoire_noir -> victoire_blanc."""
+        assert _invert_type_resultat("victoire_noir") == "victoire_blanc"
+
+    def test_forfait_blanc_to_noir(self) -> None:
+        """Test inversion forfait_blanc -> forfait_noir."""
+        assert _invert_type_resultat("forfait_blanc") == "forfait_noir"
+
+    def test_forfait_noir_to_blanc(self) -> None:
+        """Test inversion forfait_noir -> forfait_blanc."""
+        assert _invert_type_resultat("forfait_noir") == "forfait_blanc"
+
+    def test_victoire_blanc_ajournement_to_noir(self) -> None:
+        """Test inversion victoire_blanc_ajournement -> victoire_noir_ajournement."""
+        assert _invert_type_resultat("victoire_blanc_ajournement") == "victoire_noir_ajournement"
+
+    def test_victoire_noir_ajournement_to_blanc(self) -> None:
+        """Test inversion victoire_noir_ajournement -> victoire_blanc_ajournement."""
+        assert _invert_type_resultat("victoire_noir_ajournement") == "victoire_blanc_ajournement"
+
+    def test_nulle_unchanged(self) -> None:
+        """Test que nulle reste nulle (symétrique)."""
+        assert _invert_type_resultat("nulle") == "nulle"
+
+    def test_ajournement_unchanged(self) -> None:
+        """Test que ajournement reste ajournement (symétrique)."""
+        assert _invert_type_resultat("ajournement") == "ajournement"
+
+    def test_double_forfait_unchanged(self) -> None:
+        """Test que double_forfait reste double_forfait (symétrique)."""
+        assert _invert_type_resultat("double_forfait") == "double_forfait"
+
+    def test_non_joue_unchanged(self) -> None:
+        """Test que non_joue reste non_joue (symétrique)."""
+        assert _invert_type_resultat("non_joue") == "non_joue"
+
+    def test_inconnu_unchanged(self) -> None:
+        """Test que inconnu reste inconnu (symétrique)."""
+        assert _invert_type_resultat("inconnu") == "inconnu"
+
+    def test_unknown_type_passthrough(self) -> None:
+        """Test que type inconnu est retourné tel quel."""
+        assert _invert_type_resultat("type_inconnu_xyz") == "type_inconnu_xyz"
+
+
+# ==============================================================================
+# TESTS PARSING ECHIQUIER AVEC DOM NOIR (ISO 5259)
+# ==============================================================================
+
+
+class TestParseEchiquierDomNoir:
+    """Tests parsing échiquier quand domicile joue Noir.
+
+    Ces tests vérifient le fix du bug type_resultat (corrigé 10/01/2026).
+    ISO 5259: Validation que type_resultat correspond aux scores après swap.
+    """
+
+    def test_dom_noir_victoire_ext(self, tmp_path: Path) -> None:
+        """Test DOM joue Noir et EXT gagne (victoire_blanc dans données).
+
+        HTML: DOM=Noir perd 0-1 contre EXT=Blanc
+        Attendu: resultat_blanc=1.0, resultat_noir=0.0, type_resultat=victoire_blanc
+        """
+        ronde_html = """
+        <html>
+        <body>
+        <table>
+            <tr id="RowEnTeteDetail1">
+                <td>Club DOM</td>
+                <td>0 - 1</td>
+                <td>Club EXT</td>
+            </tr>
+            <tr id="RowMatchDetail1">
+                <td>2 N</td>
+                <td>LEGRAND Pierre  1500</td>
+                <td>0 - 1</td>
+                <td>DUBOIS Jean  1600</td>
+                <td>2 B</td>
+            </tr>
+        </table>
+        </body>
+        </html>
+        """
+        ronde_file = tmp_path / "ronde_1.html"
+        ronde_file.write_text(ronde_html, encoding="utf-8")
+
+        result = parse_ronde(ronde_file)
+
+        assert len(result) == 1
+        assert len(result[0].echiquiers) == 1
+        ech = result[0].echiquiers[0]
+
+        # DOM (LEGRAND) joue Noir, EXT (DUBOIS) joue Blanc
+        assert ech.blanc.nom_complet == "DUBOIS Jean"
+        assert ech.noir.nom_complet == "LEGRAND Pierre"
+        # EXT (Blanc) gagne 1-0
+        assert ech.resultat_blanc == 1.0
+        assert ech.resultat_noir == 0.0
+        # type_resultat doit être victoire_blanc (cohérent avec scores)
+        assert ech.type_resultat == "victoire_blanc"
+
+    def test_dom_noir_victoire_dom(self, tmp_path: Path) -> None:
+        """Test DOM joue Noir et DOM gagne (victoire_noir dans données).
+
+        HTML: DOM=Noir gagne 1-0 contre EXT=Blanc
+        Attendu: resultat_blanc=0.0, resultat_noir=1.0, type_resultat=victoire_noir
+        """
+        ronde_html = """
+        <html>
+        <body>
+        <table>
+            <tr id="RowEnTeteDetail1">
+                <td>Club DOM</td>
+                <td>1 - 0</td>
+                <td>Club EXT</td>
+            </tr>
+            <tr id="RowMatchDetail1">
+                <td>2 N</td>
+                <td>LEGRAND Pierre  1600</td>
+                <td>1 - 0</td>
+                <td>DUBOIS Jean  1500</td>
+                <td>2 B</td>
+            </tr>
+        </table>
+        </body>
+        </html>
+        """
+        ronde_file = tmp_path / "ronde_1.html"
+        ronde_file.write_text(ronde_html, encoding="utf-8")
+
+        result = parse_ronde(ronde_file)
+
+        ech = result[0].echiquiers[0]
+
+        # DOM (LEGRAND) joue Noir et gagne
+        assert ech.blanc.nom_complet == "DUBOIS Jean"
+        assert ech.noir.nom_complet == "LEGRAND Pierre"
+        assert ech.resultat_blanc == 0.0
+        assert ech.resultat_noir == 1.0
+        # type_resultat doit être victoire_noir (cohérent avec scores)
+        assert ech.type_resultat == "victoire_noir"
+
+    def test_dom_noir_nulle(self, tmp_path: Path) -> None:
+        """Test DOM joue Noir et nulle (nulle reste nulle).
+
+        HTML: DOM=Noir fait nulle avec EXT=Blanc
+        Attendu: resultat_blanc=0.5, resultat_noir=0.5, type_resultat=nulle
+        """
+        ronde_html = """
+        <html>
+        <body>
+        <table>
+            <tr id="RowEnTeteDetail1">
+                <td>Club DOM</td>
+                <td>0 - 0</td>
+                <td>Club EXT</td>
+            </tr>
+            <tr id="RowMatchDetail1">
+                <td>2 N</td>
+                <td>LEGRAND Pierre  1550</td>
+                <td>X - X</td>
+                <td>DUBOIS Jean  1550</td>
+                <td>2 B</td>
+            </tr>
+        </table>
+        </body>
+        </html>
+        """
+        ronde_file = tmp_path / "ronde_1.html"
+        ronde_file.write_text(ronde_html, encoding="utf-8")
+
+        result = parse_ronde(ronde_file)
+
+        ech = result[0].echiquiers[0]
+
+        assert ech.resultat_blanc == 0.5
+        assert ech.resultat_noir == 0.5
+        # Nulle reste nulle (symétrique)
+        assert ech.type_resultat == "nulle"
+
+    def test_dom_blanc_victoire_dom(self, tmp_path: Path) -> None:
+        """Test DOM joue Blanc et gagne (cas normal sans swap).
+
+        HTML: DOM=Blanc gagne 1-0 contre EXT=Noir
+        Attendu: resultat_blanc=1.0, resultat_noir=0.0, type_resultat=victoire_blanc
+        """
+        ronde_html = """
+        <html>
+        <body>
+        <table>
+            <tr id="RowEnTeteDetail1">
+                <td>Club DOM</td>
+                <td>1 - 0</td>
+                <td>Club EXT</td>
+            </tr>
+            <tr id="RowMatchDetail1">
+                <td>1 B</td>
+                <td>LEGRAND Pierre  1600</td>
+                <td>1 - 0</td>
+                <td>DUBOIS Jean  1500</td>
+                <td>1 N</td>
+            </tr>
+        </table>
+        </body>
+        </html>
+        """
+        ronde_file = tmp_path / "ronde_1.html"
+        ronde_file.write_text(ronde_html, encoding="utf-8")
+
+        result = parse_ronde(ronde_file)
+
+        ech = result[0].echiquiers[0]
+
+        # DOM (LEGRAND) joue Blanc
+        assert ech.blanc.nom_complet == "LEGRAND Pierre"
+        assert ech.noir.nom_complet == "DUBOIS Jean"
+        assert ech.resultat_blanc == 1.0
+        assert ech.resultat_noir == 0.0
+        assert ech.type_resultat == "victoire_blanc"
