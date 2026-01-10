@@ -116,7 +116,10 @@ def _parse_forfait_result(text: str) -> tuple[float, float, str] | None:
 
 
 def _parse_generic_score(text: str) -> tuple[float, float, str] | None:
-    """Parse format generique X-Y."""
+    """Parse format generique X-Y.
+
+    ISO 5259: Coherence donnees - 0-0 est non_joue, pas nulle.
+    """
     if "-" not in text:
         return None
     parts = text.replace(" ", "").split("-")
@@ -125,11 +128,16 @@ def _parse_generic_score(text: str) -> tuple[float, float, str] | None:
     try:
         score_b = float(parts[0].replace(",", "."))
         score_n = float(parts[1].replace(",", "."))
+        # Determine type based on score comparison
         if score_b > score_n:
-            return (score_b, score_n, "victoire_blanc")
-        if score_n > score_b:
-            return (score_b, score_n, "victoire_noir")
-        return (score_b, score_n, "nulle")
+            type_res = "victoire_blanc"
+        elif score_n > score_b:
+            type_res = "victoire_noir"
+        elif score_b == 0:  # ISO 5259: 0-0 = non joue (echiquier vide)
+            type_res = "non_joue"
+        else:
+            type_res = "nulle"
+        return (score_b, score_n, type_res)
     except ValueError:
         return None
 
