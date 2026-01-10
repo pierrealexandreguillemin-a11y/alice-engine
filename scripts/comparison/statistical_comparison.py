@@ -222,22 +222,38 @@ def save_comparison_report(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Convertir en dict serializable
+    # Convert numpy types to native Python types for JSON serialization
+    def convert_to_native(obj: Any) -> Any:
+        if isinstance(obj, np.integer | np.floating):
+            return obj.item()
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, dict):
+            return {k: convert_to_native(v) for k, v in obj.items()}
+        if isinstance(obj, list | tuple):
+            return [convert_to_native(v) for v in obj]
+        return obj
+
     report = {
         "model_a_name": comparison.model_a_name,
         "model_b_name": comparison.model_b_name,
         "winner": comparison.winner,
-        "practical_significance": comparison.practical_significance,
+        "practical_significance": bool(comparison.practical_significance),
         "recommendation": comparison.recommendation,
         "timestamp": comparison.timestamp,
         "mcnemar": {
-            "statistic": comparison.mcnemar_result.statistic,
-            "p_value": comparison.mcnemar_result.p_value,
-            "significant": comparison.mcnemar_result.significant,
-            "effect_size": comparison.mcnemar_result.effect_size,
-            "confidence_interval": comparison.mcnemar_result.confidence_interval,
+            "statistic": float(comparison.mcnemar_result.statistic),
+            "p_value": float(comparison.mcnemar_result.p_value),
+            "significant": bool(comparison.mcnemar_result.significant),
+            "effect_size": float(comparison.mcnemar_result.effect_size),
+            "confidence_interval": [
+                float(x) for x in comparison.mcnemar_result.confidence_interval
+            ],
         },
-        "metrics_a": comparison.metrics_a,
-        "metrics_b": comparison.metrics_b,
+        "metrics_a": convert_to_native(comparison.metrics_a),
+        "metrics_b": convert_to_native(comparison.metrics_b),
     }
 
     with open(output_path, "w", encoding="utf-8") as f:

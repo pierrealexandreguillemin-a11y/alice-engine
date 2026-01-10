@@ -131,10 +131,10 @@ repos:
       # Target: 80% (current: 55% progressive adoption)
       # ------------------------------------------------------------------------
       - id: pytest-cov
-        name: "ISO 29119 | Test Coverage (55% min)"
+        name: "ISO 29119 | Test Coverage (70% min)"
         description: "Run tests with coverage measurement"
         entry: python
-        args: [-m, pytest, tests/, -v, --tb=short, --cov=app, --cov=services, --cov=scripts, --cov-fail-under=55, -x]
+        args: [-m, pytest, tests/, -v, --tb=short, --cov=app, --cov=services, --cov=scripts, --cov-fail-under=70, -x]
         language: system
         pass_filenames: false
         stages: [pre-push]

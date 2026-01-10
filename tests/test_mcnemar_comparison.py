@@ -20,13 +20,10 @@ Last Updated: 2026-01-10
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path  # noqa: TCH003 - Used at runtime in tests
 
 import numpy as np
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from scripts.comparison.mcnemar_test import (
     McNemarResult,
@@ -374,6 +371,141 @@ class TestCompareModels:
 
         assert result.winner == "tie"
         assert not result.mcnemar_result.significant
+
+
+class TestCompareWithBaseline:
+    """Tests pour compare_with_baseline."""
+
+    def test_compare_with_baseline_basic(self, tmp_path: Path) -> None:
+        """Test comparaison avec baseline."""
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        from scripts.comparison.statistical_comparison import compare_with_baseline
+
+        # Create mock predictor
+        mock_predictor = MagicMock()
+        test_data = pd.DataFrame(
+            {
+                "feature_1": np.random.randn(50),
+                "feature_2": np.random.randn(50),
+                "target": np.random.randint(0, 2, 50),
+            }
+        )
+
+        # Mock predict to return correct predictions
+        mock_predictor.predict.return_value = pd.Series(test_data["target"].values)
+        mock_predictor.predict_proba.return_value = pd.DataFrame(
+            {
+                0: 1 - test_data["target"].values,
+                1: test_data["target"].values,
+            }
+        )
+
+        def baseline_predict(x_data: pd.DataFrame) -> np.ndarray:
+            return test_data["target"].values
+
+        result = compare_with_baseline(
+            autogluon_predictor=mock_predictor,
+            baseline_predict=baseline_predict,
+            test_data=test_data,
+            label="target",
+            output_path=tmp_path / "report.json",
+        )
+
+        assert isinstance(result, ModelComparison)
+        assert (tmp_path / "report.json").exists()
+
+
+class TestFullComparisonPipeline:
+    """Tests pour full_comparison_pipeline."""
+
+    def test_full_pipeline_basic(self, tmp_path: Path) -> None:
+        """Test pipeline complet."""
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.tree import DecisionTreeClassifier
+
+        from scripts.comparison.statistical_comparison import full_comparison_pipeline
+
+        np.random.seed(42)
+        X = np.random.randn(100, 5)
+        y = (X[:, 0] + X[:, 1] > 0).astype(int)
+
+        model_a = LogisticRegression(random_state=42)
+        model_b = DecisionTreeClassifier(random_state=42)
+
+        result = full_comparison_pipeline(
+            model_a_fit=model_a.fit,
+            model_b_fit=model_b.fit,
+            model_a_predict=model_a.predict,
+            model_b_predict=model_b.predict,
+            X=X,
+            y=y,
+            n_iterations=2,
+            output_dir=tmp_path,
+        )
+
+        assert isinstance(result, ModelComparison)
+        assert (tmp_path / "comparison_report.json").exists()
+
+
+class TestGenerateRecommendation:
+    """Tests pour _generate_recommendation."""
+
+    def test_recommendation_tie_practical(self) -> None:
+        """Test recommandation pour tie avec signif pratique."""
+        from scripts.comparison.statistical_comparison import _generate_recommendation
+
+        mcnemar = McNemarResult(
+            statistic=1.0,
+            p_value=0.1,
+            significant=False,
+            effect_size=0.1,
+            confidence_interval=(-0.05, 0.15),
+            model_a_mean_accuracy=0.85,
+            model_b_mean_accuracy=0.78,
+            winner=None,
+        )
+
+        rec = _generate_recommendation(
+            winner="tie",
+            mcnemar=mcnemar,
+            metrics_a={"accuracy": 0.85},
+            metrics_b={"accuracy": 0.78},
+            model_a_name="A",
+            model_b_name="B",
+            practical_significance=True,
+        )
+
+        assert "tendance" in rec.lower() or "A" in rec
+
+    def test_recommendation_winner_practical(self) -> None:
+        """Test recommandation pour gagnant avec signif pratique."""
+        from scripts.comparison.statistical_comparison import _generate_recommendation
+
+        mcnemar = McNemarResult(
+            statistic=5.0,
+            p_value=0.01,
+            significant=True,
+            effect_size=0.3,
+            confidence_interval=(0.05, 0.15),
+            model_a_mean_accuracy=0.9,
+            model_b_mean_accuracy=0.7,
+            winner="model_a",
+        )
+
+        rec = _generate_recommendation(
+            winner="ModelA",
+            mcnemar=mcnemar,
+            metrics_a={"accuracy": 0.9},
+            metrics_b={"accuracy": 0.7},
+            model_a_name="ModelA",
+            model_b_name="ModelB",
+            practical_significance=True,
+        )
+
+        assert "deployer" in rec.lower() or "ModelA" in rec
 
 
 class TestSaveComparisonReport:
