@@ -202,7 +202,7 @@ def mcnemar_5x2cv_test(
             all_acc_a.append(correct_a.mean())
             all_acc_b.append(correct_b.mean())
 
-            logger.debug(f"Iter {i+1}, Fold {fold_idx+1}: n01={n01}, n10={n10}")
+            logger.debug(f"Iter {i + 1}, Fold {fold_idx + 1}: n01={n01}, n10={n10}")
 
     # Calculer la statistique 5x2cv
     # Formule de Dietterich (1998)

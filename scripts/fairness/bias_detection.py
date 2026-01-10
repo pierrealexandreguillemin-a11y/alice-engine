@@ -276,7 +276,7 @@ def compute_bias_by_elo_range(
     groups = pd.cut(
         elo_ratings,
         bins=bins,
-        labels=[f"{bins[i]}-{bins[i+1]}" for i in range(len(bins) - 1)],
+        labels=[f"{bins[i]}-{bins[i + 1]}" for i in range(len(bins) - 1)],
         include_lowest=True,
     )
 

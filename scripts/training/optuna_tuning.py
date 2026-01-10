@@ -325,7 +325,7 @@ def optimize_all_models(
     results = {}
 
     for model_name in ["catboost", "xgboost", "lightgbm"]:
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"Optimizing {model_name}...")
         logger.info("=" * 60)
 
