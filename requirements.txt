@@ -43,6 +43,7 @@ ortools>=9.8
 # ============================================
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
+pandera>=0.20.0            # DataFrame schema validation (ISO 5259)
 
 # ============================================
 # MongoDB (async, lecture seule)
