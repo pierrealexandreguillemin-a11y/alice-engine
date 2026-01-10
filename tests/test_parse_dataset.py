@@ -955,6 +955,22 @@ class TestEdgeCases:
         _, _, type_res2 = parse_result("F - 1")
         assert type_res1 == type_res2 == "forfait_blanc"
 
+    def test_parse_result_zero_zero_is_non_joue(self) -> None:
+        """Test 0-0 est classifié comme non_joue, pas nulle.
+
+        ISO 5259: Cohérence données - 0-0 représente un échiquier vide,
+        pas une partie nulle. Bug corrigé 11/01/2026.
+        """
+        score_b, score_n, type_res = parse_result("0 - 0")
+        assert score_b == 0.0
+        assert score_n == 0.0
+        assert type_res == "non_joue"
+
+    def test_parse_result_zero_zero_compact(self) -> None:
+        """Test 0-0 format compact."""
+        score_b, score_n, type_res = parse_result("0-0")
+        assert type_res == "non_joue"
+
     def test_categories_paired_genders(self) -> None:
         """Test que chaque catégorie a un équivalent masculin et féminin."""
         male_cats = {k for k in CATEGORIES_AGE if k.endswith("M")}
