@@ -7,6 +7,7 @@ Ce package contient les modules pour l'entraînement des modèles:
 - trainers.py: Fonctions d'entraînement
 - parallel.py: Exécution parallèle
 - mlflow_tracking.py: Intégration MLflow
+- optuna_tuning.py: Optimisation hyperparamètres
 """
 
 from scripts.training.config import (
@@ -21,6 +22,7 @@ from scripts.training.features import (
 )
 from scripts.training.metrics import compute_all_metrics
 from scripts.training.mlflow_tracking import log_to_mlflow, setup_mlflow
+from scripts.training.optuna_tuning import optimize_all_models, optimize_hyperparameters
 from scripts.training.parallel import train_all_models_parallel
 from scripts.training.trainers import train_catboost, train_lightgbm, train_xgboost
 
@@ -44,4 +46,7 @@ __all__ = [
     # MLflow
     "setup_mlflow",
     "log_to_mlflow",
+    # Optuna
+    "optimize_hyperparameters",
+    "optimize_all_models",
 ]
