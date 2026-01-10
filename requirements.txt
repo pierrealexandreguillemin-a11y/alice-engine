@@ -19,6 +19,14 @@ xgboost>=2.1.0             # 2eme choix - backup
 lightgbm>=4.3.0            # 3eme choix - stacking ensemble
 optuna>=4.6.0              # Hyperparameter optimization (ISO 42001)
 
+# ============================================
+# AutoML - AutoGluon + TabPFN (ISO 42001)
+# @see docs/plans/AUTOGLUON_IMPLEMENTATION_PLAN.md
+# ============================================
+autogluon>=1.5.0           # AutoML framework (multi-layer stacking)
+# tabpfn>=2.5.0            # Foundation model (GPU optional) - install separately
+torch>=2.0.0               # Required for TabPFN
+
 scikit-learn>=1.4.0
 pandas>=2.1.0
 numpy>=1.26.0
