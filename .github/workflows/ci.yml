@@ -72,6 +72,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free Disk Space (for AutoGluon/PyTorch)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -129,6 +138,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Free Disk Space (for AutoGluon/PyTorch)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -202,6 +219,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free Disk Space (for AutoGluon/PyTorch)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -250,6 +275,14 @@ jobs:
         with:
           ref: ${{ github.event.release.target_commitish }}
           fetch-depth: 0
+
+      - name: Free Disk Space (for AutoGluon/PyTorch)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
 
       - name: Set up Python
         uses: actions/setup-python@v5
