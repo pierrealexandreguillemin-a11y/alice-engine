@@ -45,7 +45,8 @@
 | ISO 27001 | Confidentialité | Chiffrement AES-256-GCM |
 | ISO 27001 | Auditabilité | Logs, retention policy, drift reports |
 | ISO 23894 | Risques AI | Drift monitoring PSI, alertes seuils |
-| ISO 24027 | Biais | Métriques fairness par catégorie (à implémenter) |
+| ISO 24027 | Biais | `scripts/fairness/bias_detection.py` - SPD, EOD, DIR |
+| ISO 24029 | Robustesse | `scripts/robustness/adversarial_tests.py` - Tests adversariaux |
 
 ---
 
@@ -530,6 +531,8 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 | `scripts/ensemble_stacking.py` | ISO 42001, 25059 | Métriques qualité, Explicabilité |
 | `scripts/evaluate_models.py` | ISO 25059, 29119 | Benchmarks, Tests modèles |
 | `scripts/parse_dataset.py` | ISO 5259, 25012 | Parsing qualité, Validation schéma |
+| `scripts/fairness/bias_detection.py` | ISO 24027, 42001 | Détection biais, Fairness metrics |
+| `scripts/robustness/adversarial_tests.py` | ISO 24029, 42001 | Tests robustesse, Perturbations |
 
 ### Services
 
@@ -554,6 +557,8 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 | `tests/test_model_registry.py` | ISO 29119, 42001 | Tests intégrité, coverage |
 | `tests/test_feature_engineering.py` | ISO 29119, 5259 | Tests features, validation |
 | `tests/test_ffe_rules_features.py` | ISO 29119, 25012 | Tests règles métier |
+| `tests/test_fairness_bias_detection.py` | ISO 29119, 24027 | Tests détection biais (29 tests) |
+| `tests/test_robustness_adversarial.py` | ISO 29119, 24029 | Tests robustesse (29 tests) |
 
 ### Documentation
 
@@ -588,4 +593,4 @@ Last Updated: YYYY-MM-DD
 
 ---
 
-*Dernière MAJ: 2026-01-09 | ALICE Engine v0.4.0*
+*Dernière MAJ: 2026-01-10 | ALICE Engine v0.5.0*
