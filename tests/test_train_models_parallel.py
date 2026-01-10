@@ -11,7 +11,10 @@ Author: ALICE Engine Team
 Last Updated: 2026-01-09
 """
 
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -210,3 +213,385 @@ class TestComputeAllMetrics:
         assert "accuracy" in metrics_dict
         assert "f1_score" in metrics_dict
         assert isinstance(metrics_dict["auc_roc"], float)
+
+
+# =============================================================================
+# Tests pour scripts/train_models_parallel.py functions
+# =============================================================================
+
+
+@dataclass
+class MockMetricsTPP:
+    """Mock pour ModelMetrics (train_models_parallel tests)."""
+
+    auc_roc: float = 0.85
+    accuracy: float = 0.80
+    precision: float = 0.78
+    recall: float = 0.82
+    f1_score: float = 0.80
+    log_loss: float = 0.45
+    train_time_s: float = 10.0
+    test_auc: float | None = None
+    test_accuracy: float | None = None
+    test_f1: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convertit en dictionnaire."""
+        return {
+            "auc_roc": self.auc_roc,
+            "accuracy": self.accuracy,
+            "precision": self.precision,
+            "recall": self.recall,
+            "f1_score": self.f1_score,
+            "log_loss": self.log_loss,
+            "train_time_s": self.train_time_s,
+            "test_auc": self.test_auc,
+            "test_accuracy": self.test_accuracy,
+            "test_f1": self.test_f1,
+        }
+
+
+@dataclass
+class MockModelResultTPP:
+    """Mock pour SingleModelResult."""
+
+    model: Any = None
+    metrics: MockMetricsTPP = field(default_factory=MockMetricsTPP)
+
+
+class TestLoadDatasets:
+    """Tests pour _load_datasets."""
+
+    def test_load_datasets(self, tmp_path: Path) -> None:
+        """Test chargement des datasets."""
+        from scripts.train_models_parallel import _load_datasets
+
+        # Créer des parquet de test
+        train_df = pd.DataFrame({"a": [1, 2, 3], "target": [0, 1, 0]})
+        valid_df = pd.DataFrame({"a": [4, 5], "target": [1, 0]})
+        test_df = pd.DataFrame({"a": [6, 7], "target": [0, 1]})
+
+        train_df.to_parquet(tmp_path / "train.parquet")
+        valid_df.to_parquet(tmp_path / "valid.parquet")
+        test_df.to_parquet(tmp_path / "test.parquet")
+
+        train, valid, test = _load_datasets(tmp_path)
+
+        assert len(train) == 3
+        assert len(valid) == 2
+        assert len(test) == 2
+
+
+class TestEvaluateOnTest:
+    """Tests pour _evaluate_on_test."""
+
+    def test_evaluate_models(self) -> None:
+        """Test évaluation sur test set."""
+        from scripts.train_models_parallel import _evaluate_on_test
+
+        # Mock model avec predict_proba
+        mock_model = MagicMock()
+        mock_model.predict_proba.return_value = np.array([[0.3, 0.7], [0.8, 0.2]])
+
+        results = {
+            "CatBoost": MockModelResultTPP(model=mock_model),
+        }
+
+        X_test = pd.DataFrame({"a": [1, 2]})
+        y_test = pd.Series([1, 0])
+
+        with patch("scripts.train_models_parallel.compute_all_metrics") as mock_metrics:
+            mock_metrics.return_value = MagicMock(auc_roc=0.90, accuracy=0.85, f1_score=0.82)
+            _evaluate_on_test(results, X_test, y_test)
+
+        assert results["CatBoost"].metrics.test_auc == 0.90
+        assert results["CatBoost"].metrics.test_accuracy == 0.85
+
+    def test_skip_none_model(self) -> None:
+        """Test skip modèle None."""
+        from scripts.train_models_parallel import _evaluate_on_test
+
+        results = {"Failed": MockModelResultTPP(model=None)}
+        X_test = pd.DataFrame({"a": [1]})
+        y_test = pd.Series([0])
+
+        # Ne devrait pas lever d'exception
+        _evaluate_on_test(results, X_test, y_test)
+
+
+class TestBuildSummary:
+    """Tests pour _build_summary."""
+
+    def test_build_summary(self, tmp_path: Path) -> None:
+        """Test construction résumé."""
+        from scripts.train_models_parallel import _build_summary
+
+        mock_model = MagicMock()
+        results = {
+            "CatBoost": MockModelResultTPP(
+                model=mock_model,
+                metrics=MockMetricsTPP(auc_roc=0.85, test_auc=0.82),
+            ),
+            "XGBoost": MockModelResultTPP(
+                model=mock_model,
+                metrics=MockMetricsTPP(auc_roc=0.83, test_auc=0.80),
+            ),
+        }
+
+        version_dir = tmp_path / "v1"
+        summary = _build_summary(results, version_dir)
+
+        assert summary["best_model"] == "CatBoost"
+        assert summary["best_auc"] == 0.82
+        assert "version_dir" in summary
+
+    def test_build_summary_with_none_models(self, tmp_path: Path) -> None:
+        """Test résumé avec modèles None."""
+        from scripts.train_models_parallel import _build_summary
+
+        results = {
+            "Failed": MockModelResultTPP(model=None),
+            "Success": MockModelResultTPP(
+                model=MagicMock(),
+                metrics=MockMetricsTPP(test_auc=0.75),
+            ),
+        }
+
+        summary = _build_summary(results, tmp_path / "v1")
+
+        assert summary["best_model"] == "Success"
+        assert summary["best_auc"] == 0.75
+
+    def test_build_summary_fallback_auc(self, tmp_path: Path) -> None:
+        """Test résumé utilise auc_roc si test_auc None."""
+        from scripts.train_models_parallel import _build_summary
+
+        results = {
+            "Model": MockModelResultTPP(
+                model=MagicMock(),
+                metrics=MockMetricsTPP(auc_roc=0.88, test_auc=None),
+            ),
+        }
+
+        summary = _build_summary(results, tmp_path / "v1")
+
+        assert summary["best_auc"] == 0.88
+
+
+class TestSaveModels:
+    """Tests pour _save_models."""
+
+    @patch("scripts.train_models_parallel.save_production_models")
+    def test_save_models(self, mock_save: MagicMock, tmp_path: Path) -> None:
+        """Test sauvegarde modèles."""
+        from scripts.train_models_parallel import _save_models
+
+        mock_save.return_value = tmp_path / "v1"
+
+        mock_model = MagicMock()
+        results = {
+            "CatBoost": MockModelResultTPP(model=mock_model, metrics=MockMetricsTPP(test_auc=0.85)),
+        }
+
+        train_df = pd.DataFrame({"a": [1], "target": [0]})
+        valid_df = pd.DataFrame({"a": [2], "target": [1]})
+        test_df = pd.DataFrame({"a": [3], "target": [0]})
+        X_train = pd.DataFrame({"a": [1]})
+
+        version_dir = _save_models(
+            results=results,
+            config={"param": 1},
+            models_dir=tmp_path,
+            train=train_df,
+            valid=valid_df,
+            test=test_df,
+            data_dir=tmp_path,
+            X_train=X_train,
+            encoders={"encoder": MagicMock()},
+        )
+
+        mock_save.assert_called_once()
+        assert version_dir == tmp_path / "v1"
+
+    @patch("scripts.train_models_parallel.save_production_models")
+    def test_save_models_filters_none(self, mock_save: MagicMock, tmp_path: Path) -> None:
+        """Test sauvegarde filtre modèles None."""
+        from scripts.train_models_parallel import _save_models
+
+        mock_save.return_value = tmp_path / "v1"
+
+        results = {
+            "OK": MockModelResultTPP(model=MagicMock()),
+            "Failed": MockModelResultTPP(model=None),
+        }
+
+        _save_models(
+            results=results,
+            config={},
+            models_dir=tmp_path,
+            train=pd.DataFrame(),
+            valid=pd.DataFrame(),
+            test=pd.DataFrame(),
+            data_dir=tmp_path,
+            X_train=pd.DataFrame(),
+            encoders={},
+        )
+
+        # Vérifier que seul le modèle OK est passé
+        call_kwargs = mock_save.call_args[1]
+        assert len(call_kwargs["models"]) == 1
+        assert "OK" in call_kwargs["models"]
+
+
+class TestRunTraining:
+    """Tests pour run_training."""
+
+    @patch("scripts.train_models_parallel._load_datasets")
+    @patch("scripts.train_models_parallel.load_hyperparameters")
+    @patch("scripts.train_models_parallel.prepare_features")
+    @patch("scripts.train_models_parallel.train_all_models_parallel")
+    @patch("scripts.train_models_parallel._evaluate_on_test")
+    @patch("scripts.train_models_parallel._save_models")
+    @patch("scripts.train_models_parallel._build_summary")
+    def test_run_training_no_mlflow(
+        self,
+        mock_summary: MagicMock,
+        mock_save: MagicMock,
+        mock_eval: MagicMock,
+        mock_train: MagicMock,
+        mock_prepare: MagicMock,
+        mock_load_hp: MagicMock,
+        mock_load_data: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test pipeline sans MLflow."""
+        from scripts.train_models_parallel import run_training
+
+        # Setup mocks
+        train_df = pd.DataFrame({"a": [1, 2], "target": [0, 1]})
+        valid_df = pd.DataFrame({"a": [3], "target": [0]})
+        test_df = pd.DataFrame({"a": [4], "target": [1]})
+
+        mock_load_data.return_value = (train_df, valid_df, test_df)
+        mock_load_hp.return_value = {}
+
+        X_train = pd.DataFrame({"a": [1, 2]})
+        y_train = pd.Series([0, 1])
+        mock_prepare.return_value = (X_train, y_train, {})
+
+        mock_model = MagicMock()
+        mock_train.return_value = {
+            "CatBoost": MockModelResultTPP(model=mock_model),
+        }
+
+        mock_save.return_value = tmp_path / "v1"
+        mock_summary.return_value = {"best_model": "CatBoost"}
+
+        result = run_training(
+            data_dir=tmp_path,
+            config_path=tmp_path / "config.yaml",
+            models_dir=tmp_path / "models",
+            use_mlflow=False,
+        )
+
+        assert result["best_model"] == "CatBoost"
+        mock_train.assert_called_once()
+
+    @patch("scripts.train_models_parallel._load_datasets")
+    @patch("scripts.train_models_parallel.load_hyperparameters")
+    @patch("scripts.train_models_parallel.prepare_features")
+    @patch("scripts.train_models_parallel.train_all_models_parallel")
+    @patch("scripts.train_models_parallel._evaluate_on_test")
+    @patch("scripts.train_models_parallel._save_models")
+    @patch("scripts.train_models_parallel._build_summary")
+    @patch("scripts.train_models_parallel.setup_mlflow")
+    @patch("scripts.train_models_parallel.log_to_mlflow")
+    def test_run_training_with_mlflow(
+        self,
+        mock_log_mlflow: MagicMock,
+        mock_setup_mlflow: MagicMock,
+        mock_summary: MagicMock,
+        mock_save: MagicMock,
+        mock_eval: MagicMock,
+        mock_train: MagicMock,
+        mock_prepare: MagicMock,
+        mock_load_hp: MagicMock,
+        mock_load_data: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test pipeline avec MLflow."""
+        from scripts.train_models_parallel import run_training
+
+        # Setup mocks
+        train_df = pd.DataFrame({"a": [1], "target": [0]})
+        mock_load_data.return_value = (train_df, train_df, train_df)
+        mock_load_hp.return_value = {}
+        mock_prepare.return_value = (pd.DataFrame({"a": [1]}), pd.Series([0]), {})
+        mock_train.return_value = {"Model": MockModelResultTPP(model=MagicMock())}
+        mock_save.return_value = tmp_path / "v1"
+        mock_summary.return_value = {}
+
+        run_training(
+            data_dir=tmp_path,
+            config_path=tmp_path / "config.yaml",
+            models_dir=tmp_path,
+            use_mlflow=True,
+        )
+
+        mock_setup_mlflow.assert_called_once()
+        mock_log_mlflow.assert_called_once()
+
+
+class TestMain:
+    """Tests pour main."""
+
+    @patch("scripts.train_models_parallel.run_training")
+    def test_main_default_args(self, mock_run: MagicMock) -> None:
+        """Test main avec arguments par défaut."""
+        from scripts.train_models_parallel import main
+
+        with patch("sys.argv", ["script"]):
+            main()
+
+        mock_run.assert_called_once()
+
+    @patch("scripts.train_models_parallel.run_training")
+    def test_main_no_mlflow(self, mock_run: MagicMock, tmp_path: Path) -> None:
+        """Test main avec --no-mlflow."""
+        from scripts.train_models_parallel import main
+
+        with patch(
+            "sys.argv",
+            ["script", "--data-dir", str(tmp_path), "--no-mlflow"],
+        ):
+            main()
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["use_mlflow"] is False
+
+    @patch("scripts.train_models_parallel.run_training")
+    def test_main_custom_paths(self, mock_run: MagicMock, tmp_path: Path) -> None:
+        """Test main avec chemins personnalisés."""
+        from scripts.train_models_parallel import main
+
+        config_path = tmp_path / "custom.yaml"
+        models_path = tmp_path / "custom_models"
+
+        with patch(
+            "sys.argv",
+            [
+                "script",
+                "--data-dir",
+                str(tmp_path),
+                "--config",
+                str(config_path),
+                "--models-dir",
+                str(models_path),
+            ],
+        ):
+            main()
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["data_dir"] == tmp_path
+        assert call_kwargs["config_path"] == config_path
+        assert call_kwargs["models_dir"] == models_path

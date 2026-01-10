@@ -64,6 +64,9 @@ ignore = [
     "N806",              # X uppercase ok (ML convention)
     "B007",              # loop variable unused ok
     "F841",              # unused variable ok (mocks)
+    "PLC0415",           # imports in functions (lazy imports for mocking)
+    "PLR0913",           # too many arguments (test methods with patches)
+    "TCH002", "TCH003",  # type imports at runtime ok for tests
 ]
 "scripts/**/*.py" = [
     "S603", "S607",      # Scripts internes de confiance
