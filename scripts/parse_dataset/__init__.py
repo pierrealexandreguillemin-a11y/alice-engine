@@ -60,7 +60,10 @@ from scripts.parse_dataset.players import (
 )
 
 # Ronde
-from scripts.parse_dataset.ronde import parse_ronde
+from scripts.parse_dataset.ronde import (
+    _invert_type_resultat,
+    parse_ronde,
+)
 
 __all__ = [
     # Constants
@@ -84,6 +87,8 @@ __all__ = [
     "parse_calendrier",
     "parse_ronde",
     "parse_groupe",
+    # Ronde internals (for testing ISO 29119)
+    "_invert_type_resultat",
     # Players
     "parse_player_page",
     "joueur_to_dict",

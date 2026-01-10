@@ -6,6 +6,14 @@ Ce module parse les fichiers ronde_N.html pour extraire:
 - Joueurs et scores
 
 Conformite ISO/IEC 5055 (<300 lignes, SRP).
+
+ISO Compliance:
+- ISO/IEC 5055 - Software Quality (code quality)
+- ISO/IEC 5259:2024 - Data Quality for ML (parsing validation)
+- ISO/IEC 25012 - Data Quality (coherence type_resultat/scores)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-10
 """
 
 from __future__ import annotations
@@ -25,6 +33,44 @@ from scripts.parse_dataset.parsing_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Mapping pour inverser type_resultat quand les couleurs sont swappées
+# ISO 5259: Coherence données - type_resultat doit correspondre aux scores
+_TYPE_RESULTAT_INVERSION: dict[str, str] = {
+    "victoire_blanc": "victoire_noir",
+    "victoire_noir": "victoire_blanc",
+    "forfait_blanc": "forfait_noir",
+    "forfait_noir": "forfait_blanc",
+    "victoire_blanc_ajournement": "victoire_noir_ajournement",
+    "victoire_noir_ajournement": "victoire_blanc_ajournement",
+    # Types symétriques (pas d'inversion nécessaire)
+    "nulle": "nulle",
+    "ajournement": "ajournement",
+    "double_forfait": "double_forfait",
+    "non_joue": "non_joue",
+    "inconnu": "inconnu",
+}
+
+
+def _invert_type_resultat(type_resultat: str) -> str:
+    """Inverse le type_resultat quand les couleurs sont swappées.
+
+    Quand le joueur domicile joue Noir, les scores sont swappés pour
+    maintenir la perspective blanc/noir. Le type_resultat doit aussi
+    être inversé pour rester cohérent.
+
+    Args:
+    ----
+        type_resultat: Type de résultat original (victoire_blanc, etc.)
+
+    Returns:
+    -------
+        Type de résultat inversé
+
+    ISO Compliance:
+        - ISO/IEC 5259:2024 - Data Quality (coherence scores/type_resultat)
+    """
+    return _TYPE_RESULTAT_INVERSION.get(type_resultat, type_resultat)
 
 
 def parse_ronde(
@@ -151,10 +197,13 @@ def _parse_echiquier_row(tr: Any, current_match: Match) -> Echiquier | None:
         equipe_blanc = current_match.equipe_dom
         equipe_noir = current_match.equipe_ext
     else:
+        # DOM joue Noir: swap joueurs, équipes, scores ET type_resultat
+        # ISO 5259: Cohérence données - type_resultat doit correspondre aux scores
         blanc, noir = joueur_ext, joueur_dom
         equipe_blanc = current_match.equipe_ext
         equipe_noir = current_match.equipe_dom
         score_blanc, score_noir = score_noir, score_blanc
+        type_resultat = _invert_type_resultat(type_resultat)
 
     return Echiquier(
         numero=board_dom or board_ext,
