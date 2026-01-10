@@ -17,6 +17,7 @@ uvicorn[standard]>=0.27.0
 catboost>=1.2.7            # 1er choix - categories natives
 xgboost>=2.1.0             # 2eme choix - backup
 lightgbm>=4.3.0            # 3eme choix - stacking ensemble
+optuna>=4.6.0              # Hyperparameter optimization (ISO 42001)
 
 scikit-learn>=1.4.0
 pandas>=2.1.0
