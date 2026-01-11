@@ -8,8 +8,30 @@ from __future__ import annotations
 
 from scripts.ffe_rules.types import ReglesCompetition, TypeCompetition
 
+# Table de detection par patterns (ordre = priorite)
+_COMPETITION_PATTERNS: list[tuple[list[str], TypeCompetition]] = [
+    # Coupes speciales (prioritaire)
+    (["loubatiere", "loubatière"], TypeCompetition.C03),
+    (["parite", "parité"], TypeCompetition.C04),
+    # Feminin
+    (["feminin", "féminin", "12f", "feminine"], TypeCompetition.F01),
+    # Scolaire
+    (["scolaire", "etablissement", "école"], TypeCompetition.J03),
+    # Jeunes
+    (["jeune", "junior", "top jeunes"], TypeCompetition.J02),
+    # Regional
+    (["regionale", "régionale", "r1 ", "r2 ", "r3 "], TypeCompetition.REG),
+    # Departemental
+    (["departemental", "départemental", "n5", "n6", "criterium"], TypeCompetition.DEP),
+]
 
-def detecter_type_competition(nom_competition: str) -> TypeCompetition:  # noqa: PLR0911
+
+def _match_coupe_france(nom: str) -> bool:
+    """Detecte la Coupe de France (pattern combine)."""
+    return "coupe" in nom and "france" in nom
+
+
+def detecter_type_competition(nom_competition: str) -> TypeCompetition:
     """Detecte le type de competition pour appliquer les bonnes regles.
 
     Args:
@@ -19,36 +41,19 @@ def detecter_type_competition(nom_competition: str) -> TypeCompetition:  # noqa:
     Returns:
     -------
         TypeCompetition enum correspondant
+
+    ISO 5055: Dispatch table pattern (complexite B).
     """
     nom = nom_competition.lower()
 
-    # Coupes speciales (prioritaire)
-    if "loubatiere" in nom or "loubatière" in nom:
-        return TypeCompetition.C03
-    if "parite" in nom or "parité" in nom:
-        return TypeCompetition.C04
+    # Patterns simples via table
+    for patterns, comp_type in _COMPETITION_PATTERNS:
+        if any(p in nom for p in patterns):
+            return comp_type
 
-    # Feminin
-    if "feminin" in nom or "féminin" in nom or "12f" in nom or "feminine" in nom:
-        return TypeCompetition.F01
-
-    # Coupe de France
-    if "coupe" in nom and "france" in nom:
+    # Pattern combine Coupe de France
+    if _match_coupe_france(nom):
         return TypeCompetition.C01
-
-    # Scolaire
-    if "scolaire" in nom or "etablissement" in nom or "école" in nom:
-        return TypeCompetition.J03
-
-    # Jeunes
-    if "jeune" in nom or "junior" in nom or "top jeunes" in nom:
-        return TypeCompetition.J02
-
-    # Regional / Departemental
-    if any(x in nom for x in ["regionale", "régionale", "r1 ", "r2 ", "r3 "]):
-        return TypeCompetition.REG
-    if any(x in nom for x in ["departemental", "départemental", "n5", "n6", "criterium"]):
-        return TypeCompetition.DEP
 
     # National (default)
     return TypeCompetition.A02
