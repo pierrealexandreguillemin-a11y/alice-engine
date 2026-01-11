@@ -30,16 +30,22 @@ async def test_health_endpoint_returns_200():
 
 
 @pytest.mark.asyncio
-async def test_health_endpoint_returns_healthy_status():
-    """Test: GET /health contient status=healthy."""
+async def test_health_endpoint_returns_status():
+    """Test: GET /health contient status valide.
+
+    ISO 27001: Health check retourne 'degraded' si config securite incomplete
+    (api_key non configure en environnement test).
+    """
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health")
 
     data = response.json()
-    assert data["status"] == "healthy"
+    # Status is 'degraded' in test env (no api_key), 'healthy' in prod with full config
+    assert data["status"] in ("healthy", "degraded")
     assert "timestamp" in data
     assert "version" in data
+    assert "security" in data  # ISO 27001: security checks exposed
 
 
 @pytest.mark.asyncio
