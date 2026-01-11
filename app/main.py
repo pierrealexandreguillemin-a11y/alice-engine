@@ -54,13 +54,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - ISO 27001: Restrictif en production
+_cors_origins: list[str] = settings.cors_origins if settings.cors_origins else []
+if settings.debug and not _cors_origins:
+    _cors_origins = ["*"]  # Dev mode only
+elif not _cors_origins:
+    # Production sans origins = même origine seulement (plus sécurisé)
+    _cors_origins = []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Restreindre en production
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"] if not settings.debug else ["*"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"] if not settings.debug else ["*"],
 )
 
 # Inclusion des routes

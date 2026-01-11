@@ -230,9 +230,18 @@ def encrypt_model_directory(
                 logger.info(f"  Deleted original: {file_path.name}")
 
     if save_key_to_file:
+        # ISO 27001: Interdit en production - clés ne doivent JAMAIS être stockées avec données
+        env_debug = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+        if not env_debug:
+            raise RuntimeError(
+                "ISO 27001 VIOLATION: save_key_to_file=True is forbidden in production. "
+                "Store encryption keys in ALICE_ENCRYPTION_KEY environment variable."
+            )
         key_path = version_dir / "encryption.key"
         save_encryption_key(encryption_key, key_path)
-        logger.warning(f"  Key saved to {key_path.name} - THIS IS NOT RECOMMENDED FOR PRODUCTION!")
+        logger.warning(
+            f"  Key saved to {key_path.name} - DEBUG MODE ONLY, forbidden in production!"
+        )
 
     logger.info(f"  Encrypted {len(encrypted_files)} model files in {version_dir.name}")
 

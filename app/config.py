@@ -43,6 +43,7 @@ class Settings(BaseSettings):
 
     # Securite
     api_key: str = ""  # Pour endpoint /train
+    cors_origins: list[str] = []  # ISO 27001: Whitelist origins (vide = restrictif)
 
     # Modeles ML
     model_path: str = "./models"
