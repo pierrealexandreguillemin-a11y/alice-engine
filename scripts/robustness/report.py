@@ -59,13 +59,25 @@ def _generate_recommendations(
     """Genere des recommandations basees sur les metriques."""
     recommendations = []
 
-    if overall_level == RobustnessLevel.FRAGILE:
+    _add_fragile_alert(recommendations, overall_level)
+    _add_test_recommendations(recommendations, metrics)
+    recommendations.extend(_generate_specific_recommendations(metrics))
+    _add_robust_recommendation(recommendations, overall_level)
+
+    return recommendations
+
+
+def _add_fragile_alert(recommendations: list[str], level: RobustnessLevel) -> None:
+    """Ajoute alerte fragile si necessaire."""
+    if level == RobustnessLevel.FRAGILE:
         recommendations.append(
             "CRITIQUE: Modele fragile detecte. Ne pas deployer en production "
             "sans renforcement de la robustesse."
         )
 
-    # Analyser les tests problematiques
+
+def _add_test_recommendations(recommendations: list[str], metrics: list[RobustnessMetrics]) -> None:
+    """Ajoute recommandations par type de test."""
     fragile_tests = [m for m in metrics if m.level == RobustnessLevel.FRAGILE]
     warning_tests = [m for m in metrics if m.level == RobustnessLevel.WARNING]
 
@@ -80,16 +92,14 @@ def _generate_recommendations(
         test_names = ", ".join(m.test_name for m in warning_tests)
         recommendations.append(f"Tests warning: {test_names}. Monitoring renforce recommande.")
 
-    # Recommandations specifiques
-    recommendations.extend(_generate_specific_recommendations(metrics))
 
-    if overall_level == RobustnessLevel.ROBUST:
+def _add_robust_recommendation(recommendations: list[str], level: RobustnessLevel) -> None:
+    """Ajoute recommandation si modele robuste."""
+    if level == RobustnessLevel.ROBUST:
         recommendations.append(
             "Modele robuste. Maintenir monitoring regulier et reevaluer "
             "apres chaque reentrainement."
         )
-
-    return recommendations
 
 
 def _generate_specific_recommendations(

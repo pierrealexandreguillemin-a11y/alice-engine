@@ -64,10 +64,22 @@ def calculate_standings(df: pd.DataFrame) -> pd.DataFrame:
     """
     logger.info("Calcul classement réel depuis scores matchs...")
 
+    matches = _extract_unique_matches(df)
+    if matches.empty:
+        return pd.DataFrame()
+
+    standings_data = _compute_all_standings(matches)
+
+    result = pd.DataFrame(standings_data)
+    logger.info(f"  {len(result)} lignes classement générées")
+    return result
+
+
+def _extract_unique_matches(df: pd.DataFrame) -> pd.DataFrame:
+    """Extrait les matchs uniques du DataFrame."""
     if df.empty:
         return pd.DataFrame()
 
-    # Colonnes requises pour extraire matchs
     match_cols = [
         "saison",
         "competition",
@@ -80,67 +92,80 @@ def calculate_standings(df: pd.DataFrame) -> pd.DataFrame:
         "score_ext",
     ]
 
-    # Vérifier colonnes présentes
     missing = [c for c in match_cols if c not in df.columns]
     if missing:
         logger.warning(f"  Colonnes manquantes pour classement: {missing}")
         return pd.DataFrame()
 
-    # Extraire matchs uniques
     matches = df.drop_duplicates(
         subset=["saison", "competition", "division", "groupe", "ronde", "equipe_dom", "equipe_ext"]
     )[match_cols].copy()
 
     logger.info(f"  {len(matches)} matchs uniques")
+    return matches
 
+
+def _compute_all_standings(matches: pd.DataFrame) -> list[dict]:
+    """Calcule tous les classements par groupe."""
     standings_data = []
 
     for (saison, comp, div, groupe), group_matches in matches.groupby(
         ["saison", "competition", "division", "groupe"]
     ):
-        # Stats accumulées par équipe
-        equipe_stats: dict[str, dict[str, Any]] = {}
+        group_standings = _compute_group_standings(group_matches, saison, comp, div, groupe)
+        standings_data.extend(group_standings)
 
-        # Historique confrontations directes
-        h2h: dict[tuple[str, str], int] = {}
+    return standings_data
 
-        for ronde in sorted(group_matches["ronde"].unique()):
-            ronde_matches = group_matches[group_matches["ronde"] == ronde]
 
-            for _, match in ronde_matches.iterrows():
-                _process_match(match, equipe_stats, h2h)
+def _compute_group_standings(
+    group_matches: pd.DataFrame, saison: int, comp: str, div: str, groupe: str
+) -> list[dict]:
+    """Calcule le classement pour un groupe."""
+    equipe_stats: dict[str, dict[str, Any]] = {}
+    h2h: dict[tuple[str, str], int] = {}
+    standings_data = []
 
-            # Calculer classement à cette ronde avec tie-breakers
-            ranking = _apply_tiebreakers(equipe_stats, h2h)
+    for ronde in sorted(group_matches["ronde"].unique()):
+        ronde_matches = group_matches[group_matches["ronde"] == ronde]
+        for _, match in ronde_matches.iterrows():
+            _process_match(match, equipe_stats, h2h)
 
-            nb_equipes = len(ranking)
-            pts_premier = ranking[0][1]["points"] if ranking else 0
-            pts_dernier = ranking[-1][1]["points"] if ranking else 0
+        standings_data.extend(
+            _build_ronde_standings(equipe_stats, h2h, saison, comp, div, groupe, ronde)
+        )
 
-            for position, (equipe, stats) in enumerate(ranking, 1):
-                standings_data.append(
-                    {
-                        "equipe": equipe,
-                        "saison": saison,
-                        "competition": comp,
-                        "division": div,
-                        "groupe": groupe,
-                        "ronde": ronde,
-                        "points_cumules": stats["points"],
-                        "matchs_joues": stats["matchs"],
-                        "victoires": stats["victoires"],
-                        "diff_points_matchs": stats["diff_points_matchs"],
-                        "position": position,
-                        "nb_equipes": nb_equipes,
-                        "ecart_premier": pts_premier - stats["points"],
-                        "ecart_dernier": stats["points"] - pts_dernier,
-                    }
-                )
+    return standings_data
 
-    result = pd.DataFrame(standings_data)
-    logger.info(f"  {len(result)} lignes classement générées")
 
-    return result
+def _build_ronde_standings(
+    equipe_stats: dict, h2h: dict, saison: int, comp: str, div: str, groupe: str, ronde: int
+) -> list[dict]:
+    """Construit le classement pour une ronde."""
+    ranking = _apply_tiebreakers(equipe_stats, h2h)
+    nb_equipes = len(ranking)
+    pts_premier = ranking[0][1]["points"] if ranking else 0
+    pts_dernier = ranking[-1][1]["points"] if ranking else 0
+
+    return [
+        {
+            "equipe": equipe,
+            "saison": saison,
+            "competition": comp,
+            "division": div,
+            "groupe": groupe,
+            "ronde": ronde,
+            "points_cumules": stats["points"],
+            "matchs_joues": stats["matchs"],
+            "victoires": stats["victoires"],
+            "diff_points_matchs": stats["diff_points_matchs"],
+            "position": pos,
+            "nb_equipes": nb_equipes,
+            "ecart_premier": pts_premier - stats["points"],
+            "ecart_dernier": stats["points"] - pts_dernier,
+        }
+        for pos, (equipe, stats) in enumerate(ranking, 1)
+    ]
 
 
 def _process_match(

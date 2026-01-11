@@ -59,25 +59,8 @@ def rollback_to_version(
         return False
 
     current_link = models_dir / "current"
-    if current_link.exists() or current_link.is_symlink():
-        if current_link.is_symlink():
-            current_link.unlink()
-        elif current_link.is_dir():
-            try:
-                os.rmdir(current_link)
-            except OSError:
-                import shutil
-
-                shutil.rmtree(current_link)
-
-    if platform.system() == "Windows":
-        subprocess.run(  # nosec B603, B607 - trusted mklink command for symlink
-            ["cmd", "/c", "mklink", "/J", str(current_link), str(target_dir)],
-            capture_output=True,
-            check=False,
-        )
-    else:
-        current_link.symlink_to(target_dir.name)
+    _remove_existing_link(current_link)
+    _create_symlink(current_link, target_dir)
 
     logger.info(f"Rolled back to version: {target_version}")
     return True
@@ -275,20 +258,8 @@ def save_production_models(
 def _update_current_symlink(models_dir: Path, version_dir: Path, version: str) -> None:
     """Met a jour le symlink 'current' vers la nouvelle version."""
     current_link = models_dir / "current"
-
-    # Supprimer l'ancien lien/dossier
     _remove_existing_link(current_link)
-
-    # Creer le nouveau lien
-    if platform.system() == "Windows":
-        subprocess.run(  # nosec B603, B607 - trusted mklink command for symlink
-            ["cmd", "/c", "mklink", "/J", str(current_link), str(version_dir)],
-            capture_output=True,
-            check=False,
-        )
-    else:
-        current_link.symlink_to(version_dir.name)
-
+    _create_symlink(current_link, version_dir)
     logger.info(f"\n  Updated 'current' -> {version}")
 
 
@@ -304,3 +275,15 @@ def _remove_existing_link(current_link: Path) -> None:
             os.rmdir(current_link)
         except OSError:
             pass
+
+
+def _create_symlink(link_path: Path, target_path: Path) -> None:
+    """Cree un symlink/junction vers le dossier cible."""
+    if platform.system() == "Windows":
+        subprocess.run(  # nosec B603, B607 - trusted mklink command for symlink
+            ["cmd", "/c", "mklink", "/J", str(link_path), str(target_path)],
+            capture_output=True,
+            check=False,
+        )
+    else:
+        link_path.symlink_to(target_path.name)

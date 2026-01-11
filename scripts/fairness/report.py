@@ -36,12 +36,24 @@ def _generate_recommendations(
     """Genere des recommandations basees sur les metriques."""
     recommendations = []
 
-    if overall_level == BiasLevel.CRITICAL:
+    _add_critical_alert(recommendations, overall_level)
+    _add_group_recommendations(recommendations, metrics)
+    recommendations.extend(_generate_dir_recommendations(metrics))
+    _add_default_recommendation(recommendations, overall_level)
+
+    return recommendations
+
+
+def _add_critical_alert(recommendations: list[str], level: BiasLevel) -> None:
+    """Ajoute alerte critique si necessaire."""
+    if level == BiasLevel.CRITICAL:
         recommendations.append(
             "URGENT: Biais critique detecte. Suspendre deploiement et investiguer."
         )
 
-    # Analyser les groupes problematiques
+
+def _add_group_recommendations(recommendations: list[str], metrics: list[BiasMetrics]) -> None:
+    """Ajoute recommandations par groupe."""
     critical_groups = [m for m in metrics if m.level == BiasLevel.CRITICAL]
     warning_groups = [m for m in metrics if m.level == BiasLevel.WARNING]
 
@@ -57,13 +69,11 @@ def _generate_recommendations(
             f"Groupes a surveiller: {group_names}. Monitoring renforce recommande."
         )
 
-    # Recommandations specifiques
-    recommendations.extend(_generate_dir_recommendations(metrics))
 
-    if overall_level == BiasLevel.ACCEPTABLE and not recommendations:
+def _add_default_recommendation(recommendations: list[str], level: BiasLevel) -> None:
+    """Ajoute recommandation par defaut si aucun probleme."""
+    if level == BiasLevel.ACCEPTABLE and not recommendations:
         recommendations.append("Aucun biais significatif detecte. Maintenir monitoring regulier.")
-
-    return recommendations
 
 
 def _generate_dir_recommendations(metrics: list[BiasMetrics]) -> list[str]:

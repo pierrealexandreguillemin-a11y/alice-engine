@@ -91,17 +91,26 @@ def _parse_ajournement_result(text: str) -> tuple[float, float, str] | None:
     """Parse ajournements."""
     if text in ("A", "AJ.", "ADJ"):
         return (0.0, 0.0, "ajournement")
-    if "A" in text and "-" in text:
-        parts = text.replace(" ", "").split("-")
-        if len(parts) == 2:
-            left, right = parts
-            if left == "1" and right == "A":
-                return (1.0, 0.0, "victoire_blanc_ajournement")
-            if left == "A" and right == "1":
-                return (0.0, 1.0, "victoire_noir_ajournement")
-            if left == "A" and right == "A":
-                return (0.0, 0.0, "ajournement")
-    return None
+
+    if "A" not in text or "-" not in text:
+        return None
+
+    return _parse_ajournement_score(text)
+
+
+def _parse_ajournement_score(text: str) -> tuple[float, float, str] | None:
+    """Parse score d'ajournement."""
+    parts = text.replace(" ", "").split("-")
+    if len(parts) != 2:
+        return None
+
+    left, right = parts
+    ajournement_map = {
+        ("1", "A"): (1.0, 0.0, "victoire_blanc_ajournement"),
+        ("A", "1"): (0.0, 1.0, "victoire_noir_ajournement"),
+        ("A", "A"): (0.0, 0.0, "ajournement"),
+    }
+    return ajournement_map.get((left, right))
 
 
 def _parse_forfait_result(text: str) -> tuple[float, float, str] | None:

@@ -28,21 +28,37 @@ def print_report(
     issues: list[str],
 ) -> None:
     """Print full architecture report."""
+    _print_coupling_section(coupling_data)
+    _print_global_metrics(files, total_deps, avg_deps, max_deps, circular)
+    _print_score_section(score, issues)
+    _print_recommendations(avg_deps, max_deps, circular)
+
+
+def _print_coupling_section(coupling_data: list[dict]) -> None:
+    """Print coupling metrics section."""
     print_header("METRIQUES COUPLING")
     print("\nTOP 10 FICHIERS COUPLES:\n")
 
     for i, item in enumerate(coupling_data[:10], 1):
-        if item["total"] > 15:
-            status = "CRITIQUE"
-        elif item["total"] > 8:
-            status = "WARNING"
-        else:
-            status = "OK"
-
+        status = _get_coupling_status(item["total"])
         print(f"{i}. [{status}] {item['file']}")
         print(f"   Ca: {item['afferent']} | Ce: {item['efferent']} | Total: {item['total']}")
         print(f"   Instability: {item['instability']}%\n")
 
+
+def _get_coupling_status(total: int) -> str:
+    """Determine coupling status."""
+    if total > 15:
+        return "CRITIQUE"
+    if total > 8:
+        return "WARNING"
+    return "OK"
+
+
+def _print_global_metrics(
+    files: list[str], total_deps: int, avg_deps: float, max_deps: int, circular: list[list[str]]
+) -> None:
+    """Print global metrics section."""
     print_header("METRIQUES GLOBALES")
     print(f"\nFichiers analyses: {len(files)}")
     print(f"Dependances totales: {total_deps}")
@@ -55,24 +71,28 @@ def print_report(
         for cycle in circular:
             print(f"  - {' <-> '.join(cycle)}")
 
+
+def _print_score_section(score: int, issues: list[str]) -> None:
+    """Print score section."""
     print_header("SCORE SANTE ARCHITECTURE")
     print(f"\nScore: {score}/100\n")
-
-    if score >= 80:
-        print("[EXCELLENT] Architecture saine")
-    elif score >= 60:
-        print("[MOYEN] Ameliorations recommandees")
-    elif score >= 40:
-        print("[FAIBLE] Refactoring requis")
-    else:
-        print("[CRITIQUE] Spaghetti code detecte!")
+    print(_get_score_label(score))
 
     if issues:
         print("\nProblemes detectes:")
         for issue in issues:
             print(f"  - {issue}")
 
-    _print_recommendations(avg_deps, max_deps, circular)
+
+def _get_score_label(score: int) -> str:
+    """Get score label."""
+    if score >= 80:
+        return "[EXCELLENT] Architecture saine"
+    if score >= 60:
+        return "[MOYEN] Ameliorations recommandees"
+    if score >= 40:
+        return "[FAIBLE] Refactoring requis"
+    return "[CRITIQUE] Spaghetti code detecte!"
 
 
 def _print_recommendations(avg_deps: float, max_deps: int, circular: list[list[str]]) -> None:

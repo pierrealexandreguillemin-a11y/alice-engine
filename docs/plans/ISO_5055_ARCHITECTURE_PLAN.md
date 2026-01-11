@@ -1,206 +1,189 @@
 # Plan 100% Conformite ISO 5055 - Architecture
 
 Document ID: ALICE-PLAN-ISO5055-001
-Version: 1.0.0
+Version: 2.0.0
 Date: 2026-01-11
 Auteur: ALICE Engine Team
-
-## P0 - CRITIQUE: Conformite Rangement Documents
-
-**AVANT TOUTE IMPLEMENTATION:**
-- [ ] Verifier structure `docs/` conforme ISO 15289
-- [ ] Plans dans `docs/plans/`
-- [ ] Rapports dans `docs/iso/` ou `reports/`
-- [ ] Aucun fichier technique a la racine (sauf config)
-
----
+Statut: **COMPLETE**
 
 ## Resume Executif
 
-| Categorie | Fichiers | Priorite |
-|-----------|----------|----------|
-| Fichiers >300 lignes | 6 | P1 |
-| Fonctions rang C (11-16) | 6 | P2 |
-| Modules xenon rang C | 5 | P3 |
+| Categorie | Avant | Apres | Statut |
+|-----------|-------|-------|--------|
+| Fichiers >300 lignes | 6 | 0 | COMPLETE |
+| Fonctions rang C (11-20) | 18 | 0 | COMPLETE |
+| Fonctions rang D (21+) | 0 | 0 | MAINTENU |
+| Complexite moyenne | B(8.2) | B(7.6) | AMELIORE |
 
-**Objectif:** Score 90% -> 100%
-
----
-
-## Phase 1: Fichiers >300 lignes (Priorite P1)
-
-### 1.1 `scripts/comparison/statistical_comparison.py` (421 lignes)
-
-**Split propose:**
-```
-scripts/comparison/
-    __init__.py           # Re-export (~50 lignes)
-    types.py              # ModelComparison dataclass (~40 lignes)
-    core.py               # compare_models(), _compute_metrics() (~120 lignes)
-    baseline.py           # compare_with_baseline() (~70 lignes)
-    report.py             # save_comparison_report() (~100 lignes)
-    pipeline.py           # full_comparison_pipeline() (~90 lignes)
-```
-
-### 1.2 `scripts/training/optuna_tuning.py` (337 lignes)
-
-**Split propose:**
-```
-scripts/training/
-    optuna_core.py        # optimize_hyperparameters() (~100 lignes)
-    optuna_objectives.py  # Dispatch table 3 objectives (~200 lignes)
-```
-
-### 1.3 `scripts/autogluon/iso_compliance.py` (331 lignes)
-
-**Split propose:**
-```
-scripts/autogluon/iso_compliance/
-    __init__.py           # Re-export (~40 lignes)
-    types.py              # 3 dataclasses (~80 lignes)
-    model_card.py         # generate_model_card() (~60 lignes)
-    robustness.py         # validate_robustness() (~70 lignes)
-    fairness.py           # validate_fairness() (~70 lignes)
-```
-
-### 1.4 `scripts/ensemble/stacking.py` (316 lignes) - P1-low
-
-Extraire `oof_compute.py` (~120 lignes).
-
-### 1.5 `scripts/features/ce/transferability.py` (313 lignes) - P1-low
-
-Dispatch table pour scenarios.
-
-### 1.6 `scripts/model_registry/validation.py` (301 lignes) - P1-low
-
-Extraire `retention.py` (~80 lignes).
+**Score conformite: 100%**
 
 ---
 
-## Phase 2: Fonctions complexite C (Priorite P2)
+## Phase 1: Fichiers >300 lignes - COMPLETE
 
-### 2.1 `_classify_urgency` (16) - features/ce/urgency.py
+### Commits
 
-**Pattern: Dispatch table avec checkers**
+- `c453810` - refactor(iso5055): split iso_compliance, optuna_tuning, statistical_comparison
+- `770c582` - refactor(architecture): split large modules for ISO 5055 compliance
+
+### Modules splits
+
+| Fichier original | Lignes | Action | Nouveaux modules |
+|------------------|--------|--------|------------------|
+| statistical_comparison.py | 421 | Split | types.py, core.py, baseline.py, report.py |
+| optuna_tuning.py | 337 | Split | optuna_core.py, optuna_objectives.py |
+| iso_compliance.py | 331 | Split | types.py, model_card.py, robustness.py, fairness.py, validator.py |
+| bias_detection.py | 380 | Split | metrics.py, checks.py, report.py, thresholds.py, types.py |
+| adversarial_tests.py | 450 | Split | types.py, metrics.py, perturbations.py, report.py, thresholds.py |
+| stacking.py | 316 | Split | oof_compute.py, predictor.py |
+
+---
+
+## Phase 2: Fonctions complexite C - COMPLETE
+
+### Commit
+
+- `79da708` - refactor(iso5055): reduce cyclomatic complexity C-rank functions (18 -> 11)
+- *(session actuelle)* - refactor(iso5055): eliminate remaining C-rank functions (11 -> 0)
+
+### Fonctions refactorisees
+
+| Fonction | Fichier | Avant | Apres | Helpers extraits |
+|----------|---------|-------|-------|------------------|
+| `_classify_urgency` | urgency.py | C(16) | B(9) | `_is_in_danger`, `_is_in_race` |
+| `extract_feature_importance` | artifacts.py | C(17) | A(3) | `_get_raw_importances`, `_build_importance_dict`, `_normalize_importance` |
+| `save_production_models` | versioning.py | C(16) | B(10) | `_update_current_symlink`, `_remove_existing_link`, `_create_symlink` |
+| `merge_team_enjeu` | merge_helpers.py | C(15) | A(4) | `_merge_single_team_enjeu`, `_get_enjeu_cols`, `_execute_enjeu_merge` |
+| `calculate_selection_patterns` | patterns.py | C(14) | B(6) | `_process_color_patterns`, `_analyze_player_pattern`, `_classify_role`, `_deduplicate_patterns` |
+| `extract_metadata_from_path` | compositions.py | C(13) | A(2) | `_parse_saison`, `_parse_competition`, `_parse_ligue_regionale`, `_parse_division`, `_parse_groupe` |
+| `print_report` | architecture/report.py | C(11) | A(4) | `_print_coupling_section`, `_get_coupling_status`, `_print_global_metrics`, `_print_score_section`, `_get_score_label` |
+| `_generate_recommendations` (fairness) | fairness/report.py | C(12) | A(4) | `_add_critical_alert`, `_add_group_recommendations`, `_add_default_recommendation` |
+| `calculate_recent_form` | performance.py | C(11) | A(4) | `_filter_played_games`, `_collect_form_data`, `_compute_player_form`, `_compute_tendance`, `_aggregate_form_data` |
+| `extract_player_monthly_pattern` | reliability.py | C(12) | A(4) | `_prepare_dated_df`, `_collect_monthly_stats`, `_build_monthly_pivot`, `_merge_monthly_stats` |
+| `calculate_standings` | standings.py | C(11) | A(4) | `_extract_unique_matches`, `_compute_all_standings`, `_compute_group_standings`, `_build_ronde_standings` |
+| `calculate_elo_trajectory` | elo_trajectory.py | C(12) | A(4) | `_prepare_elo_df`, `_collect_trajectory_data`, `_compute_player_trajectory`, `_classify_trajectory`, `_aggregate_trajectory_data` |
+| `calculate_pressure_performance` | pressure.py | C(13) | A(4) | `_prepare_pressure_df`, `_is_decisive`, `_collect_pressure_stats`, `_build_pressure_result`, `_compute_player_pressure`, `_classify_pressure_type` |
+| `calculate_presence_features` | presence.py | C(12) | A(4) | `_filter_by_saison`, `_collect_presence_data`, `_collect_saison_presence`, `_compute_player_presence`, `_classify_regularite`, `_aggregate_presence_data` |
+| `_parse_ajournement_result` | parsing_utils.py | C(11) | A(3) | `_parse_ajournement_score` (dispatch table) |
+| `parse_player_page` | players.py | C(11) | A(3) | `_read_html_soup`, `_parse_player_row`, `_parse_name`, `_extract_id_ffe` |
+| `_generate_recommendations` (robustness) | robustness/report.py | C(11) | A(4) | `_add_fragile_alert`, `_add_test_recommendations`, `_add_robust_recommendation` |
+
+---
+
+## Phase 3: Corrections qualite
+
+### Code duplication corrigee
+
+| Issue | Fichier | Action |
+|-------|---------|--------|
+| Duplication symlink | versioning.py | Factorisation via `_create_symlink()` utilise par `rollback_to_version` et `_update_current_symlink` |
+| Duplication suppression link | versioning.py | Factorisation via `_remove_existing_link()` |
+
+### Complexite deplacee corrigee
+
+| Fonction | Probleme | Solution |
+|----------|----------|----------|
+| `_merge_single_team_enjeu` | B(10) cree | Split en `_get_enjeu_cols` + `_execute_enjeu_merge` |
+
+---
+
+## Validation finale
+
+### Tests
+
+```
+749 passed, 1 skipped (Windows subprocess issue)
+```
+
+### Complexite
+
+```
+Fonctions C-rank: 0
+Fonctions D-rank: 0
+Moyenne: B (7.6)
+```
+
+### Fichiers
+
+```
+Fichiers >300 lignes: 0
+```
+
+---
+
+## Resultats
+
+| Metrique | Avant | Apres | Amelioration |
+|----------|-------|-------|--------------|
+| Fichiers >300 lignes | 6 | 0 | -6 |
+| Fonctions rang C | 18 | 0 | -18 |
+| Fonctions rang D | 0 | 0 | = |
+| Helpers extraits | 0 | 60+ | +60 |
+| Tests passants | 749 | 749 | = |
+| **Score conformite** | 90% | **100%** | +10% |
+
+---
+
+## Patterns appliques
+
+### 1. Dispatch Table
 ```python
-URGENCY_CHECKS = [_check_aucune, _check_critique, _check_haute]
-
-def classify_urgency(ctx: UrgencyContext) -> str:
-    for check in URGENCY_CHECKS:
-        result = check(ctx)
-        if result is not None:
-            return result
-    return "normale"
+RESULT_MAP = {("1", "A"): (1.0, 0.0, "victoire_blanc_ajournement"), ...}
+return RESULT_MAP.get((left, right))
 ```
-**Reduction:** C(16) -> B(6) + A(3) helpers
 
-### 2.2 `save_production_models` (16) - model_registry/versioning.py
-
-**Pattern: Fonctions step**
+### 2. Step Functions
 ```python
-def save_production_models(...) -> Path:
-    environment = _step1_collect_environment(logger)
-    data_lineage = _step2_compute_lineage(...)
-    artifacts = _step3_save_artifacts(...)
-    ...
+def main_function():
+    step1_result = _step1_prepare()
+    step2_result = _step2_process(step1_result)
+    return _step3_finalize(step2_result)
 ```
-**Reduction:** C(16) -> B(8) + A(3-4) steps
 
-### 2.3 `extract_feature_importance` (17) - model_registry/artifacts.py
-
-**Pattern: Strategy dispatch**
+### 3. Guard Clauses + Helpers
 ```python
-IMPORTANCE_EXTRACTORS = {
-    "CatBoost": _get_catboost_importance,
-    "XGBoost": _get_xgboost_importance,
-    "LightGBM": _get_lightgbm_importance,
-}
+def complex_function():
+    if not _validate_input(x):
+        return default
+    data = _collect_data(x)
+    return _aggregate_result(data)
 ```
-**Reduction:** C(17) -> A(4) + A(3) extractors
 
-### 2.4 `calculate_selection_patterns` (14) - features/ali/patterns.py
-
-**Pattern: Extraction helpers**
+### 4. Classification Helpers
 ```python
-def _classify_role(taux, flexibilite, nb_echiquiers) -> str: ...
-def _compute_player_pattern(joueur, group, ...) -> dict: ...
-```
-**Reduction:** C(14) -> B(7) + A(4) helpers
-
----
-
-## Phase 3: Modules xenon rang C (Priorite P3)
-
-| Module | Lignes | Action |
-|--------|--------|--------|
-| `features/advanced/elo_trajectory.py` | 139 | Extraire `_process_player_trajectory()` |
-| `features/advanced/pressure.py` | 144 | Extraire `_is_decisive()`, `_classify_pressure_type()` |
-| `features/ali/patterns.py` | 131 | Couvert en 2.4 |
-| `features/ali/presence.py` | 132 | Extraire `_calculate_player_presence()` |
-| `features/ce/urgency.py` | 177 | Couvert en 2.1 |
-
----
-
-## Ordre d'implementation
-
-```
-P0 - Conformite documents (immediat)
-[ ] Verifier structure docs/
-[ ] Deplacer fichiers mal places
-
-P1 - Fichiers >300 lignes
-[1] statistical_comparison.py    421 -> 5 modules
-[2] optuna_tuning.py            337 -> 2 modules
-[3] iso_compliance.py           331 -> 5 modules
-[4] stacking.py                 316 -> 2 modules
-[5] transferability.py          313 -> 2 modules
-[6] validation.py               301 -> 2 modules
-
-P2 - Complexite C
-[7] extract_feature_importance   C(17) -> A(4)
-[8] _classify_urgency           C(16) -> B(6)
-[9] save_production_models      C(16) -> B(8)
-[10] calculate_selection_patterns C(14) -> B(7)
-
-P3 - Xenon C modules
-[11-14] Extraction helpers
+def _classify_type(value: float) -> str:
+    if value > THRESHOLD_HIGH:
+        return "high"
+    if value < THRESHOLD_LOW:
+        return "low"
+    return "normal"
 ```
 
 ---
 
-## Validation
+## Maintenance
 
-Apres chaque module:
-```bash
-# Tests
-pytest tests/ --cov --tb=short
+Pour maintenir la conformite:
 
-# Complexite
-python -m xenon scripts/ --max-average B --max-modules B --max-absolute C
+1. **Pre-commit hooks** actifs verifient:
+   - Ruff (lint + format)
+   - MyPy (types)
+   - Bandit (securite)
 
-# Lignes
-wc -l scripts/**/*.py | sort -rn | head -10
+2. **Pre-push hooks** verifient:
+   - Xenon (complexite)
+   - Couverture tests >70%
 
-# Lint
-python -m ruff check scripts/
-```
-
----
-
-## Resultat attendu
-
-| Metrique | Avant | Apres |
-|----------|-------|-------|
-| Fichiers >300 lignes | 6 | 0 |
-| Fonctions rang C | 18 | <10 |
-| Fonctions rang D | 0 | 0 |
-| Modules xenon C | 5 | 0 |
-| **Score conformite** | 90% | **100%** |
+3. **Regles**:
+   - Aucune fonction >10 complexite cyclomatique
+   - Aucun fichier >300 lignes
+   - Helpers avec prefix `_` pour logique interne
 
 ---
 
 ## References ISO
 
-- ISO/IEC 5055:2021 - Code Quality (SRP, <300 lignes)
+- ISO/IEC 5055:2021 - Code Quality (SRP, <300 lignes, complexite <10)
 - ISO/IEC 15289:2019 - Documentation Structure
 - ISO/IEC 42010:2022 - Architecture Description
+- ISO/IEC 29119:2022 - Software Testing

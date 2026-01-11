@@ -50,63 +50,83 @@ def calculate_recent_form(df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
-    # Filtrer parties jouées
-    parties_jouees = df[
+    parties_jouees = _filter_played_games(df)
+    forme_data = _collect_form_data(parties_jouees, window)
+    result = _aggregate_form_data(forme_data)
+
+    logger.info(f"  {len(result)} joueurs avec forme récente")
+    return result
+
+
+def _filter_played_games(df: pd.DataFrame) -> pd.DataFrame:
+    """Filtre les parties effectivement jouees."""
+    parties = df[
         ~df["type_resultat"].isin(["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"])
     ].copy()
+    if "date" in parties.columns:
+        parties = parties.sort_values("date")
+    return parties
 
-    if "date" in parties_jouees.columns:
-        parties_jouees = parties_jouees.sort_values("date")
 
+def _collect_form_data(parties: pd.DataFrame, window: int) -> list[dict]:
+    """Collecte les donnees de forme par joueur."""
     forme_data = []
 
     for couleur in ["blanc", "noir"]:
         nom_col = f"{couleur}_nom"
         resultat_col = f"resultat_{couleur}"
 
-        if nom_col not in parties_jouees.columns or resultat_col not in parties_jouees.columns:
+        if nom_col not in parties.columns or resultat_col not in parties.columns:
             continue
 
-        for joueur, group in parties_jouees.groupby(nom_col):
+        for joueur, group in parties.groupby(nom_col):
             if len(group) >= window:
-                last_n = group.tail(window)
-                forme = last_n[resultat_col].mean()
+                entry = _compute_player_form(joueur, group, window, resultat_col)
+                forme_data.append(entry)
 
-                # Calcul tendance (première moitié vs seconde moitié)
-                mid = window // 2
-                first_half = last_n.head(mid)[resultat_col].mean()
-                second_half = last_n.tail(mid)[resultat_col].mean()
+    return forme_data
 
-                if second_half > first_half + 0.1:
-                    tendance = "hausse"
-                elif second_half < first_half - 0.1:
-                    tendance = "baisse"
-                else:
-                    tendance = "stable"
 
-                forme_data.append(
-                    {
-                        "joueur_nom": joueur,
-                        "forme_recente": forme,
-                        "nb_matchs_forme": len(last_n),
-                        "forme_tendance": tendance,
-                    }
-                )
+def _compute_player_form(joueur: str, group: pd.DataFrame, window: int, res_col: str) -> dict:
+    """Calcule la forme d'un joueur."""
+    last_n = group.tail(window)
+    forme = last_n[res_col].mean()
+    tendance = _compute_tendance(last_n, window, res_col)
 
+    return {
+        "joueur_nom": joueur,
+        "forme_recente": forme,
+        "nb_matchs_forme": len(last_n),
+        "forme_tendance": tendance,
+    }
+
+
+def _compute_tendance(last_n: pd.DataFrame, window: int, res_col: str) -> str:
+    """Calcule la tendance (hausse/baisse/stable)."""
+    mid = window // 2
+    first_half = last_n.head(mid)[res_col].mean()
+    second_half = last_n.tail(mid)[res_col].mean()
+
+    if second_half > first_half + 0.1:
+        return "hausse"
+    if second_half < first_half - 0.1:
+        return "baisse"
+    return "stable"
+
+
+def _aggregate_form_data(forme_data: list[dict]) -> pd.DataFrame:
+    """Agrege les donnees de forme."""
     result = pd.DataFrame(forme_data)
     if len(result) > 0:
-        # Agréger si joueur joue blanc ET noir
         result = (
             result.groupby("joueur_nom")
             .agg(
                 forme_recente=("forme_recente", "mean"),
                 nb_matchs_forme=("nb_matchs_forme", "sum"),
-                forme_tendance=("forme_tendance", "first"),  # Prendre la première
+                forme_tendance=("forme_tendance", "first"),
             )
             .reset_index()
         )
-
-    logger.info(f"  {len(result)} joueurs avec forme récente")
     return result
 
 

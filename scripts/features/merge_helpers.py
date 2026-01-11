@@ -121,27 +121,42 @@ def _merge_single_team_enjeu(
     col: str,
 ) -> pd.DataFrame:
     """Merge enjeu pour une equipe (dom ou ext)."""
-    if col not in result.columns or "saison" not in result.columns:
-        return result
-
-    merge_cols = ["zone_enjeu", "niveau_hierarchique", "position"]
-    cols_exist = [c for c in merge_cols if c in team_enjeu.columns]
+    cols_exist = _get_enjeu_cols(result, team_enjeu, col)
     if not cols_exist:
         return result
 
     merge_df = team_enjeu.rename(columns={c: f"{c}_{suffix}" for c in cols_exist})
+    return _execute_enjeu_merge(result, merge_df, suffix, col, cols_exist)
+
+
+def _get_enjeu_cols(result: pd.DataFrame, team_enjeu: pd.DataFrame, col: str) -> list[str]:
+    """Recupere les colonnes d'enjeu disponibles."""
+    if col not in result.columns or "saison" not in result.columns:
+        return []
+    merge_cols = ["zone_enjeu", "niveau_hierarchique", "position"]
+    return [c for c in merge_cols if c in team_enjeu.columns]
+
+
+def _execute_enjeu_merge(
+    result: pd.DataFrame,
+    merge_df: pd.DataFrame,
+    suffix: str,
+    col: str,
+    cols_exist: list[str],
+) -> pd.DataFrame:
+    """Execute le merge d'enjeu."""
     merge_keys = _get_merge_keys(result, merge_df)
+    left_keys = [col, "saison"] + (["ronde"] if "ronde" in result.columns else [])
 
     result = result.merge(
         merge_df[merge_keys + [f"{c}_{suffix}" for c in cols_exist]].drop_duplicates(),
-        left_on=[col, "saison"] + (["ronde"] if "ronde" in result.columns else []),
+        left_on=left_keys,
         right_on=merge_keys,
         how="left",
     )
 
     if "equipe" in result.columns:
         result = result.drop(columns=["equipe"])
-
     return result
 
 

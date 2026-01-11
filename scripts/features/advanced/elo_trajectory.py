@@ -62,63 +62,86 @@ def calculate_elo_trajectory(df: pd.DataFrame, window: int = 6) -> pd.DataFrame:
     """
     logger.info(f"Calcul trajectoire Elo (window={window})...")
 
+    df_dated = _prepare_elo_df(df)
+    if df_dated.empty:
+        return pd.DataFrame()
+
+    trajectory_data = _collect_trajectory_data(df_dated, window)
+    result = _aggregate_trajectory_data(trajectory_data)
+
+    logger.info(f"  {len(result)} joueurs avec trajectoire Elo")
+    return result
+
+
+def _prepare_elo_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepare le DataFrame pour calcul trajectoire."""
     if df.empty:
         return pd.DataFrame()
 
-    # Besoin de dates pour ordonner
     if "date" not in df.columns:
         logger.warning("  Colonne date manquante pour trajectoire Elo")
         return pd.DataFrame()
 
     df_dated = df[df["date"].notna()].copy()
     df_dated["date"] = pd.to_datetime(df_dated["date"])
+    return df_dated
 
+
+def _collect_trajectory_data(df_dated: pd.DataFrame, window: int) -> list[dict]:
+    """Collecte les donnees de trajectoire par joueur."""
     trajectory_data = []
 
     for couleur in ["blanc", "noir"]:
-        nom_col = f"{couleur}_nom"
-        elo_col = f"{couleur}_elo"
+        nom_col, elo_col = f"{couleur}_nom", f"{couleur}_elo"
 
         if nom_col not in df_dated.columns or elo_col not in df_dated.columns:
             continue
 
         for joueur, group in df_dated.groupby(nom_col):
-            if len(group) < window:
-                continue
+            entry = _compute_player_trajectory(joueur, group, window, elo_col)
+            if entry:
+                trajectory_data.append(entry)
 
-            group_sorted = group.sort_values("date")
-            elos = group_sorted[elo_col].dropna().tolist()
+    return trajectory_data
 
-            if len(elos) < window:
-                continue
 
-            elo_debut = elos[0]
-            elo_fin = elos[-1]
-            delta = elo_fin - elo_debut
+def _compute_player_trajectory(
+    joueur: str, group: pd.DataFrame, window: int, elo_col: str
+) -> dict | None:
+    """Calcule la trajectoire d'un joueur."""
+    if len(group) < window:
+        return None
 
-            if delta > 50:
-                trajectory = "progression"
-                momentum = min(1.0, delta / 200)  # Normalize
-            elif delta < -50:
-                trajectory = "regression"
-                momentum = max(-1.0, delta / 200)
-            else:
-                trajectory = "stable"
-                momentum = 0.0
+    elos = group.sort_values("date")[elo_col].dropna().tolist()
+    if len(elos) < window:
+        return None
 
-            trajectory_data.append(
-                {
-                    "joueur_nom": joueur,
-                    "elo_debut": elo_debut,
-                    "elo_fin": elo_fin,
-                    "elo_delta": delta,
-                    "elo_trajectory": trajectory,
-                    "momentum": momentum,
-                    "nb_matchs": len(elos),
-                }
-            )
+    elo_debut, elo_fin = elos[0], elos[-1]
+    delta = elo_fin - elo_debut
+    trajectory, momentum = _classify_trajectory(delta)
 
-    # Dédupliquer (joueur peut jouer blanc ET noir)
+    return {
+        "joueur_nom": joueur,
+        "elo_debut": elo_debut,
+        "elo_fin": elo_fin,
+        "elo_delta": delta,
+        "elo_trajectory": trajectory,
+        "momentum": momentum,
+        "nb_matchs": len(elos),
+    }
+
+
+def _classify_trajectory(delta: float) -> tuple[str, float]:
+    """Classifie la trajectoire et calcule le momentum."""
+    if delta > 50:
+        return "progression", min(1.0, delta / 200)
+    if delta < -50:
+        return "regression", max(-1.0, delta / 200)
+    return "stable", 0.0
+
+
+def _aggregate_trajectory_data(trajectory_data: list[dict]) -> pd.DataFrame:
+    """Agrege les donnees de trajectoire."""
     result = pd.DataFrame(trajectory_data)
     if not result.empty:
         result = (
@@ -133,7 +156,4 @@ def calculate_elo_trajectory(df: pd.DataFrame, window: int = 6) -> pd.DataFrame:
             )
             .reset_index()
         )
-
-    logger.info(f"  {len(result)} joueurs avec trajectoire Elo")
-
     return result

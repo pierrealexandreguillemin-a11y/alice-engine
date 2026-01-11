@@ -165,57 +165,82 @@ def extract_player_monthly_pattern(df: pd.DataFrame) -> pd.DataFrame:
     """
     logger.info("Extraction patterns mensuels joueurs...")
 
+    df_dated = _prepare_dated_df(df)
+    if df_dated.empty:
+        return pd.DataFrame()
+
+    monthly_stats = _collect_monthly_stats(df_dated)
+    result = _merge_monthly_stats(monthly_stats)
+
+    logger.info(f"  {len(result)} joueurs avec patterns mensuels")
+    return result
+
+
+def _prepare_dated_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepare le DataFrame avec dates."""
     if df.empty or "date" not in df.columns:
         logger.warning("  Colonnes date manquantes, skip patterns mensuels")
         return pd.DataFrame()
 
-    # Filtrer matchs avec date
     df_dated = df[df["date"].notna()].copy()
     if len(df_dated) == 0:
         logger.warning("  Pas de dates disponibles, skip patterns mensuels")
         return pd.DataFrame()
 
     df_dated["mois"] = pd.to_datetime(df_dated["date"]).dt.month
+    return df_dated
 
-    # Collecter pour blancs et noirs
+
+def _collect_monthly_stats(df_dated: pd.DataFrame) -> list[pd.DataFrame]:
+    """Collecte stats mensuelles par couleur."""
     monthly_stats = []
 
     for couleur in ["blanc", "noir"]:
-        nom_col = f"{couleur}_nom"
-        if nom_col not in df_dated.columns:
-            continue
+        pivot = _build_monthly_pivot(df_dated, couleur)
+        if pivot is not None:
+            monthly_stats.append(pivot)
 
-        matchs_joues = ~df_dated["type_resultat"].isin(
-            ["non_joue", f"forfait_{couleur}", "double_forfait"]
-        )
+    return monthly_stats
 
-        # Pivot par mois
-        df_couleur = df_dated[[nom_col, "mois"]].copy()
-        df_couleur["joue"] = matchs_joues.astype(int)
 
-        pivot = df_couleur.pivot_table(
-            values="joue", index=nom_col, columns="mois", aggfunc="mean", fill_value=0
-        )
-        pivot = pivot.reset_index().rename(columns={nom_col: "joueur_nom"})
+def _build_monthly_pivot(df_dated: pd.DataFrame, couleur: str) -> pd.DataFrame | None:
+    """Construit le pivot mensuel pour une couleur."""
+    nom_col = f"{couleur}_nom"
+    if nom_col not in df_dated.columns:
+        return None
 
-        # Renommer colonnes mois
-        pivot.columns = ["joueur_nom"] + [f"dispo_mois_{m}" for m in pivot.columns[1:]]
-        monthly_stats.append(pivot)
+    matchs_joues = ~df_dated["type_resultat"].isin(
+        ["non_joue", f"forfait_{couleur}", "double_forfait"]
+    )
 
-    # Fusionner (moyenne blanc/noir)
-    if len(monthly_stats) == 2:
-        result = monthly_stats[0].merge(
-            monthly_stats[1], on="joueur_nom", how="outer", suffixes=("_b", "_n")
-        )
-        # Moyenne des deux couleurs
-        for m in range(1, 13):
-            col_b = f"dispo_mois_{m}_b"
-            col_n = f"dispo_mois_{m}_n"
-            if col_b in result.columns and col_n in result.columns:
-                result[f"dispo_mois_{m}"] = result[[col_b, col_n]].mean(axis=1)
-                result = result.drop(columns=[col_b, col_n])
+    df_couleur = df_dated[[nom_col, "mois"]].copy()
+    df_couleur["joue"] = matchs_joues.astype(int)
 
-        logger.info(f"  {len(result)} joueurs avec patterns mensuels")
-        return result
+    pivot = df_couleur.pivot_table(
+        values="joue", index=nom_col, columns="mois", aggfunc="mean", fill_value=0
+    )
+    pivot = pivot.reset_index().rename(columns={nom_col: "joueur_nom"})
+    pivot.columns = ["joueur_nom"] + [f"dispo_mois_{m}" for m in pivot.columns[1:]]
 
-    return monthly_stats[0] if monthly_stats else pd.DataFrame()
+    return pivot
+
+
+def _merge_monthly_stats(monthly_stats: list[pd.DataFrame]) -> pd.DataFrame:
+    """Fusionne les stats mensuelles blanc/noir."""
+    if not monthly_stats:
+        return pd.DataFrame()
+
+    if len(monthly_stats) == 1:
+        return monthly_stats[0]
+
+    result = monthly_stats[0].merge(
+        monthly_stats[1], on="joueur_nom", how="outer", suffixes=("_b", "_n")
+    )
+
+    for m in range(1, 13):
+        col_b, col_n = f"dispo_mois_{m}_b", f"dispo_mois_{m}_n"
+        if col_b in result.columns and col_n in result.columns:
+            result[f"dispo_mois_{m}"] = result[[col_b, col_n]].mean(axis=1)
+            result = result.drop(columns=[col_b, col_n])
+
+    return result

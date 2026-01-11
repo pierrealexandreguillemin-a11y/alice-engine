@@ -67,78 +67,89 @@ def calculate_pressure_performance(df: pd.DataFrame, min_games: int = 3) -> pd.D
     if df.empty:
         return pd.DataFrame()
 
+    parties = _prepare_pressure_df(df)
+    pressure_stats = _collect_pressure_stats(parties)
+    result = _build_pressure_result(pressure_stats, min_games)
+
+    logger.info(f"  {len(result)} joueurs avec stats pression")
+    return result
+
+
+def _prepare_pressure_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Prepare le DataFrame avec flag decisif."""
     parties = df[
         ~df["type_resultat"].isin(["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"])
     ].copy()
+    parties["is_decisive"] = parties.apply(_is_decisive, axis=1)
+    return parties
 
-    # Identifier matchs décisifs
-    def is_decisive(row: pd.Series) -> bool:
-        """Détermine si un match est décisif."""
-        ronde = row.get("ronde", 0)
-        score_dom = row.get("score_dom", 0)
-        score_ext = row.get("score_ext", 0)
 
-        # Dernière ronde ou score serré
-        is_late = ronde >= 7
-        is_close = abs(score_dom - score_ext) <= 1
+def _is_decisive(row: pd.Series) -> bool:
+    """Determine si un match est decisif."""
+    ronde = row.get("ronde", 0)
+    score_dom = row.get("score_dom", 0)
+    score_ext = row.get("score_ext", 0)
+    return ronde >= 7 or abs(score_dom - score_ext) <= 1
 
-        return is_late or is_close
 
-    parties["is_decisive"] = parties.apply(is_decisive, axis=1)
-
+def _collect_pressure_stats(parties: pd.DataFrame) -> dict[str, dict[str, list[float]]]:
+    """Collecte les stats de pression par joueur."""
     pressure_stats: dict[str, dict[str, list[float]]] = {}
 
     for couleur in ["blanc", "noir"]:
-        nom_col = f"{couleur}_nom"
-        res_col = f"resultat_{couleur}"
-
+        nom_col, res_col = f"{couleur}_nom", f"resultat_{couleur}"
         if nom_col not in parties.columns or res_col not in parties.columns:
             continue
 
         for _, row in parties.iterrows():
             joueur = str(row[nom_col])
-            resultat = row[res_col]
-            decisive = row["is_decisive"]
-
             if joueur not in pressure_stats:
                 pressure_stats[joueur] = {"normal": [], "pressure": []}
 
-            if decisive:
-                pressure_stats[joueur]["pressure"].append(resultat)
-            else:
-                pressure_stats[joueur]["normal"].append(resultat)
+            key = "pressure" if row["is_decisive"] else "normal"
+            pressure_stats[joueur][key].append(row[res_col])
 
-    # Construire résultat
+    return pressure_stats
+
+
+def _build_pressure_result(
+    pressure_stats: dict[str, dict[str, list[float]]], min_games: int
+) -> pd.DataFrame:
+    """Construit le DataFrame resultat."""
     result_data = []
     for joueur, stats in pressure_stats.items():
-        nb_pressure = len(stats["pressure"])
-        nb_normal = len(stats["normal"])
+        entry = _compute_player_pressure(joueur, stats, min_games)
+        if entry:
+            result_data.append(entry)
+    return pd.DataFrame(result_data)
 
-        if nb_pressure >= min_games and nb_normal >= min_games:
-            score_normal = np.mean(stats["normal"])
-            score_pressure = np.mean(stats["pressure"])
-            clutch = score_pressure - score_normal
 
-            if clutch > 0.1:
-                ptype = "clutch"
-            elif clutch < -0.1:
-                ptype = "choke"
-            else:
-                ptype = "stable"
+def _compute_player_pressure(joueur: str, stats: dict, min_games: int) -> dict | None:
+    """Calcule les stats de pression d'un joueur."""
+    nb_pressure, nb_normal = len(stats["pressure"]), len(stats["normal"])
+    if nb_pressure < min_games or nb_normal < min_games:
+        return None
 
-            result_data.append(
-                {
-                    "joueur_nom": joueur,
-                    "score_normal": score_normal,
-                    "score_pression": score_pressure,
-                    "nb_normal": nb_normal,
-                    "nb_pression": nb_pressure,
-                    "clutch_factor": clutch,
-                    "pressure_type": ptype,
-                }
-            )
+    score_normal = np.mean(stats["normal"])
+    score_pressure = np.mean(stats["pressure"])
+    clutch = score_pressure - score_normal
+    ptype = _classify_pressure_type(clutch)
 
-    result = pd.DataFrame(result_data)
-    logger.info(f"  {len(result)} joueurs avec stats pression")
+    return {
+        "joueur_nom": joueur,
+        "score_normal": score_normal,
+        "score_pression": score_pressure,
+        "nb_normal": nb_normal,
+        "nb_pression": nb_pressure,
+        "clutch_factor": clutch,
+        "pressure_type": ptype,
+    }
 
-    return result
+
+def _classify_pressure_type(clutch: float) -> str:
+    """Classifie le type de pression."""
+    if clutch > 0.1:
+        return "clutch"
+    if clutch < -0.1:
+        return "choke"
+    return "stable"

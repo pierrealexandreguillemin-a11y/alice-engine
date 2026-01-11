@@ -37,93 +37,85 @@ def parse_player_page(html_path: Path) -> Iterator[JoueurLicencie]:
     ------
         JoueurLicencie pour chaque joueur dans la page
     """
-    try:
-        html = html_path.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        logger.warning(f"Erreur lecture {html_path}: {e}")
+    soup = _read_html_soup(html_path)
+    if soup is None:
         return
 
-    soup = BeautifulSoup(html, "html.parser")
-
-    # Trouver toutes les lignes de joueurs (classe liste_clair ou liste_fonce)
     for tr in soup.find_all("tr", class_=["liste_clair", "liste_fonce"]):
-        tds = tr.find_all("td")
+        joueur = _parse_player_row(tr, html_path)
+        if joueur:
+            yield joueur
 
-        if len(tds) < 10:
-            continue
 
-        try:
-            # NrFFE (licence FFE)
-            nr_ffe = tds[0].get_text(strip=True)
+def _read_html_soup(html_path: Path) -> BeautifulSoup | None:
+    """Lit et parse le fichier HTML."""
+    try:
+        html = html_path.read_text(encoding="utf-8", errors="replace")
+        return BeautifulSoup(html, "html.parser")
+    except OSError as e:
+        logger.warning(f"Erreur lecture {html_path}: {e}")
+        return None
 
-            # Nom et Prenom
-            nom_cell = tds[1]
-            nom_complet = nom_cell.get_text(strip=True)
 
-            # Separer nom et prenom
-            parts = nom_complet.split()
-            nom = ""
-            prenom = ""
-            for i, part in enumerate(parts):
-                if part.isupper():
-                    nom += " " + part
-                else:
-                    prenom = " ".join(parts[i:])
-                    break
-            nom = nom.strip()
-            if not prenom and len(parts) > 1:
-                prenom = parts[-1]
-                nom = " ".join(parts[:-1])
+def _parse_player_row(tr: Any, html_path: Path) -> JoueurLicencie | None:
+    """Parse une ligne de joueur."""
+    tds = tr.find_all("td")
+    if len(tds) < 10:
+        return None
 
-            # Affiliation
-            affiliation = tds[2].get_text(strip=True)
+    try:
+        nom, prenom, nom_complet = _parse_name(tds[1].get_text(strip=True))
 
-            # ID FFE (lien vers FicheJoueur)
-            id_ffe = 0
-            info_cell = tds[3]
-            info_link = info_cell.find("a", href=True)
-            if info_link:
-                href = info_link["href"]
-                id_match = re.search(r"Id=(\d+)", href)
-                if id_match:
-                    id_ffe = int(id_match.group(1))
+        return JoueurLicencie(
+            nr_ffe=tds[0].get_text(strip=True),
+            id_ffe=_extract_id_ffe(tds[3]),
+            nom=nom,
+            prenom=prenom,
+            nom_complet=nom_complet,
+            affiliation=tds[2].get_text(strip=True),
+            elo=parse_elo_value(tds[4].get_text())[0],
+            elo_type=parse_elo_value(tds[4].get_text())[1],
+            elo_rapide=parse_elo_value(tds[5].get_text())[0],
+            elo_rapide_type=parse_elo_value(tds[5].get_text())[1],
+            elo_blitz=parse_elo_value(tds[6].get_text())[0],
+            elo_blitz_type=parse_elo_value(tds[6].get_text())[1],
+            categorie=tds[7].get_text(strip=True),
+            mute=bool(tds[8].get_text(strip=True)),
+            club=tds[9].get_text(strip=True),
+        )
+    except (IndexError, ValueError) as e:
+        logger.debug(f"Erreur parsing joueur dans {html_path}: {e}")
+        return None
 
-            # Elos
-            elo, elo_type = parse_elo_value(tds[4].get_text())
-            elo_rapide, elo_rapide_type = parse_elo_value(tds[5].get_text())
-            elo_blitz, elo_blitz_type = parse_elo_value(tds[6].get_text())
 
-            # Categorie
-            categorie = tds[7].get_text(strip=True)
+def _parse_name(nom_complet: str) -> tuple[str, str, str]:
+    """Separe nom et prenom."""
+    parts = nom_complet.split()
+    nom, prenom = "", ""
 
-            # M. = Mute (transfere d'un autre club cette saison)
-            mute_text = tds[8].get_text(strip=True)
-            mute = bool(mute_text)
+    for i, part in enumerate(parts):
+        if part.isupper():
+            nom += " " + part
+        else:
+            prenom = " ".join(parts[i:])
+            break
 
-            # Club (parfois nom + ville)
-            club = tds[9].get_text(strip=True)
+    nom = nom.strip()
+    if not prenom and len(parts) > 1:
+        prenom = parts[-1]
+        nom = " ".join(parts[:-1])
 
-            yield JoueurLicencie(
-                nr_ffe=nr_ffe,
-                id_ffe=id_ffe,
-                nom=nom,
-                prenom=prenom,
-                nom_complet=nom_complet,
-                affiliation=affiliation,
-                elo=elo,
-                elo_type=elo_type,
-                elo_rapide=elo_rapide,
-                elo_rapide_type=elo_rapide_type,
-                elo_blitz=elo_blitz,
-                elo_blitz_type=elo_blitz_type,
-                categorie=categorie,
-                mute=mute,
-                club=club,
-            )
+    return nom, prenom, nom_complet
 
-        except (IndexError, ValueError) as e:
-            logger.debug(f"Erreur parsing joueur dans {html_path}: {e}")
-            continue
+
+def _extract_id_ffe(info_cell: Any) -> int:
+    """Extrait l'ID FFE du lien."""
+    info_link = info_cell.find("a", href=True)
+    if not info_link:
+        return 0
+
+    id_match = re.search(r"Id=(\d+)", info_link["href"])
+    return int(id_match.group(1)) if id_match else 0
 
 
 def joueur_to_dict(joueur: JoueurLicencie) -> dict[str, Any]:
