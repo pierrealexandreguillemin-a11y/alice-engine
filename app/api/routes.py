@@ -4,16 +4,18 @@ Responsabilite unique: Gestion HTTP (validation, serialisation).
 La logique metier est deleguee aux services.
 
 ISO Compliance:
-- ISO/IEC 27001 - Information Security (authentification, autorisation)
+- ISO/IEC 27001 - Information Security (authentification, autorisation, audit logs)
 - ISO/IEC 27034 - Secure Coding (input validation, CWE-20)
 - ISO/IEC 42010 - Architecture (Controller layer, SRP)
 - ISO/IEC 25010 - System Quality (securite, fiabilite)
 
 Author: ALICE Engine Team
-Last Updated: 2026-01-09
+Last Updated: 2026-01-11
 """
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.api.schemas import (
     ErrorResponse,
@@ -24,6 +26,13 @@ from app.api.schemas import (
     TrainResponse,
 )
 from app.config import settings
+from app.logging_config import get_audit_logger, get_logger
+
+logger = get_logger(__name__)
+audit_logger = get_audit_logger()
+
+# Rate limiter (uses app.state.limiter from main.py)
+limiter = Limiter(key_func=get_remote_address)
 
 # TODO: Importer les services quand ils seront implementes
 # from services.inference import InferenceService
@@ -41,7 +50,8 @@ router = APIRouter(prefix="/api/v1", tags=["ALICE"])
         500: {"model": ErrorResponse, "description": "Internal error"},
     },
 )
-async def predict_lineup(request: PredictRequest) -> PredictResponse:
+@limiter.limit("30/minute")
+async def predict_lineup(request: PredictRequest, http_request: Request) -> PredictResponse:
     """Predict opponent lineup and optimize user composition.
 
     1. ALI (Adversarial Lineup Inference): Predit la composition adverse
@@ -100,8 +110,10 @@ async def get_model_info(club_id: str) -> ModelInfoResponse:
         401: {"model": ErrorResponse, "description": "Unauthorized"},
     },
 )
+@limiter.limit("5/minute")
 async def trigger_training(
     request: TrainRequest,
+    http_request: Request,
     x_api_key: str | None = Header(None),
 ) -> TrainResponse:
     """Trigger model retraining (protected by API key).
@@ -110,9 +122,18 @@ async def trigger_training(
     @param x_api_key: Cle API requise
 
     @see ISO 27034 - Auth/Authz
+    @see ISO 27001 - Audit logging
     """
-    # Verification API key
+    client_ip = get_remote_address(http_request)
+
+    # Verification API key (ISO 27001 - audit auth attempts)
     if not x_api_key or x_api_key != settings.api_key:
+        audit_logger.warning(
+            "auth_failed",
+            action="training_request",
+            client_ip=client_ip,
+            reason="invalid_api_key",
+        )
         raise HTTPException(
             status_code=401,
             detail={
@@ -120,6 +141,14 @@ async def trigger_training(
                 "message": "Invalid or missing API key",
             },
         )
+
+    # Audit log succes (ISO 27001)
+    audit_logger.info(
+        "auth_success",
+        action="training_request",
+        client_ip=client_ip,
+        club_id=request.club_id or "global",
+    )
 
     # TODO: Lancer l'entrainement en background
     return TrainResponse(

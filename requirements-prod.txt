@@ -31,3 +31,7 @@ httpx>=0.26.0
 
 # Utilitaires
 python-dotenv>=1.0.0
+
+# Logging et rate limiting (ISO 27001)
+structlog>=24.1.0
+slowapi>=0.1.9

@@ -7,22 +7,34 @@ ISO Compliance:
 - ISO/IEC 42001:2023 - AI Management System (API gouvernance)
 - ISO/IEC 42010 - Architecture (application entry point)
 - ISO/IEC 25010 - System Quality (fiabilite, performance)
-- ISO/IEC 27001 - Information Security (CORS, middleware)
+- ISO/IEC 27001 - Information Security (CORS, rate limiting, audit logs)
 
 Author: ALICE Engine Team
-Last Updated: 2026-01-09
+Last Updated: 2026-01-11
 """
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.api.routes import router as api_router
 from app.config import settings
+from app.logging_config import configure_logging, get_logger
+
+# Configure logging au demarrage (ISO 27001)
+configure_logging(debug=settings.debug, json_format=not settings.debug)
+logger = get_logger(__name__)
+
+# Rate limiter (ISO 27001 - protection contre abus)
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -33,14 +45,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Shutdown: Nettoyage des ressources
     """
     # Startup
-    print(f"[ALICE] Demarrage v{settings.app_version}")
-    print(f"[ALICE] Mode debug: {settings.debug}")
+    logger.info(
+        "service_started",
+        version=settings.app_version,
+        debug=settings.debug,
+        log_level=settings.log_level,
+    )
     # TODO: Charger le modele XGBoost/CatBoost ici
 
     yield
 
     # Shutdown
-    print("[ALICE] Arret en cours...")
+    logger.info("service_stopped", version=settings.app_version)
 
 
 # Creation de l'application FastAPI
@@ -53,6 +69,10 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
+
+# Rate limiter state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware - ISO 27001: Restrictif en production
 _cors_origins: list[str] = settings.cors_origins if settings.cors_origins else []
@@ -75,7 +95,8 @@ app.include_router(api_router)
 
 
 @app.get("/", tags=["Info"])
-async def root() -> dict[str, str]:
+@limiter.limit("60/minute")
+async def root(request: Request) -> dict[str, str]:
     """Return service information."""
     return {
         "service": "ALICE",
@@ -87,18 +108,36 @@ async def root() -> dict[str, str]:
 
 
 @app.get("/health", tags=["Health"])
-async def health_check() -> dict[str, Any]:
+@limiter.limit("120/minute")
+async def health_check(request: Request) -> dict[str, Any]:
     """Check service health for monitoring (UptimeRobot, Render).
 
-    @see ISO 25010 - Fiabilite
+    ISO 25010 - Fiabilite
+    ISO 27001 - Verification securite (integrite modeles, config)
     """
+    # Verification modeles (ISO 27001 - integrite)
+    model_path = Path(settings.model_path)
+    model_status = "ok" if model_path.exists() else "not_configured"
+
+    # Verification config securite
+    security_checks = {
+        "api_key_configured": bool(settings.api_key),
+        "cors_restricted": not settings.debug or bool(settings.cors_origins),
+        "debug_mode": settings.debug,
+    }
+
+    # Statut global
+    all_ok = model_status == "ok" and security_checks["api_key_configured"]
+    status = "healthy" if all_ok else "degraded"
+
     return {
-        "status": "healthy",
+        "status": status,
         "timestamp": datetime.now(UTC).isoformat(),
         "version": settings.app_version,
         "checks": {
             "api": "ok",
-            "model": "not_loaded",  # TODO: Verifier modele charge
+            "model": model_status,
             "mongodb": "not_configured",  # TODO: Verifier connexion
         },
+        "security": security_checks,
     }

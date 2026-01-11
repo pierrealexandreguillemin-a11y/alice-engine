@@ -93,6 +93,12 @@ mypy>=1.8.0                # Type checking
 pip-audit>=2.6.0           # Audit dependances
 
 # ============================================
-# Logs et monitoring (optionnel)
+# Logs et monitoring (ISO 27001)
 # ============================================
+structlog>=24.1.0          # Structured logging (audit trails)
 # sentry-sdk[fastapi]>=1.39.0
+
+# ============================================
+# Rate limiting (ISO 27001)
+# ============================================
+slowapi>=0.1.9             # Rate limiting FastAPI
