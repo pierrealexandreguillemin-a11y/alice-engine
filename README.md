@@ -136,7 +136,7 @@ alice-engine/
 ├── pytest.ini                  # Config pytest
 ├── requirements.txt            # Dependances Python
 ├── render.yaml                 # Config deploiement Render
-├── iso-standards-reference.md  # Reference normes ISO
+├── docs/iso/                   # Documentation ISO (normes, conformite)
 └── README.md                   # Ce fichier
 ```
 

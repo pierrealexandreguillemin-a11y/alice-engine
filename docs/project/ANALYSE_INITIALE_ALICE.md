@@ -297,7 +297,7 @@ joblib>=1.3              # Sauvegarde modèles
 
 ---
 
-### 6. Auto-évaluation ISO (iso-standards-reference.md)
+### 6. Auto-evaluation ISO (docs/iso/ISO_STANDARDS_REFERENCE.md)
 
 | Norme | Application | Statut |
 |-------|-------------|--------|

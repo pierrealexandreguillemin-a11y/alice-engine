@@ -104,7 +104,7 @@ class TestOptimizeHyperparameters:
         X_train, X_valid = X[:80], X[80:]
         y_train, y_valid = y[:80], y[80:]
 
-        with pytest.raises(ValueError, match="Modèle non supporté"):
+        with pytest.raises(ValueError, match="non support"):
             optimize_hyperparameters(
                 X_train,
                 y_train,
@@ -139,7 +139,7 @@ class TestOptimizeHyperparameters:
         mock_model.get_best_score.return_value = {"validation": {"AUC": 0.75}}
 
         with patch(
-            "scripts.training.optuna_tuning.CatBoostClassifier",
+            "scripts.training.optuna_objectives.CatBoostClassifier",
             return_value=mock_model,
         ):
             result = optimize_hyperparameters(
@@ -237,7 +237,7 @@ class TestObjectiveCreators:
         mock_model.get_best_score.return_value = {"validation": {"AUC": 0.85}}
 
         with patch(
-            "scripts.training.optuna_tuning.CatBoostClassifier",
+            "scripts.training.optuna_objectives.CatBoostClassifier",
             return_value=mock_model,
         ):
             # Créer un vrai trial Optuna
@@ -266,7 +266,7 @@ class TestOptimizeAllModels:
         y_train, y_valid = y[:80], y[80:]
 
         # Mock pour éviter l'exécution réelle
-        with patch("scripts.training.optuna_tuning.optimize_hyperparameters") as mock_opt:
+        with patch("scripts.training.optuna_core.optimize_hyperparameters") as mock_opt:
             mock_opt.return_value = {"param": "value"}
 
             result = optimize_all_models(
@@ -289,7 +289,7 @@ class TestOptimizeAllModels:
         X_train, X_valid = X[:80], X[80:]
         y_train, y_valid = y[:80], y[80:]
 
-        with patch("scripts.training.optuna_tuning.optimize_hyperparameters") as mock_opt:
+        with patch("scripts.training.optuna_core.optimize_hyperparameters") as mock_opt:
             mock_opt.return_value = {"param": "value"}
 
             optimize_all_models(
@@ -360,7 +360,7 @@ class TestOptunaIntegration:
         mock_model.best_score = 0.82
 
         with patch(
-            "scripts.training.optuna_tuning.XGBClassifier",
+            "scripts.training.optuna_objectives.XGBClassifier",
             return_value=mock_model,
         ):
             trial = optuna.trial.FixedTrial(
@@ -397,7 +397,7 @@ class TestOptunaIntegration:
         mock_model.best_score_ = {"valid_0": {"auc": 0.88}}
 
         with patch(
-            "scripts.training.optuna_tuning.lgb.LGBMClassifier",
+            "scripts.training.optuna_objectives.lgb.LGBMClassifier",
             return_value=mock_model,
         ):
             trial = optuna.trial.FixedTrial(

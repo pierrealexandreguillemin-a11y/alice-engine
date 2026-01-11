@@ -23,7 +23,7 @@ Hooks pre-commit Python équivalents aux hooks Husky de `C:\Dev\chess-app`.
 - ISO/IEC 24029 - Neural Network Robustness
 - ISO/IEC TR 24027 - Bias in AI
 
-Voir `iso-standards-reference.md` pour détails et mapping fichiers → normes.
+Voir `docs/iso/ISO_STANDARDS_REFERENCE.md` pour details et mapping fichiers -> normes.
 
 ## Fichiers clés
 
@@ -86,4 +86,4 @@ make iso-docs   # MAJ documentation ISO
 ## Documentation
 
 - `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
-- `iso-standards-reference.md` - Normes ISO applicables
+- `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
