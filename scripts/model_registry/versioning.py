@@ -264,16 +264,22 @@ def save_production_models(
     save_production_model_card(model_card, version_dir)
 
     # Update current symlink
-    current_link = models_dir / "current"
-    if current_link.exists() or current_link.is_symlink():
-        if current_link.is_symlink():
-            current_link.unlink()
-        elif current_link.is_dir():
-            try:
-                os.rmdir(current_link)
-            except OSError:
-                pass
+    _update_current_symlink(models_dir, version_dir, version)
+    logger.info(f"\n{'=' * 60}")
+    logger.info(f"PRODUCTION MODELS SAVED: {version_dir}")
+    logger.info(f"{'=' * 60}")
 
+    return version_dir
+
+
+def _update_current_symlink(models_dir: Path, version_dir: Path, version: str) -> None:
+    """Met a jour le symlink 'current' vers la nouvelle version."""
+    current_link = models_dir / "current"
+
+    # Supprimer l'ancien lien/dossier
+    _remove_existing_link(current_link)
+
+    # Creer le nouveau lien
     if platform.system() == "Windows":
         subprocess.run(  # nosec B603, B607 - trusted mklink command for symlink
             ["cmd", "/c", "mklink", "/J", str(current_link), str(version_dir)],
@@ -284,8 +290,17 @@ def save_production_models(
         current_link.symlink_to(version_dir.name)
 
     logger.info(f"\n  Updated 'current' -> {version}")
-    logger.info(f"\n{'=' * 60}")
-    logger.info(f"PRODUCTION MODELS SAVED: {version_dir}")
-    logger.info(f"{'=' * 60}")
 
-    return version_dir
+
+def _remove_existing_link(current_link: Path) -> None:
+    """Supprime un lien ou dossier existant."""
+    if not (current_link.exists() or current_link.is_symlink()):
+        return
+
+    if current_link.is_symlink():
+        current_link.unlink()
+    elif current_link.is_dir():
+        try:
+            os.rmdir(current_link)
+        except OSError:
+            pass

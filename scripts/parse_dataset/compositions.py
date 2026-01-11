@@ -54,40 +54,69 @@ def extract_metadata_from_path(groupe_dir: Path, data_root: Path) -> Metadata:
     parts = rel_path.parts
     metadata = Metadata(saison=0, competition="", division="", groupe="")
 
+    _parse_saison(metadata, parts)
+    _parse_competition(metadata, parts)
+    _parse_division(metadata, parts)
+    _parse_groupe(metadata, parts)
+
+    return metadata
+
+
+def _parse_saison(metadata: Metadata, parts: tuple[str, ...]) -> None:
+    """Parse la saison depuis le chemin."""
     if len(parts) >= 1:
         try:
             metadata.saison = int(parts[0])
         except ValueError:
             pass
 
-    if len(parts) >= 2:
-        comp = parts[1]
-        metadata.competition = comp.replace("_", " ")
 
-        if comp.startswith("Ligue_"):
-            metadata.type_competition = "regional"
-            ligue_match = re.search(r"Ligue_(?:de_|des_|du_|d'|de_la_|de_l')?(.+)", comp)
-            if ligue_match:
-                ligue_name = ligue_match.group(1)
-                metadata.ligue = ligue_name.replace("_", " ")
-                for key, code in LIGUES_REGIONALES.items():
-                    if key in ligue_name or key.lower() in ligue_name.lower():
-                        metadata.ligue_code = code
-                        break
-        else:
-            metadata.type_competition = TYPES_COMPETITION.get(comp, "autre")
+def _parse_competition(metadata: Metadata, parts: tuple[str, ...]) -> None:
+    """Parse la competition depuis le chemin."""
+    if len(parts) < 2:
+        return
 
-    if len(parts) >= 3:
-        div = parts[2]
-        metadata.division = div.replace("_", " ")
-        niveau_match = re.search(r"(\d+)", div)
-        if niveau_match:
-            metadata.niveau = int(niveau_match.group(1))
+    comp = parts[1]
+    metadata.competition = comp.replace("_", " ")
 
+    if comp.startswith("Ligue_"):
+        _parse_ligue_regionale(metadata, comp)
+    else:
+        metadata.type_competition = TYPES_COMPETITION.get(comp, "autre")
+
+
+def _parse_ligue_regionale(metadata: Metadata, comp: str) -> None:
+    """Parse une ligue regionale."""
+    metadata.type_competition = "regional"
+    ligue_match = re.search(r"Ligue_(?:de_|des_|du_|d'|de_la_|de_l')?(.+)", comp)
+    if not ligue_match:
+        return
+
+    ligue_name = ligue_match.group(1)
+    metadata.ligue = ligue_name.replace("_", " ")
+
+    for key, code in LIGUES_REGIONALES.items():
+        if key in ligue_name or key.lower() in ligue_name.lower():
+            metadata.ligue_code = code
+            break
+
+
+def _parse_division(metadata: Metadata, parts: tuple[str, ...]) -> None:
+    """Parse la division depuis le chemin."""
+    if len(parts) < 3:
+        return
+
+    div = parts[2]
+    metadata.division = div.replace("_", " ")
+    niveau_match = re.search(r"(\d+)", div)
+    if niveau_match:
+        metadata.niveau = int(niveau_match.group(1))
+
+
+def _parse_groupe(metadata: Metadata, parts: tuple[str, ...]) -> None:
+    """Parse le groupe depuis le chemin."""
     if len(parts) >= 4:
         metadata.groupe = parts[3].replace("_", " ")
-
-    return metadata
 
 
 def parse_groupe(groupe_dir: Path, data_root: Path) -> Iterator[dict[str, Any]]:

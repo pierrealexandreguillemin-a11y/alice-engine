@@ -41,39 +41,43 @@ def extract_feature_importance(
     feature_names: list[str],
 ) -> dict[str, float]:
     """Extrait l'importance des features d'un modèle."""
-    importance: dict[str, float] = {}
-
     try:
-        if model_name == "CatBoost" and hasattr(model, "get_feature_importance"):
-            importances = model.get_feature_importance()
-            for i, name in enumerate(feature_names):
-                if i < len(importances):
-                    importance[name] = float(importances[i])
+        importances = _get_raw_importances(model, model_name)
+        if not importances:
+            return {}
 
-        elif model_name == "XGBoost" and hasattr(model, "feature_importances_"):
-            importances = model.feature_importances_
-            for i, name in enumerate(feature_names):
-                if i < len(importances):
-                    importance[name] = float(importances[i])
-
-        elif model_name == "LightGBM" and hasattr(model, "feature_importances_"):
-            importances = model.feature_importances_
-            for i, name in enumerate(feature_names):
-                if i < len(importances):
-                    importance[name] = float(importances[i])
-
-        # Normaliser
-        if importance:
-            total = sum(importance.values())
-            if total > 0:
-                importance = {k: v / total for k, v in importance.items()}
-
-        # Trier par importance décroissante
-        importance = dict(sorted(importance.items(), key=lambda x: x[1], reverse=True))
+        importance = _build_importance_dict(importances, feature_names)
+        importance = _normalize_importance(importance)
+        return dict(sorted(importance.items(), key=lambda x: x[1], reverse=True))
 
     except Exception as e:
         logger.warning(f"Could not extract feature importance for {model_name}: {e}")
+        return {}
 
+
+def _get_raw_importances(model: object, model_name: str) -> list[float] | None:
+    """Extrait les importances brutes selon le type de modele."""
+    if model_name == "CatBoost" and hasattr(model, "get_feature_importance"):
+        return list(model.get_feature_importance())
+    if hasattr(model, "feature_importances_"):
+        return list(model.feature_importances_)
+    return None
+
+
+def _build_importance_dict(importances: list[float], feature_names: list[str]) -> dict[str, float]:
+    """Construit le dictionnaire d'importance."""
+    return {
+        name: float(importances[i]) for i, name in enumerate(feature_names) if i < len(importances)
+    }
+
+
+def _normalize_importance(importance: dict[str, float]) -> dict[str, float]:
+    """Normalise les importances pour sommer a 1."""
+    if not importance:
+        return importance
+    total = sum(importance.values())
+    if total > 0:
+        return {k: v / total for k, v in importance.items()}
     return importance
 
 
@@ -141,36 +145,14 @@ def save_model_artifact(
     export_onnx: bool = False,
 ) -> ModelArtifact | None:
     """Sauvegarde un modèle avec checksums."""
-    model_format = MODEL_FORMATS.get(model_name, ".joblib")
-    model_path = version_dir / f"{model_name.lower()}{model_format}"
-
     try:
-        # Sauvegarde native
-        if model_name == "CatBoost" and hasattr(model, "save_model"):
-            model.save_model(str(model_path))
-        elif model_name == "XGBoost" and hasattr(model, "save_model"):
-            model.save_model(str(model_path))
-        elif model_name == "LightGBM" and hasattr(model, "booster_"):
-            model.booster_.save_model(str(model_path))
-        else:
-            model_path = version_dir / f"{model_name.lower()}.joblib"
-            joblib.dump(model, model_path)
-
+        model_path, model_format = _save_model_native(model, model_name, version_dir)
         checksum = compute_file_checksum(model_path)
         size_bytes = model_path.stat().st_size
 
-        onnx_path = None
-        onnx_checksum = None
-        if export_onnx:
-            onnx_path = export_to_onnx(
-                model,
-                model_name,
-                model_path,
-                feature_names,
-                len(feature_names),
-            )
-            if onnx_path and onnx_path.exists():
-                onnx_checksum = compute_file_checksum(onnx_path)
+        onnx_path, onnx_checksum = _handle_onnx_export(
+            model, model_name, model_path, feature_names, export_onnx
+        )
 
         logger.info(f"  Saved {model_path.name} ({size_bytes:,} bytes, SHA256: {checksum[:12]}...)")
 
@@ -187,6 +169,40 @@ def save_model_artifact(
     except Exception as e:
         logger.exception(f"Failed to save {model_name}: {e}")
         return None
+
+
+def _save_model_native(model: object, model_name: str, version_dir: Path) -> tuple[Path, str]:
+    """Sauvegarde le modele au format natif."""
+    model_format = MODEL_FORMATS.get(model_name, ".joblib")
+    model_path = version_dir / f"{model_name.lower()}{model_format}"
+
+    if model_name in ("CatBoost", "XGBoost") and hasattr(model, "save_model"):
+        model.save_model(str(model_path))
+    elif model_name == "LightGBM" and hasattr(model, "booster_"):
+        model.booster_.save_model(str(model_path))
+    else:
+        model_path = version_dir / f"{model_name.lower()}.joblib"
+        model_format = ".joblib"
+        joblib.dump(model, model_path)
+
+    return model_path, model_format
+
+
+def _handle_onnx_export(
+    model: object,
+    model_name: str,
+    model_path: Path,
+    feature_names: list[str],
+    export_onnx: bool,
+) -> tuple[Path | None, str | None]:
+    """Gere l'export ONNX optionnel."""
+    if not export_onnx:
+        return None, None
+
+    onnx_path = export_to_onnx(model, model_name, model_path, feature_names, len(feature_names))
+    if onnx_path and onnx_path.exists():
+        return onnx_path, compute_file_checksum(onnx_path)
+    return None, None
 
 
 # ==============================================================================

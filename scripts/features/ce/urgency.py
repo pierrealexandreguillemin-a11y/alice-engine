@@ -155,23 +155,32 @@ def _classify_urgency(
     -------
         Niveau d'urgence: 'critique', 'haute', 'normale', 'aucune'
     """
-    # Aucune urgence si maintien assuré et pas en course
     if maintien_assure and position > 4:
         return "aucune"
 
-    # Critique si dernière chance (1 ronde ou moins)
-    if rondes_restantes <= 1:
-        en_danger = not maintien_assure and (position > nb_equipes - 2 or ecart_dernier <= 2)
-        en_course = (montee_possible and position <= 2) or (ecart_premier <= 2 and position <= 4)
-        if en_danger or en_course:
-            return "critique"
+    en_danger = _is_in_danger(maintien_assure, position, nb_equipes, ecart_dernier)
+    en_course = _is_in_race(montee_possible, position, ecart_premier)
 
-    # Haute si situation tendue (2-3 rondes)
-    if rondes_restantes <= 3:
-        danger_proche = ecart_dernier <= 2 and not maintien_assure
-        course_proche = ecart_premier <= 2 and position <= 4
-        if danger_proche or course_proche:
-            return "haute"
+    if rondes_restantes <= 1 and (en_danger or en_course):
+        return "critique"
 
-    # Normale par défaut
+    if rondes_restantes <= 3 and (en_danger or en_course):
+        return "haute"
+
     return "normale"
+
+
+def _is_in_danger(
+    maintien_assure: bool, position: int, nb_equipes: int, ecart_dernier: int
+) -> bool:
+    """Determine si l'equipe est en danger de relegation."""
+    if maintien_assure:
+        return False
+    return position > nb_equipes - 2 or ecart_dernier <= 2
+
+
+def _is_in_race(montee_possible: bool, position: int, ecart_premier: int) -> bool:
+    """Determine si l'equipe est en course pour la montee."""
+    if montee_possible and position <= 2:
+        return True
+    return ecart_premier <= 2 and position <= 4

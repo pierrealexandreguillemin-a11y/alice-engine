@@ -109,26 +109,48 @@ def merge_team_enjeu(
         return result
 
     for suffix, col in [("dom", "equipe_dom"), ("ext", "equipe_ext")]:
-        if col not in result.columns or "saison" not in result.columns:
-            continue
-        merge_cols = ["zone_enjeu", "niveau_hierarchique", "position"]
-        cols_exist = [c for c in merge_cols if c in team_enjeu.columns]
-        if not cols_exist:
-            continue
-        merge_df = team_enjeu.rename(columns={c: f"{c}_{suffix}" for c in cols_exist})
-        merge_keys = ["equipe", "saison"]
-        if "ronde" in result.columns and "ronde" in merge_df.columns:
-            merge_keys.append("ronde")
-        result = result.merge(
-            merge_df[merge_keys + [f"{c}_{suffix}" for c in cols_exist]].drop_duplicates(),
-            left_on=[col, "saison"] + (["ronde"] if "ronde" in result.columns else []),
-            right_on=merge_keys,
-            how="left",
-        )
-        if "equipe" in result.columns:
-            result = result.drop(columns=["equipe"])
+        result = _merge_single_team_enjeu(result, team_enjeu, suffix, col)
 
     return result
+
+
+def _merge_single_team_enjeu(
+    result: pd.DataFrame,
+    team_enjeu: pd.DataFrame,
+    suffix: str,
+    col: str,
+) -> pd.DataFrame:
+    """Merge enjeu pour une equipe (dom ou ext)."""
+    if col not in result.columns or "saison" not in result.columns:
+        return result
+
+    merge_cols = ["zone_enjeu", "niveau_hierarchique", "position"]
+    cols_exist = [c for c in merge_cols if c in team_enjeu.columns]
+    if not cols_exist:
+        return result
+
+    merge_df = team_enjeu.rename(columns={c: f"{c}_{suffix}" for c in cols_exist})
+    merge_keys = _get_merge_keys(result, merge_df)
+
+    result = result.merge(
+        merge_df[merge_keys + [f"{c}_{suffix}" for c in cols_exist]].drop_duplicates(),
+        left_on=[col, "saison"] + (["ronde"] if "ronde" in result.columns else []),
+        right_on=merge_keys,
+        how="left",
+    )
+
+    if "equipe" in result.columns:
+        result = result.drop(columns=["equipe"])
+
+    return result
+
+
+def _get_merge_keys(result: pd.DataFrame, merge_df: pd.DataFrame) -> list[str]:
+    """Determine les cles de merge."""
+    merge_keys = ["equipe", "saison"]
+    if "ronde" in result.columns and "ronde" in merge_df.columns:
+        merge_keys.append("ronde")
+    return merge_keys
 
 
 def merge_h2h_features(
