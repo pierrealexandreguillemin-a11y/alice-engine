@@ -124,7 +124,7 @@ def _generate_specific_recommendations(
             )
         elif "distribution" in m.test_name:
             recommendations.append(
-                f"OOD sensible ({m.test_name}): Implementer detection OOD " "et mecanisme de rejet."
+                f"OOD sensible ({m.test_name}): Implementer detection OOD et mecanisme de rejet."
             )
         elif "extreme" in m.test_name:
             recommendations.append(
@@ -199,7 +199,7 @@ def generate_robustness_report(
 
     logger.info(f"  Niveau global: {overall_level.value}")
     logger.info(
-        f"  {len([m for m in metrics if m.level == RobustnessLevel.FRAGILE])} " "tests fragiles"
+        f"  {len([m for m in metrics if m.level == RobustnessLevel.FRAGILE])} tests fragiles"
     )
 
     return report
