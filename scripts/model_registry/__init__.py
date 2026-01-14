@@ -54,6 +54,53 @@ from scripts.model_registry.drift import (
     save_drift_report,
 )
 
+# Drift Monitor (ISO 23894) - Main
+from scripts.model_registry.drift_monitor import (
+    analyze_feature_drift,
+    monitor_drift,
+)
+
+# Drift Monitor (ISO 23894) - Stats
+from scripts.model_registry.drift_stats import (
+    compute_chi2_test,
+    compute_js_divergence,
+    compute_ks_test,
+)
+
+# Drift Monitor (ISO 23894) - Types
+from scripts.model_registry.drift_types import (
+    KS_PVALUE_CRITICAL,
+    KS_PVALUE_OK,
+    KS_PVALUE_WARNING,
+    PSI_THRESHOLD_OK,
+    DriftMonitorResult,
+    DriftSeverity,
+    DriftType,
+    FeatureDriftResult,
+)
+
+# Input Validator (ISO 24029) - Types
+from scripts.model_registry.input_types import (
+    DEFAULT_STD_TOLERANCE,
+    OOD_REJECTION_THRESHOLD,
+    FeatureBounds,
+    FeatureValidationResult,
+    InputBoundsConfig,
+    InputValidationResult,
+    OODAction,
+    OODSeverity,
+)
+
+# Input Validator (ISO 24029) - Main
+from scripts.model_registry.input_validator import (
+    compute_feature_bounds,
+    create_bounds_config,
+    load_bounds_config,
+    save_bounds_config,
+    validate_batch,
+    validate_input,
+)
+
 # Security
 from scripts.model_registry.security import (
     ENCRYPTED_EXTENSION,
@@ -159,7 +206,7 @@ __all__ = [
     "decrypt_model_file",
     "encrypt_model_directory",
     "decrypt_model_directory",
-    # Drift
+    # Drift (legacy)
     "compute_psi",
     "compute_drift_metrics",
     "create_drift_report",
@@ -167,12 +214,41 @@ __all__ = [
     "save_drift_report",
     "load_drift_report",
     "check_drift_status",
+    # Drift Monitor (ISO 23894)
+    "DriftSeverity",
+    "DriftType",
+    "FeatureDriftResult",
+    "DriftMonitorResult",
+    "compute_ks_test",
+    "compute_chi2_test",
+    "compute_js_divergence",
+    "analyze_feature_drift",
+    "monitor_drift",
+    "KS_PVALUE_OK",
+    "KS_PVALUE_WARNING",
+    "KS_PVALUE_CRITICAL",
     # Validation
     "validate_dataframe_schema",
     "validate_train_valid_test_schema",
     "apply_retention_policy",
     "get_retention_status",
     "list_model_versions",
+    # Input Validator (ISO 24029)
+    "OODSeverity",
+    "OODAction",
+    "FeatureBounds",
+    "FeatureValidationResult",
+    "InputValidationResult",
+    "InputBoundsConfig",
+    "compute_feature_bounds",
+    "create_bounds_config",
+    "validate_input",
+    "validate_batch",
+    "save_bounds_config",
+    "load_bounds_config",
+    "DEFAULT_STD_TOLERANCE",
+    "OOD_REJECTION_THRESHOLD",
+    "PSI_THRESHOLD_OK",
     # Artifacts
     "extract_feature_importance",
     "export_to_onnx",

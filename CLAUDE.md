@@ -1,5 +1,30 @@
 # Alice-Engine - Guide Claude
 
+## RÈGLES ABSOLUES (ISO Compliance)
+
+**TOUJOURS APPLIQUER - AUCUNE EXCEPTION:**
+
+### ISO 5055 - Limites de code
+- **Maximum 300 lignes par fichier** (inclut docstrings)
+- **Maximum 50 lignes par fonction**
+- **Complexité cyclomatique ≤ B** (Xenon)
+- **Si fichier > 300 lignes → REFACTORER en modules SRP**
+
+### ISO 5055 - SRP (Single Responsibility)
+- 1 fichier = 1 responsabilité unique
+- Préfixer les noms: `types.py`, `thresholds.py`, `metrics.py`, `report.py`
+- Créer un `__init__.py` pour re-exporter
+
+### ISO 27034 - Secure Coding
+- Pydantic pour TOUTE validation d'entrée
+- Jamais de secrets en clair (utiliser env vars)
+- Input sanitization obligatoire
+
+### ISO 29119 - Tests
+- Docstring structuré avec: Document ID, Version, Tests count
+- Fixtures réutilisables
+- Tests groupés par classe thématique
+
 ## Setup DevOps
 
 Hooks pre-commit Python équivalents aux hooks Husky de `C:\Dev\chess-app`.
@@ -10,7 +35,7 @@ Hooks pre-commit Python équivalents aux hooks Husky de `C:\Dev\chess-app`.
 - ISO 25010 (Qualité système)
 - ISO 27001 (Sécurité)
 - ISO 27034 (Secure coding)
-- ISO 5055 (Qualité code)
+- ISO 5055 (Qualité code) - **MAX 300 LIGNES/FICHIER**
 - ISO 42010 (Architecture)
 - ISO 29119 (Tests)
 - ISO 15289 (Documentation)
@@ -24,6 +49,12 @@ Hooks pre-commit Python équivalents aux hooks Husky de `C:\Dev\chess-app`.
 - ISO/IEC TR 24027 - Bias in AI
 
 Voir `docs/iso/ISO_STANDARDS_REFERENCE.md` pour details et mapping fichiers -> normes.
+
+## Avant chaque modification
+
+1. **Vérifier les lignes**: `wc -l fichier.py` - si > 300 → refactorer
+2. **Vérifier la complexité**: `radon cc fichier.py` - si C ou pire → refactorer
+3. **Appliquer SRP**: 1 module = 1 responsabilité
 
 ## Fichiers clés
 

@@ -10,7 +10,7 @@ ISO Compliance:
 - ISO/IEC 23894:2023 - AI Risk Management (resource management)
 
 Author: ALICE Engine Team
-Last Updated: 2026-01-09
+Last Updated: 2026-01-14
 """
 
 from __future__ import annotations
@@ -18,6 +18,14 @@ from __future__ import annotations
 import gc
 
 import pytest
+
+# Load fixtures from specialized conftest modules
+pytest_plugins = [
+    "tests.conftest_robustness",
+    "tests.conftest_drift",
+    "tests.conftest_input",
+    "tests.conftest_bias",
+]
 
 
 @pytest.fixture(autouse=True)
