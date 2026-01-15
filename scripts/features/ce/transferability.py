@@ -35,25 +35,15 @@ Last Updated: 2026-01-10
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 
 import pandas as pd
 
+from scripts.features.ce.types import TeamTransferability
+
+# Re-export for backward compatibility
+__all__ = ["TeamTransferability", "calculate_transferability", "suggest_transfers"]
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class TeamTransferability:
-    """État de transférabilité d'une équipe."""
-
-    equipe: str
-    saison: int
-    ronde: int
-    scenario: str
-    can_donate: bool  # Peut céder des joueurs
-    can_receive: bool  # Peut recevoir des renforts
-    priority: int  # Priorité (1 = max, 5 = min)
-    reason: str  # Justification
 
 
 def calculate_transferability(

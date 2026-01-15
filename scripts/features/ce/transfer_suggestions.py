@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from scripts.features.ce.transferability import TeamTransferability
+from scripts.features.ce.types import TeamTransferability
 
 if TYPE_CHECKING:
     import pandas as pd
