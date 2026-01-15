@@ -249,65 +249,20 @@ def _evaluate_team_transferability(  # noqa: PLR0911 - Multiple returns for clar
 
 
 def _calculate_transfer_score(team: TeamTransferability) -> float:
-    """Calcule un score de transfert [-1, 1].
+    """Calcule un score de transfert [-1, 1]."""
+    from scripts.features.ce.transfer_suggestions import calculate_transfer_score
 
-    -1.0 = Donneur maximal (équipe condamnée)
-    +1.0 = Receveur prioritaire (course titre urgente)
-     0.0 = Neutre
-
-    Ce score permet de matcher donneurs et receveurs.
-    """
-    if team.can_donate and not team.can_receive:
-        # Donneur: score négatif selon priorité
-        return -1.0 + (team.priority - 1) * 0.2  # -1.0 à -0.2
-
-    if team.can_receive and not team.can_donate:
-        # Receveur: score positif selon priorité
-        return 1.0 - (team.priority - 1) * 0.2  # +1.0 à +0.2
-
-    # Neutre
-    return 0.0
+    return calculate_transfer_score(team)
 
 
+# Re-export for backward compatibility
 def suggest_transfers(
     transferability: pd.DataFrame,
     club_id: str | None = None,
 ) -> list[dict]:
-    """Suggère des transferts de joueurs entre équipes.
+    """Suggère des transferts - délégué à transfer_suggestions.py."""
+    from scripts.features.ce.transfer_suggestions import (
+        suggest_transfers as _suggest_transfers,
+    )
 
-    Args:
-    ----
-        transferability: DataFrame issu de calculate_transferability
-        club_id: Optionnel - filtrer par club
-
-    Returns:
-    -------
-        Liste de suggestions:
-        [{"from_team": ..., "to_team": ..., "priority": ..., "reason": ...}]
-    """
-    if transferability.empty:
-        return []
-
-    donors = transferability[transferability["can_donate"]].sort_values("priority")
-    receivers = transferability[transferability["can_receive"]].sort_values("priority")
-
-    suggestions = []
-
-    for _, donor in donors.iterrows():
-        for _, receiver in receivers.iterrows():
-            if donor["saison"] != receiver["saison"]:
-                continue
-
-            suggestions.append(
-                {
-                    "from_team": donor["equipe"],
-                    "to_team": receiver["equipe"],
-                    "donor_scenario": donor["scenario"],
-                    "receiver_scenario": receiver["scenario"],
-                    "priority": receiver["priority"],
-                    "reason": f"{donor['reason']} → {receiver['reason']}",
-                }
-            )
-
-    # Trier par priorité du receveur
-    return sorted(suggestions, key=lambda x: x["priority"])
+    return _suggest_transfers(transferability, club_id)
