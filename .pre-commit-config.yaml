@@ -216,3 +216,16 @@ repos:
         language: system
         pass_filenames: false
         stages: [manual]
+
+      # ------------------------------------------------------------------------
+      # DOCUMENTATION: MkDocs Build (ISO 15289 - Documentation Quality)
+      # Validates documentation builds without errors
+      # ------------------------------------------------------------------------
+      - id: mkdocs-build
+        name: "ISO 15289 | Documentation Build"
+        description: "Validate MkDocs documentation builds correctly"
+        entry: python
+        args: [-m, mkdocs, build, --strict]
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
