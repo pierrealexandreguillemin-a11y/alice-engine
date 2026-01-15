@@ -37,11 +37,13 @@ xenon>=0.9.0
 pydeps>=1.12.0
 pylint>=3.2.0  # Pour detection duplication
 
-# === DOCUMENTATION ===
-# pdoc>=14.0.0  # API docs (optionnel)
-# mkdocs>=1.6.0  # Site docs (optionnel)
+# === DOCUMENTATION (ISO 15289) ===
+mkdocs>=1.6.0
+mkdocs-material>=9.5.0
+mkdocstrings[python]>=0.24.0
 
 # Note: Graphviz doit etre installe separement
 # Windows: choco install graphviz
 # Mac: brew install graphviz
 # Linux: apt install graphviz
+pytest-benchmark>=4.0.0

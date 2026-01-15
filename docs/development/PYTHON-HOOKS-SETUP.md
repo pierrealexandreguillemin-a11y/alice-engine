@@ -283,5 +283,39 @@ Push OK!
 
 ---
 
-*Derniere MAJ: 2025-01-03*
+## Limitations connues (Windows)
+
+### Subprocess blocking (ISO 15289 - QR-001)
+
+**Probleme**: Sur Windows, certains appels `subprocess.run()` peuvent bloquer
+indefiniment lors des tests automatises, notamment pour les commandes comme
+`radon cc` ou `python --version`.
+
+**Cause racine**: Sur Windows, les processus enfants heritent des handles du
+processus parent. Quand pytest capture stdout/stderr, cela peut causer un
+deadlock si le buffer n'est pas vide a la fermeture.
+
+**Solution implementee**:
+```python
+# scripts/iso_docs/checkers.py
+def _get_startupinfo() -> subprocess.STARTUPINFO | None:
+    """Get startupinfo for Windows to prevent console window blocking."""
+    if sys.platform == "win32":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        return startupinfo
+    return None
+```
+
+**Strategie de test adoptee** (ISO 29119):
+- Tests unitaires avec mocking complet de `subprocess.run()`
+- Les tests d'integration reels sont effectues manuellement ou en CI Linux
+- Documentation de cette limitation (ce document)
+
+**Statut**: Workaround fonctionnel via mocks dans les tests automatises.
+
+---
+
+*Derniere MAJ: 2026-01-15*
 *Score DevOps cible: 100/100*
