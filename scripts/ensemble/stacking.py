@@ -22,8 +22,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from scripts.ensemble.metrics import compute_stacking_metrics, extract_model_weights
 from scripts.ensemble.oof import compute_oof_for_model
-from scripts.ensemble.types import StackingMetrics, StackingResult
+from scripts.ensemble.types import StackingResult
 from scripts.ensemble.voting import MODEL_NAMES, compute_soft_voting
 
 if TYPE_CHECKING:
@@ -82,10 +83,10 @@ def create_stacking_ensemble(
     )
 
     # Model weights from meta-learner
-    model_weights = _extract_model_weights(meta_model)
+    model_weights = extract_model_weights(meta_model)
 
     # Metrics
-    metrics = _compute_metrics(
+    metrics = compute_stacking_metrics(
         model_aucs, stacking_train_auc, stacking_test_auc, soft_voting_auc, y_test_np, test_matrix
     )
 
@@ -271,46 +272,4 @@ def _create_meta_model(config: dict[str, object]) -> MLClassifier:
     return RidgeClassifier(
         alpha=ridge_params.get("alpha", 1.0),
         random_state=ridge_params.get("random_state", 42),
-    )
-
-
-def _extract_model_weights(meta_model: MLClassifier) -> dict[str, float]:
-    """Extract model weights from meta-learner."""
-    if hasattr(meta_model, "coef_"):
-        coefs = meta_model.coef_[0]
-        weights = np.abs(coefs) / np.abs(coefs).sum()
-        return {name: float(w) for name, w in zip(MODEL_NAMES, weights, strict=False)}
-    return {name: 1.0 / len(MODEL_NAMES) for name in MODEL_NAMES}
-
-
-def _compute_metrics(
-    model_aucs: dict[str, float],
-    stacking_train_auc: float,
-    stacking_test_auc: float,
-    soft_voting_auc: float,
-    y_test_np: NDArray[np.int64],
-    test_matrix: NDArray[np.float64],
-) -> StackingMetrics:
-    """Compute final metrics."""
-    from sklearn.metrics import roc_auc_score  # Lazy import
-
-    # Single model test AUCs
-    single_models: dict[str, dict[str, float]] = {}
-    for idx, name in enumerate(MODEL_NAMES):
-        test_auc = float(roc_auc_score(y_test_np, test_matrix[:, idx]))
-        single_models[name] = {"oof_auc": model_aucs[name], "test_auc": test_auc}
-
-    # Best single model
-    best_name = max(single_models, key=lambda x: single_models[x]["test_auc"])
-    best_auc = single_models[best_name]["test_auc"]
-
-    return StackingMetrics(
-        single_models=single_models,
-        stacking_train_auc=stacking_train_auc,
-        stacking_test_auc=stacking_test_auc,
-        soft_voting_test_auc=soft_voting_auc,
-        gain_vs_best_single=stacking_test_auc - best_auc,
-        gain_vs_soft_voting=stacking_test_auc - soft_voting_auc,
-        best_single_name=best_name,
-        best_single_auc=best_auc,
     )
