@@ -277,20 +277,9 @@ def apply_retention_policy(
 def get_retention_status(
     models_dir: Path, max_versions: int = DEFAULT_MAX_VERSIONS
 ) -> dict[str, object]:
-    """Retourne le statut de la politique de rétention.
-
-    Args:
-    ----
-        models_dir: Répertoire des modèles
-        max_versions: Nombre maximum de versions
-
-    Returns:
-    -------
-        Dict avec current_count, max_versions, versions_to_delete, etc.
-    """
+    """Retourne le statut de la politique de rétention."""
     versions = list_model_versions(models_dir)
     to_delete_count = max(0, len(versions) - max_versions)
-
     return {
         "current_count": len(versions),
         "max_versions": max_versions,
