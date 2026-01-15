@@ -1,9 +1,20 @@
 """Tool installation and metrics checking functions."""
 
 import subprocess  # nosec B404 - subprocess for internal dev tools only
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent.parent
+
+
+def _get_startupinfo() -> subprocess.STARTUPINFO | None:
+    """Get startupinfo for Windows to prevent console window blocking."""
+    if sys.platform == "win32":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        return startupinfo
+    return None
 
 
 def check_installed(cmd: str) -> tuple[bool, str]:
@@ -18,6 +29,7 @@ def check_installed(cmd: str) -> tuple[bool, str]:
             text=True,
             timeout=10,
             shell=True,  # Required for "python -m" and quoted args on Windows
+            startupinfo=_get_startupinfo(),
         )
         if result.returncode != 0:
             return False, "non installe"
@@ -39,6 +51,7 @@ def get_test_coverage() -> str:
             cwd=ROOT,
             timeout=120,
             shell=True,
+            startupinfo=_get_startupinfo(),
         )
         for line in result.stdout.split("\n"):
             if "TOTAL" in line:
@@ -61,6 +74,7 @@ def get_complexity_avg() -> str:
             cwd=ROOT,
             timeout=30,
             shell=True,
+            startupinfo=_get_startupinfo(),
         )
         for line in result.stdout.split("\n"):
             if "Average complexity" in line:

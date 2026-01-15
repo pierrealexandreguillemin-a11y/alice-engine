@@ -120,27 +120,32 @@ def _encode_categorical_features(
     *,
     fit_encoders: bool,
 ) -> pd.DataFrame:
-    """Encode les features catégorielles."""
+    """Encode les features catégorielles.
+
+    Optimized: Batch operations for better performance.
+    """
     from sklearn.preprocessing import LabelEncoder  # Lazy import
 
-    X_cat_encoded = pd.DataFrame()
+    # Pre-filter columns and fillna in batch (more efficient)
+    cols_to_encode = [c for c in CATEGORICAL_FEATURES if c in df.columns]
+    if not cols_to_encode:
+        return pd.DataFrame()
 
-    for col in CATEGORICAL_FEATURES:
-        if col not in df.columns:
-            continue
+    # Batch fillna and astype conversion
+    cat_data = df[cols_to_encode].fillna("UNKNOWN").astype(str)
 
-        df[col] = df[col].fillna("UNKNOWN").astype(str)
-
+    encoded_cols = {}
+    for col in cols_to_encode:
         if fit_encoders:
             le = LabelEncoder()
-            X_cat_encoded[col] = le.fit_transform(df[col])
+            encoded_cols[col] = le.fit_transform(cat_data[col])
             label_encoders[col] = le
         else:
-            encoded = _encode_with_existing_encoder(df, col, label_encoders)
+            encoded = _encode_with_existing_encoder(cat_data, col, label_encoders)
             if encoded is not None:
-                X_cat_encoded[col] = encoded
+                encoded_cols[col] = encoded.values
 
-    return X_cat_encoded
+    return pd.DataFrame(encoded_cols)
 
 
 def _encode_with_existing_encoder(
@@ -148,13 +153,20 @@ def _encode_with_existing_encoder(
     col: str,
     label_encoders: dict[str, LabelEncoder],
 ) -> pd.Series | None:
-    """Encode une colonne avec un encodeur existant."""
+    """Encode une colonne avec un encodeur existant.
+
+    Optimized: Vectorized operations instead of apply().
+    """
     le = label_encoders.get(col)
     if le is None:
         return None
 
     known_classes = set(le.classes_)
-    values = df[col].apply(lambda x, kc=known_classes: x if x in kc else "UNKNOWN")
+    col_values = df[col].values
+
+    # Vectorized: replace unknown values with "UNKNOWN"
+    mask = np.isin(col_values, list(known_classes))
+    values = np.where(mask, col_values, "UNKNOWN")
 
     if "UNKNOWN" not in known_classes:
         le.classes_ = np.append(le.classes_, "UNKNOWN")

@@ -507,18 +507,27 @@ class TestMain:
 class TestIntegration:
     """Tests d'intégration."""
 
-    @pytest.mark.skip(reason="Blocks on Windows - subprocess hang issue with shell=True")
-    def test_report_generation_real_checks(self) -> None:
-        """Test génération rapport avec vraies vérifications."""
-        # Ce test utilise les vraies commandes
-        # Peut échouer si les outils ne sont pas installés
-        # FIXME: Investigate subprocess blocking on Windows
+    @patch("scripts.iso_docs.templates.check_installed")
+    @patch("scripts.iso_docs.templates.get_test_coverage")
+    @patch("scripts.iso_docs.templates.get_complexity_avg")
+    def test_report_generation_mocked(
+        self,
+        mock_complexity: MagicMock,
+        mock_coverage: MagicMock,
+        mock_installed: MagicMock,
+    ) -> None:
+        """Test génération rapport avec mocks (évite subprocess Windows)."""
+        mock_installed.return_value = (True, "1.0.0")
+        mock_coverage.return_value = "85%"
+        mock_complexity.return_value = "A (2.5)"
+
         report = generate_report()
 
         # Vérifier structure minimale
         assert "# IMPLEMENTATION DEVOPS" in report
         assert "Score actuel:" in report
         assert "Modules installes:" in report
+        assert "85%" in report
 
     @patch("scripts.iso_docs.templates.check_installed")
     def test_coverage_badge_good(self, mock_installed: MagicMock) -> None:

@@ -101,3 +101,4 @@ Thumbs.db
 *.bak
 *.tmp
 nul
+site/
