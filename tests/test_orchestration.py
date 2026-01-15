@@ -1,15 +1,15 @@
 """Tests Orchestration - ISO 29119/5259.
 
 Document ID: ALICE-TEST-ORCHESTRATION
-Version: 1.0.0
-Tests: 15
+Version: 1.1.0
+Tests: 17
 
 Classes:
 - TestFindAllGroupes: Tests découverte groupes (3 tests)
 - TestFindPlayerPages: Tests découverte pages joueurs (3 tests)
 - TestParseCompositions: Tests export compositions (4 tests)
-- TestParseJoueurs: Tests export joueurs (3 tests)
-- TestTestParseGroupe: Tests fonction debug (2 tests)
+- TestParseJoueurs: Tests export joueurs (4 tests)
+- TestTestParseGroupe: Tests fonction debug (3 tests)
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
@@ -212,6 +212,27 @@ class TestParseJoueurs:
         assert stats["nb_joueurs"] >= 1
         assert output_path.exists()
 
+    def test_counts_zero_elo_players(self, tmp_path: Path) -> None:
+        """Compte les joueurs avec elo=0 (ISO 5259 data quality)."""
+        pytest.importorskip("pyarrow")
+        from scripts.parse_dataset.orchestration import parse_joueurs
+
+        # HTML avec joueur elo=0 (valeur vide dans colonnes elo)
+        player_html = """<html><body><table>
+            <tr class="liste_clair">
+                <td>K59857</td><td>DUPONT Jean</td><td>A</td>
+                <td><a href="FicheJoueur?Id=123">Info</a></td>
+                <td>0 F</td><td>0 N</td><td>0 E</td>
+                <td>SenM</td><td></td><td>Club</td>
+            </tr>
+        </table></body></html>"""
+        (tmp_path / "page_001.html").write_text(player_html, encoding="utf-8")
+
+        output_path = tmp_path / "out.parquet"
+        stats = parse_joueurs(tmp_path, output_path)
+
+        assert stats["nb_joueurs_elo_zero"] >= 1
+
 
 class TestTestParseGroupe:
     """Tests pour test_parse_groupe."""
@@ -222,6 +243,27 @@ class TestTestParseGroupe:
 
         # Ne doit pas lever d'exception
         test_parse_groupe(str(tmp_path / "nonexistent"), tmp_path)
+
+    def test_empty_rows_no_sample(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        """N'affiche pas SAMPLE si rows vide (branche else ligne 193)."""
+        from scripts.parse_dataset.orchestration import test_parse_groupe
+
+        # Créer un groupe avec HTML valide mais sans matchs parsables
+        groupe = tmp_path / "2025" / "Interclubs" / "N1" / "Groupe_A"
+        groupe.mkdir(parents=True)
+        # HTML sans RowMatchDetail = aucune ligne parsée
+        ronde_html = """<html><body><table>
+            <tr id="RowEnTeteDetail1"><td>Club A</td><td>0-0</td><td>Club B</td></tr>
+        </table></body></html>"""
+        (groupe / "ronde_1.html").write_text(ronde_html, encoding="utf-8")
+
+        test_parse_groupe(str(groupe), tmp_path)
+
+        captured = capsys.readouterr()
+        assert "METADATA" in captured.out
+        assert "0 lignes" in captured.out
+        # SAMPLE ne doit pas apparaître car rows est vide
+        assert "SAMPLE" not in captured.out
 
     def test_parses_and_prints(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
         """Parse et affiche les résultats."""
