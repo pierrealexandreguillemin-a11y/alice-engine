@@ -1,16 +1,18 @@
-"""Tests pour scripts/iso_audit - ISO 29119.
+"""Tests Auditors ISO Audit - ISO 29119.
 
-Ce module teste les fonctionnalités d'audit ISO:
-- ISOViolation et AuditResult (types.py)
-- Fonctions d'audit (auditors.py)
-- Génération de rapports (report.py)
+Document ID: ALICE-TEST-ISO-AUDIT-AUDITORS
+Version: 1.0.0
 
-ISO 29119: Test coverage pour le module d'audit ISO.
+Tests pour les fonctions d'audit ISO.
+
+ISO Compliance:
+- ISO/IEC 29119:2022 - Software Testing
+- ISO/IEC 5055:2021 - Code Quality (<300 lignes)
+
+Author: ALICE Engine Team
+Last Updated: 2026-01-15
 """
 
-from __future__ import annotations
-
-import json
 from pathlib import Path
 
 from scripts.iso_audit.auditors import (
@@ -22,103 +24,7 @@ from scripts.iso_audit.auditors import (
     audit_iso_25010_quality,
     count_lines,
 )
-from scripts.iso_audit.report import (
-    _build_markdown_content,
-    _build_violations_by_norm,
-    _generate_json_report,
-    _generate_markdown_report,
-    generate_report,
-)
-from scripts.iso_audit.types import AuditResult, ISOViolation
-
-# =============================================================================
-# Tests pour types.py
-# =============================================================================
-
-
-class TestISOViolation:
-    """Tests pour ISOViolation dataclass."""
-
-    def test_create_violation(self) -> None:
-        """Test création violation basique."""
-        v = ISOViolation(
-            norm="ISO 5055",
-            severity="HIGH",
-            file="test.py",
-            message="Fichier trop long",
-        )
-        assert v.norm == "ISO 5055"
-        assert v.severity == "HIGH"
-        assert v.file == "test.py"
-        assert v.message == "Fichier trop long"
-        assert v.fix_suggestion == ""
-
-    def test_violation_with_fix(self) -> None:
-        """Test violation avec suggestion de correction."""
-        v = ISOViolation(
-            norm="ISO 29119",
-            severity="CRITICAL",
-            file="module.py",
-            message="Couverture 0%",
-            fix_suggestion="Créer tests unitaires",
-        )
-        assert v.fix_suggestion == "Créer tests unitaires"
-
-
-class TestAuditResult:
-    """Tests pour AuditResult dataclass."""
-
-    def test_create_empty_result(self) -> None:
-        """Test création résultat vide."""
-        result = AuditResult()
-        assert result.violations == []
-        assert result.stats == {}
-        assert result.compliant is False
-        assert result.timestamp is not None
-
-    def test_add_violation(self) -> None:
-        """Test ajout de violation."""
-        result = AuditResult()
-        result.add_violation(
-            norm="ISO 5055",
-            severity="MEDIUM",
-            file="test.py",
-            message="300+ lignes",
-            fix="Refactorer",
-        )
-        assert len(result.violations) == 1
-        assert result.violations[0].norm == "ISO 5055"
-        assert result.violations[0].severity == "MEDIUM"
-
-    def test_to_dict(self) -> None:
-        """Test conversion en dictionnaire."""
-        result = AuditResult()
-        result.add_violation("ISO 5055", "CRITICAL", "a.py", "msg1")
-        result.add_violation("ISO 5055", "HIGH", "b.py", "msg2")
-        result.add_violation("ISO 29119", "MEDIUM", "c.py", "msg3")
-        result.stats = {"test": 123}
-        result.compliant = True
-
-        d = result.to_dict()
-        assert d["compliant"] is True
-        assert d["stats"] == {"test": 123}
-        assert len(d["violations"]) == 3
-        assert d["summary"]["total"] == 3
-        assert d["summary"]["critical"] == 1
-        assert d["summary"]["high"] == 1
-        assert d["summary"]["medium"] == 1
-        assert d["summary"]["low"] == 0
-
-    def test_to_dict_empty(self) -> None:
-        """Test conversion dictionnaire vide."""
-        result = AuditResult()
-        d = result.to_dict()
-        assert d["summary"]["total"] == 0
-
-
-# =============================================================================
-# Tests pour auditors.py
-# =============================================================================
+from scripts.iso_audit.types import AuditResult
 
 
 class TestCountLines:
@@ -215,14 +121,10 @@ class TestAuditISO5055:
 
     def test_audit_with_files(self, tmp_path: Path) -> None:
         """Test audit avec fichiers Python."""
-        # Créer structure
         app_dir = tmp_path / "app"
         app_dir.mkdir()
 
-        # Fichier conforme
         (app_dir / "small.py").write_text("# Comment\nprint('hello')\n")
-
-        # Fichier trop long
         (app_dir / "large.py").write_text("x = 1\n" * 350)
 
         result = AuditResult()
@@ -270,7 +172,6 @@ class TestAuditISO15289:
         result = AuditResult()
         audit_iso_15289_documentation(result, tmp_path)
 
-        # Chercher violation LOW pour contenu trop court
         low_violations = [v for v in result.violations if v.severity == "LOW"]
         assert len(low_violations) == 1
 
@@ -312,7 +213,6 @@ class TestAuditISO25010:
 
     def test_audit_srp_violation(self, tmp_path: Path) -> None:
         """Test détection violation SRP (>20 fonctions)."""
-        # Créer fichier avec beaucoup de fonctions
         funcs = "\n".join([f"def func_{i}():\n    pass\n" for i in range(25)])
         (tmp_path / "big_module.py").write_text(funcs)
 
@@ -320,102 +220,3 @@ class TestAuditISO25010:
         audit_iso_25010_quality(result, tmp_path)
 
         assert result.stats["iso_25010"]["srp_violations"] == 1
-
-
-# =============================================================================
-# Tests pour report.py
-# =============================================================================
-
-
-class TestGenerateReport:
-    """Tests pour generate_report."""
-
-    def test_generate_report_creates_files(self, tmp_path: Path) -> None:
-        """Test création fichiers rapport."""
-        result = AuditResult()
-        result.add_violation("ISO 5055", "HIGH", "test.py", "Too long")
-
-        generate_report(result, tmp_path)
-
-        assert (tmp_path / "iso-audit" / "iso-audit-report.json").exists()
-        assert (tmp_path / "iso-audit" / "ISO_AUDIT_REPORT.md").exists()
-
-    def test_json_report_content(self, tmp_path: Path) -> None:
-        """Test contenu rapport JSON."""
-        result = AuditResult()
-        result.add_violation("ISO 5055", "CRITICAL", "a.py", "msg")
-        result.compliant = True
-
-        output_path = tmp_path / "iso-audit"
-        output_path.mkdir(parents=True)
-        _generate_json_report(result, output_path)
-
-        json_file = output_path / "iso-audit-report.json"
-        data = json.loads(json_file.read_text())
-
-        assert data["compliant"] is True
-        assert len(data["violations"]) == 1
-
-    def test_markdown_report_content(self, tmp_path: Path) -> None:
-        """Test contenu rapport Markdown."""
-        result = AuditResult()
-        result.add_violation("ISO 5055", "HIGH", "test.py", "Too long")
-        result.compliant = False
-
-        output_path = tmp_path / "iso-audit"
-        output_path.mkdir(parents=True)
-        _generate_markdown_report(result, output_path)
-
-        md_file = output_path / "ISO_AUDIT_REPORT.md"
-        content = md_file.read_text()
-
-        assert "Rapport Audit ISO" in content
-        assert "[FAIL] NON CONFORME" in content
-        assert "ISO 5055" in content
-
-
-class TestBuildMarkdownContent:
-    """Tests pour _build_markdown_content."""
-
-    def test_compliant_status(self) -> None:
-        """Test statut conforme."""
-        result = AuditResult()
-        result.compliant = True
-
-        md = _build_markdown_content(result)
-        assert "[OK] CONFORME" in md
-
-    def test_non_compliant_status(self) -> None:
-        """Test statut non conforme."""
-        result = AuditResult()
-        result.compliant = False
-        result.add_violation("ISO 5055", "HIGH", "a.py", "msg")
-
-        md = _build_markdown_content(result)
-        assert "[FAIL] NON CONFORME" in md
-        assert "| 1 |" in md  # Violations totales
-
-
-class TestBuildViolationsByNorm:
-    """Tests pour _build_violations_by_norm."""
-
-    def test_empty_violations(self) -> None:
-        """Test liste vide."""
-        content = _build_violations_by_norm([])
-        assert content == ""
-
-    def test_grouped_by_norm(self) -> None:
-        """Test regroupement par norme."""
-        violations = [
-            ISOViolation("ISO 5055", "HIGH", "a.py", "msg1"),
-            ISOViolation("ISO 5055", "MEDIUM", "b.py", "msg2"),
-            ISOViolation("ISO 29119", "LOW", "c.py", "msg3"),
-        ]
-
-        content = _build_violations_by_norm(violations)
-
-        assert "### ISO 5055" in content
-        assert "### ISO 29119" in content
-        assert "a.py" in content
-        assert "b.py" in content
-        assert "c.py" in content
