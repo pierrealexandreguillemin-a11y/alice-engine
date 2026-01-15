@@ -1,16 +1,18 @@
 """Tests Monitor Drift - ISO 23894.
 
 Document ID: ALICE-TEST-DRIFT-MON
-Version: 1.0.0
-Tests: 7
+Version: 1.1.0
+Tests: 13
 
 Classes:
+- TestComputeOverallSeverity: Tests helper _compute_overall_severity (3 tests)
+- TestIsSignificantDrift: Tests helper _is_significant_drift (3 tests)
 - TestAnalyzeFeatureDrift: Tests analyse feature (3 tests)
 - TestMonitorDrift: Tests monitoring complet (4 tests)
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
-- ISO/IEC 5055:2021 - Code Quality (<120 lignes)
+- ISO/IEC 5055:2021 - Code Quality (<150 lignes)
 
 Author: ALICE Engine Team
 Last Updated: 2026-01-14
@@ -19,12 +21,48 @@ Last Updated: 2026-01-14
 import numpy as np
 
 from scripts.model_registry.drift_monitor import (
+    _compute_overall_severity,
+    _is_significant_drift,
     analyze_feature_drift,
     monitor_drift,
 )
 from scripts.model_registry.drift_types import DriftSeverity
 
 # Fixtures (baseline_data, current_no_drift, current_with_drift) are auto-loaded via pytest_plugins
+
+
+class TestComputeOverallSeverity:
+    """Tests pour _compute_overall_severity (ISO 29119 - Unit tests)."""
+
+    def test_returns_critical_when_present(self):
+        """Retourne CRITICAL si présent dans la liste."""
+        severities = [DriftSeverity.LOW, DriftSeverity.CRITICAL, DriftSeverity.MEDIUM]
+        assert _compute_overall_severity(severities) == DriftSeverity.CRITICAL
+
+    def test_returns_highest_severity(self):
+        """Retourne la sévérité la plus haute."""
+        severities = [DriftSeverity.LOW, DriftSeverity.MEDIUM]
+        assert _compute_overall_severity(severities) == DriftSeverity.MEDIUM
+
+    def test_returns_none_for_empty_list(self):
+        """Retourne NONE pour liste vide."""
+        assert _compute_overall_severity([]) == DriftSeverity.NONE
+
+
+class TestIsSignificantDrift:
+    """Tests pour _is_significant_drift (ISO 29119 - Unit tests)."""
+
+    def test_medium_is_significant(self):
+        """MEDIUM est significatif."""
+        assert _is_significant_drift(DriftSeverity.MEDIUM) is True
+
+    def test_high_is_significant(self):
+        """HIGH est significatif."""
+        assert _is_significant_drift(DriftSeverity.HIGH) is True
+
+    def test_low_is_not_significant(self):
+        """LOW n'est pas significatif."""
+        assert _is_significant_drift(DriftSeverity.LOW) is False
 
 
 class TestAnalyzeFeatureDrift:

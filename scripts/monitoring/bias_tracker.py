@@ -126,6 +126,41 @@ def _determine_status(alerts: list[BiasAlert]) -> FairnessStatus:
     return FairnessStatus.CAUTION
 
 
+def _compute_demographic_parity(rates: list[float]) -> float:
+    """Calcule le ratio de parité démographique (min/max).
+
+    Le ratio indique l'équité entre groupes: 1.0 = parfaitement équitable,
+    < 0.8 = généralement considéré comme biaisé (règle 4/5 EEOC).
+
+    Args:
+    ----
+        rates: Liste des taux de prédiction positive par groupe.
+
+    Returns:
+    -------
+        float: Ratio min/max entre 0 et 1, ou 1.0 si liste vide.
+    """
+    return min(rates) / max(rates) if rates and max(rates) > 0 else 1.0
+
+
+def _compute_equalized_odds(values: list[float | None]) -> float | None:
+    """Calcule la différence max-min pour equalized odds.
+
+    Mesure l'écart entre groupes pour TPR ou FPR.
+    Un écart proche de 0 indique des taux équivalents entre groupes.
+
+    Args:
+    ----
+        values: Liste des taux (TPR ou FPR) par groupe, peut contenir None.
+
+    Returns:
+    -------
+        float | None: Différence max-min si >= 2 valeurs valides, None sinon.
+    """
+    filtered = [v for v in values if v is not None]
+    return max(filtered) - min(filtered) if len(filtered) >= 2 else None
+
+
 def monitor_bias(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -141,10 +176,7 @@ def monitor_bias(
     group_metrics = compute_bias_metrics(
         y_true, y_pred, protected, protected_attribute, y_prob, config.min_group_size
     )
-    rates = [m.positive_rate for m in group_metrics]
-    dp = min(rates) / max(rates) if rates and max(rates) > 0 else 1.0
-    tprs = [m.true_positive_rate for m in group_metrics if m.true_positive_rate is not None]
-    fprs = [m.false_positive_rate for m in group_metrics if m.false_positive_rate is not None]
+    dp = _compute_demographic_parity([m.positive_rate for m in group_metrics])
 
     result = BiasMonitorResult(
         timestamp=datetime.now().isoformat(),
@@ -153,8 +185,8 @@ def monitor_bias(
         group_metrics=group_metrics,
         demographic_parity=dp,
         disparate_impact=dp,
-        equalized_odds_tpr=max(tprs) - min(tprs) if len(tprs) >= 2 else None,
-        equalized_odds_fpr=max(fprs) - min(fprs) if len(fprs) >= 2 else None,
+        equalized_odds_tpr=_compute_equalized_odds([m.true_positive_rate for m in group_metrics]),
+        equalized_odds_fpr=_compute_equalized_odds([m.false_positive_rate for m in group_metrics]),
     )
 
     result.alerts = check_bias_alerts(result, config)

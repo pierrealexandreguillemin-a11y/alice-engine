@@ -1,10 +1,12 @@
 """Tests Bias Tracker - ISO 24027.
 
 Document ID: ALICE-TEST-BIAS-TRACK
-Version: 1.0.0
-Tests: 8
+Version: 1.1.0
+Tests: 14
 
 Classes:
+- TestComputeDemographicParity: Tests helper _compute_demographic_parity (3 tests)
+- TestComputeEqualizedOdds: Tests helper _compute_equalized_odds (3 tests)
 - TestComputeBiasMetrics: Tests calcul métriques (2 tests)
 - TestCheckBiasAlerts: Tests détection alertes (2 tests)
 - TestMonitorBias: Tests monitoring complet (3 tests)
@@ -12,7 +14,7 @@ Classes:
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
-- ISO/IEC 5055:2021 - Code Quality (<120 lignes)
+- ISO/IEC 5055:2021 - Code Quality (<160 lignes)
 
 Author: ALICE Engine Team
 Last Updated: 2026-01-14
@@ -21,7 +23,11 @@ Last Updated: 2026-01-14
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from scripts.monitoring.bias_tracker import (
+    _compute_demographic_parity,
+    _compute_equalized_odds,
     compute_bias_metrics,
     load_bias_config,
     monitor_bias,
@@ -34,6 +40,42 @@ from scripts.monitoring.bias_types import (
 
 # Fixtures (biased_predictions, default_config, fair_predictions, strict_config, y_prob)
 # are auto-loaded via pytest_plugins in conftest.py
+
+
+class TestComputeDemographicParity:
+    """Tests pour _compute_demographic_parity (ISO 29119 - Unit tests)."""
+
+    def test_equal_rates_returns_one(self):
+        """Taux égaux retournent 1.0."""
+        rates = [0.5, 0.5, 0.5]
+        assert _compute_demographic_parity(rates) == 1.0
+
+    def test_unequal_rates_returns_ratio(self):
+        """Taux inégaux retournent min/max."""
+        rates = [0.4, 0.8]
+        assert _compute_demographic_parity(rates) == 0.5
+
+    def test_empty_rates_returns_one(self):
+        """Liste vide retourne 1.0."""
+        assert _compute_demographic_parity([]) == 1.0
+
+
+class TestComputeEqualizedOdds:
+    """Tests pour _compute_equalized_odds (ISO 29119 - Unit tests)."""
+
+    def test_returns_difference(self):
+        """Retourne max - min pour >= 2 valeurs."""
+        values = [0.7, 0.9, 0.8]
+        assert _compute_equalized_odds(values) == pytest.approx(0.2)
+
+    def test_returns_none_for_single_value(self):
+        """Retourne None pour < 2 valeurs."""
+        assert _compute_equalized_odds([0.5]) is None
+
+    def test_filters_none_values(self):
+        """Ignore les valeurs None."""
+        values = [0.6, None, 0.8, None]
+        assert _compute_equalized_odds(values) == pytest.approx(0.2)
 
 
 class TestComputeBiasMetrics:

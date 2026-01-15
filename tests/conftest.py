@@ -25,6 +25,7 @@ pytest_plugins = [
     "tests.conftest_drift",
     "tests.conftest_input",
     "tests.conftest_bias",
+    "tests.conftest_ml",
 ]
 
 

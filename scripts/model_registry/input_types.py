@@ -89,37 +89,79 @@ class FeatureBounds:
             categories=data.get("categories"),
         )
 
+    def _check_categorical(self, value: float | str) -> tuple[OODSeverity, str]:
+        """Vérifie une valeur catégorielle contre les catégories connues.
+
+        Args:
+        ----
+            value: Valeur catégorielle à vérifier.
+
+        Returns:
+        -------
+            tuple[OODSeverity, str]: (VALID, "") si catégorie connue,
+                (OUT_OF_BOUNDS, message) si catégorie inconnue.
+        """
+        is_unknown = self.categories and str(value) not in self.categories
+        return (
+            (OODSeverity.OUT_OF_BOUNDS, f"Unknown category: {value}")
+            if is_unknown
+            else (OODSeverity.VALID, "")
+        )
+
+    def _check_out_of_bounds(self, value: float, std_tolerance: float) -> tuple[OODSeverity, str]:
+        """Vérifie une valeur hors bornes min/max et détermine sa sévérité.
+
+        Calcule la déviation en nombre d'écarts-types pour distinguer
+        entre OUT_OF_BOUNDS (modéré) et EXTREME (>2x std_tolerance).
+
+        Args:
+        ----
+            value: Valeur numérique hors bornes à évaluer.
+            std_tolerance: Seuil de tolérance en écarts-types.
+
+        Returns:
+        -------
+            tuple[OODSeverity, str]: (EXTREME, msg) si déviation > 2x tolérance,
+                (OUT_OF_BOUNDS, msg) sinon.
+        """
+        deviation = abs(value - self.mean) / max(self.std, 1e-8)
+        is_extreme = deviation > std_tolerance * 2
+        severity = OODSeverity.EXTREME if is_extreme else OODSeverity.OUT_OF_BOUNDS
+        msg = f"Value {value} is extreme" if is_extreme else f"Value {value} outside bounds"
+        return severity, msg
+
+    def _check_numeric(self, value: float, std_tolerance: float) -> tuple[OODSeverity, str]:
+        """Vérifie une valeur numérique contre les bornes statistiques.
+
+        Vérifie dans l'ordre: validité, bornes min/max, percentiles p01-p99.
+
+        Args:
+        ----
+            value: Valeur numérique à vérifier.
+            std_tolerance: Seuil de tolérance en écarts-types pour EXTREME.
+
+        Returns:
+        -------
+            tuple[OODSeverity, str]: Tuple (sévérité, message d'erreur).
+                - VALID si dans p01-p99
+                - WARNING si hors p01-p99 mais dans min/max
+                - OUT_OF_BOUNDS/EXTREME si hors min/max
+        """
+        if not isinstance(value, int | float) or np.isnan(value):
+            return OODSeverity.OUT_OF_BOUNDS, f"Invalid value: {value}"
+        if value < self.min_value or value > self.max_value:
+            return self._check_out_of_bounds(value, std_tolerance)
+        if value < self.p01 or value > self.p99:
+            return OODSeverity.WARNING, f"Value {value} outside p01-p99"
+        return OODSeverity.VALID, ""
+
     def check_value(
         self, value: float | str, std_tolerance: float = DEFAULT_STD_TOLERANCE
     ) -> tuple[OODSeverity, str]:
         """Vérifie si une valeur est dans les bornes."""
         if self.is_categorical:
-            is_unknown = self.categories and str(value) not in self.categories
-            return (
-                (OODSeverity.OUT_OF_BOUNDS, f"Unknown category: {value}")
-                if is_unknown
-                else (OODSeverity.VALID, "")
-            )
-
-        if not isinstance(value, int | float) or np.isnan(value):
-            return OODSeverity.OUT_OF_BOUNDS, f"Invalid value: {value}"
-
-        if value < self.min_value or value > self.max_value:
-            deviation = abs(value - self.mean) / max(self.std, 1e-8)
-            severity = (
-                OODSeverity.EXTREME if deviation > std_tolerance * 2 else OODSeverity.OUT_OF_BOUNDS
-            )
-            msg = (
-                f"Value {value} is extreme"
-                if severity == OODSeverity.EXTREME
-                else f"Value {value} outside bounds"
-            )
-            return severity, msg
-
-        if value < self.p01 or value > self.p99:
-            return OODSeverity.WARNING, f"Value {value} outside p01-p99"
-
-        return OODSeverity.VALID, ""
+            return self._check_categorical(value)
+        return self._check_numeric(value, std_tolerance)
 
 
 @dataclass

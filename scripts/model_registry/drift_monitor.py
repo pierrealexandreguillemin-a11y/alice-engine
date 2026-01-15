@@ -113,16 +113,55 @@ def analyze_feature_drift(
 
 def _generate_recommendations(result: DriftMonitorResult) -> list[str]:
     """Génère des recommandations basées sur le drift."""
-    recs = []
-    if result.overall_severity == DriftSeverity.CRITICAL:
-        recs.append("URGENT: Drift critique. Retraining immédiat recommandé.")
-    elif result.overall_severity == DriftSeverity.HIGH:
-        recs.append("WARNING: Drift significatif. Planifier un retraining.")
-    elif result.overall_severity == DriftSeverity.MEDIUM:
-        recs.append("NOTICE: Drift modéré. Surveiller l'évolution.")
+    messages = {
+        DriftSeverity.CRITICAL: "URGENT: Drift critique. Retraining immédiat recommandé.",
+        DriftSeverity.HIGH: "WARNING: Drift significatif. Planifier un retraining.",
+        DriftSeverity.MEDIUM: "NOTICE: Drift modéré. Surveiller l'évolution.",
+    }
+    recs = [messages[result.overall_severity]] if result.overall_severity in messages else []
     if result.drifted_features:
         recs.append(f"Features impactées: {', '.join(result.drifted_features[:5])}")
     return recs
+
+
+def _compute_overall_severity(severities: list[DriftSeverity]) -> DriftSeverity:
+    """Calcule la sévérité globale depuis la liste des sévérités.
+
+    Retourne la sévérité la plus haute présente dans la liste,
+    en suivant l'ordre: CRITICAL > HIGH > MEDIUM > LOW > NONE.
+
+    Args:
+    ----
+        severities: Liste des sévérités de drift par feature.
+
+    Returns:
+    -------
+        DriftSeverity: La sévérité maximale, ou NONE si liste vide.
+    """
+    severity_order = [
+        DriftSeverity.CRITICAL,
+        DriftSeverity.HIGH,
+        DriftSeverity.MEDIUM,
+        DriftSeverity.LOW,
+    ]
+    return next((s for s in severity_order if s in severities), DriftSeverity.NONE)
+
+
+def _is_significant_drift(severity: DriftSeverity) -> bool:
+    """Vérifie si la sévérité est significative.
+
+    Une sévérité est considérée significative si elle nécessite
+    une attention ou une action (MEDIUM, HIGH, CRITICAL).
+
+    Args:
+    ----
+        severity: Niveau de sévérité du drift à évaluer.
+
+    Returns:
+    -------
+        bool: True si MEDIUM, HIGH ou CRITICAL; False sinon.
+    """
+    return severity in (DriftSeverity.MEDIUM, DriftSeverity.HIGH, DriftSeverity.CRITICAL)
 
 
 def monitor_drift(
@@ -148,28 +187,19 @@ def monitor_drift(
     for feature in features:
         if feature not in current_data.columns:
             continue
-        is_cat = feature in categorical_features
         feature_result = analyze_feature_drift(
-            feature, baseline_data[feature].values, current_data[feature].values, is_cat
+            feature,
+            baseline_data[feature].values,
+            current_data[feature].values,
+            is_categorical=feature in categorical_features,
         )
         result.feature_results.append(feature_result)
-        if feature_result.severity in (
-            DriftSeverity.MEDIUM,
-            DriftSeverity.HIGH,
-            DriftSeverity.CRITICAL,
-        ):
+        if _is_significant_drift(feature_result.severity):
             result.drifted_features.append(feature)
 
     if result.feature_results:
         severities = [f.severity for f in result.feature_results]
-        if DriftSeverity.CRITICAL in severities:
-            result.overall_severity = DriftSeverity.CRITICAL
-        elif DriftSeverity.HIGH in severities:
-            result.overall_severity = DriftSeverity.HIGH
-        elif DriftSeverity.MEDIUM in severities:
-            result.overall_severity = DriftSeverity.MEDIUM
-        elif DriftSeverity.LOW in severities:
-            result.overall_severity = DriftSeverity.LOW
+        result.overall_severity = _compute_overall_severity(severities)
 
     result.drift_detected = result.overall_severity in (DriftSeverity.HIGH, DriftSeverity.CRITICAL)
     result.recommendations = _generate_recommendations(result)

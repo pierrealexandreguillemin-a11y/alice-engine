@@ -99,6 +99,50 @@ def create_bounds_config(
     return config
 
 
+def _record_severity(
+    result: InputValidationResult, feature_name: str, severity: OODSeverity, message: str
+) -> None:
+    """Enregistre la sévérité d'une feature dans le résultat de validation.
+
+    Met à jour les listes warnings, ood_features et errors selon la sévérité.
+
+    Args:
+    ----
+        result: Résultat de validation à mettre à jour (mutation in-place).
+        feature_name: Nom de la feature validée.
+        severity: Niveau de sévérité détecté.
+        message: Message descriptif de l'anomalie.
+    """
+    if severity == OODSeverity.WARNING:
+        result.warnings.append(f"[{feature_name}] {message}")
+    elif severity in (OODSeverity.OUT_OF_BOUNDS, OODSeverity.EXTREME):
+        result.ood_features.append(feature_name)
+        result.errors.append(f"[{feature_name}] {message}")
+
+
+def _determine_action(result: InputValidationResult, rejection_threshold: float) -> None:
+    """Détermine l'action finale basée sur le ratio OOD.
+
+    Met à jour is_valid et action selon le ratio de features OOD.
+
+    Args:
+    ----
+        result: Résultat de validation à mettre à jour (mutation in-place).
+        rejection_threshold: Seuil de ratio OOD au-delà duquel rejeter.
+
+    Note:
+    ----
+        - REJECT si ood_ratio >= rejection_threshold
+        - WARN si features OOD ou warnings présents
+        - ACCEPT sinon (inchangé)
+    """
+    if result.ood_ratio >= rejection_threshold:
+        result.is_valid = False
+        result.action = OODAction.REJECT
+    elif result.ood_features or result.warnings:
+        result.action = OODAction.WARN
+
+
 def validate_input(
     input_data: dict[str, Any] | pd.DataFrame,
     bounds_config: InputBoundsConfig,
@@ -107,38 +151,23 @@ def validate_input(
 ) -> InputValidationResult:
     """Valide un input contre les bornes du training set (ISO 24029)."""
     input_dict = input_data.to_dict() if hasattr(input_data, "to_dict") else dict(input_data)
-
     result = InputValidationResult(is_valid=True, action=OODAction.ACCEPT)
 
     for feature_name, bounds in bounds_config.features.items():
         if feature_name not in input_dict:
             continue
-
         value = input_dict[feature_name]
         severity, message = bounds.check_value(value, std_tolerance)
-
-        feature_result = FeatureValidationResult(
-            feature_name=feature_name, value=value, severity=severity, message=message
+        result.feature_results.append(
+            FeatureValidationResult(
+                feature_name=feature_name, value=value, severity=severity, message=message
+            )
         )
-
-        if severity == OODSeverity.WARNING:
-            result.warnings.append(f"[{feature_name}] {message}")
-        elif severity in (OODSeverity.OUT_OF_BOUNDS, OODSeverity.EXTREME):
-            result.ood_features.append(feature_name)
-            result.errors.append(f"[{feature_name}] {message}")
-
-        result.feature_results.append(feature_result)
+        _record_severity(result, feature_name, severity, message)
 
     n_validated = len([f for f in bounds_config.features if f in input_dict])
-    if n_validated > 0:
-        result.ood_ratio = len(result.ood_features) / n_validated
-
-    if result.ood_ratio >= rejection_threshold:
-        result.is_valid = False
-        result.action = OODAction.REJECT
-    elif result.ood_features or result.warnings:
-        result.action = OODAction.WARN
-
+    result.ood_ratio = len(result.ood_features) / n_validated if n_validated > 0 else 0.0
+    _determine_action(result, rejection_threshold)
     return result
 
 
