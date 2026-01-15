@@ -47,3 +47,4 @@ mkdocstrings[python]>=0.24.0
 # Mac: brew install graphviz
 # Linux: apt install graphviz
 pytest-benchmark>=4.0.0
+pdoc>=15.0.0
