@@ -63,5 +63,18 @@
     "preCommit": ["ruff", "mypy", "bandit", "gitleaks"],
     "prePush": ["pytest", "xenon", "pip-audit"],
     "coverageThreshold": 80
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/pre_check.py"
+          }
+        ]
+      }
+    ]
   }
 }
