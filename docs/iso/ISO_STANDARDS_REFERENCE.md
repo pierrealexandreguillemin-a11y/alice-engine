@@ -543,11 +543,15 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 | `scripts/autogluon/trainer.py` | ISO 42001, 5055 | Pipeline AutoGluon, Traçabilité MLflow |
 | `scripts/autogluon/run_training.py` | ISO 42001, 5055 | Runner Phase 3, <50 lignes |
 | `scripts/autogluon/config.py` | ISO 42001 | Configuration YAML, Presets |
-| `scripts/autogluon/iso_robustness.py` | ISO 24029, 5055 | Validation robustesse, Perturbations bruit |
-| `scripts/autogluon/iso_fairness.py` | ISO 24027, 5055 | Validation fairness, Demographic parity |
+| `scripts/autogluon/iso_robustness.py` | ISO 24029, 5055 | Validation robustesse basique |
+| `scripts/autogluon/iso_robustness_enhanced.py` | ISO 24029-1/2, 5055 | **Tests formels: bruit, dropout, consistance, monotonicité** |
+| `scripts/autogluon/iso_fairness.py` | ISO 24027, 5055 | Validation fairness basique |
+| `scripts/autogluon/iso_fairness_enhanced.py` | ISO 24027 Clause 7-8, 5055 | **Root cause analysis, equalized odds, mitigations** |
 | `scripts/autogluon/iso_model_card.py` | ISO 42001, 5055 | Génération Model Card JSON |
-| `scripts/autogluon/iso_impact_assessment.py` | ISO 42005, 5055 | Impact Assessment individus/groupes/société |
+| `scripts/autogluon/iso_impact_assessment.py` | ISO 42005, 5055 | Impact Assessment basique |
+| `scripts/autogluon/iso_impact_assessment_enhanced.py` | ISO 42005:2025, 5055 | **10-step process, monitoring triggers, lifecycle** |
 | `scripts/autogluon/iso_validator.py` | ISO 42001, 24029, 24027, 42005 | Orchestration validations ISO |
+| `scripts/autogluon/run_iso_validation_enhanced.py` | ISO 24027/24029/42005, 5055 | **Runner validation complète** |
 
 ### Scripts Comparison (Statistical Tests)
 
@@ -629,4 +633,67 @@ Last Updated: YYYY-MM-DD
 
 ---
 
-*Dernière MAJ: 2026-01-10 | ALICE Engine v0.5.0*
+---
+
+## Ressources Externes (Templates & Best Practices)
+
+### AutoGluon Pipeline
+
+| Ressource | URL | Usage |
+|-----------|-----|-------|
+| AutoGluon GitHub | https://github.com/autogluon/autogluon | Repo officiel, exemples |
+| AWS SageMaker Pipeline | https://github.com/aws-samples/automl-pipeline-with-autogluon-sagemaker-lambda | Template pipeline cloud |
+| TabArena Benchmark | https://github.com/autogluon/tabarena | Benchmarks tabulaires 2025 |
+| Custom Feature Generator | `examples/tabular/example_custom_feature_generator.py` | Feature engineering avancé |
+
+### Ensemble Stacking (CatBoost/XGBoost/LightGBM)
+
+| Ressource | URL | Usage |
+|-----------|-----|-------|
+| Medium Tutorial | https://medium.com/@stevechesa/stacking-ensembles | Guide stacking complet |
+| Kaggle Notebook | https://www.kaggle.com/code/ayanabil11/lightgbm-xgboost-and-catboost-stacking | Template Kaggle |
+| Research Paper | https://www.researchgate.net/publication/397047638 | Framework théorique |
+| Unifiedbooster | https://thierrymoudiki.github.io/blog/2024/08/05/python/r/unibooster | Interface unifiée |
+
+### MLflow + AutoGluon Integration
+
+| Ressource | URL | Usage |
+|-----------|-----|-------|
+| PyFunc Wrapper | https://github.com/psmishra7/autogluon_mlflow | Notebook intégration |
+| MLOps Pipeline | https://github.com/AnderGarro/autogluon_airflow_mlflow | Airflow + AutoGluon + MLflow |
+| Databricks Guide | https://community.databricks.com/t5/machine-learning/autogluon-mlflow-integration/td-p/111423 | Best practices Databricks |
+
+### Notes AutoGluon 2024-2025
+
+- **Kaggle 2024**: Top 3 dans 15/18 compétitions tabulaires, 7 premières places
+- **AutoGluon-Assistant (AG-A)**: Pilotage par LLM (Bedrock/OpenAI)
+- **TabArena 2025**: Remplace TabRepo, benchmark vivant
+- **MLflow Flavor**: Pas encore officiel, utiliser PyFunc wrapper
+
+---
+
+## Résultats Pipeline ISO (2026-01-17)
+
+### Dernière Validation
+
+| Norme | Métrique | Valeur | Seuil | Status |
+|-------|----------|--------|-------|--------|
+| ISO 24027 | Demographic Parity | **70.20%** | ≥80% | ⚠️ CAUTION |
+| ISO 24027 | Equalized Odds | 52.50% | ≥80% | ⚠️ |
+| ISO 24029 | Noise Tolerance | **99.28%** | ≥95% | ✅ ROBUST |
+| ISO 24029 | Stability Score | 95.58% | ≥90% | ✅ |
+| ISO 24029 | Consistency | 95.60% | ≥95% | ✅ |
+| ISO 42005 | Impact Level | MEDIUM | - | ✅ |
+| ISO 42005 | Recommendation | APPROVED_WITH_MONITORING | - | ✅ |
+
+### Notes Importantes
+
+1. **ligue_code vide (118k samples)**: Ce sont les compétitions NATIONALES (N1-N4, Top 16, Coupes, UNSS) où le code ligue n'est pas applicable. **Ce n'est PAS une erreur de données.**
+
+2. **Feature critique**: `diff_elo` (différence ELO blanc-noir) - impact de 7.5% sur accuracy si dropout.
+
+3. **Prochaine review**: 2026-03-03 (monitoring trimestriel)
+
+---
+
+*Dernière MAJ: 2026-01-17 | ALICE Engine v0.6.0*
