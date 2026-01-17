@@ -68,6 +68,7 @@ def validate_fairness_enhanced(
     test_data: Any,
     protected_attribute: str,
     threshold: float = 0.8,
+    exclude_empty: bool = True,
 ) -> ISO24027EnhancedReport:
     """Valide l'équité avec analyse complète ISO 24027.
 
@@ -76,18 +77,33 @@ def validate_fairness_enhanced(
         test_data: Données de test avec label
         protected_attribute: Attribut protégé (ex: 'ligue_code')
         threshold: Seuil de fairness (défaut 0.8 = EEOC 80% rule)
+        exclude_empty: Exclure les valeurs vides (ex: compétitions nationales)
 
     Returns:
         ISO24027EnhancedReport avec analyse complète
 
     ISO 24027 Clause 7: Assessment of bias and fairness
     ISO 24027 Clause 8: Treatment strategies
+
+    Note: Pour ligue_code, les valeurs vides représentent les compétitions
+    nationales où le code ligue n'est pas applicable. exclude_empty=True
+    les exclut du calcul de fairness (comportement correct).
     """
     label = predictor.label
-    y_true = test_data[label].values
-    X_test = test_data.drop(columns=[label])
+
+    # Filtrer les valeurs vides si demandé
+    if exclude_empty:
+        mask = test_data[protected_attribute].astype(str).str.strip() != ""
+        test_data_filtered = test_data[mask].copy()
+        excluded_count = (~mask).sum()
+    else:
+        test_data_filtered = test_data
+        excluded_count = 0
+
+    y_true = test_data_filtered[label].values
+    X_test = test_data_filtered.drop(columns=[label])
     y_pred = predictor.predict(X_test).values
-    protected = test_data[protected_attribute].values
+    protected = test_data_filtered[protected_attribute].values
 
     # Analyse par groupe
     group_analyses = _analyze_groups(y_true, y_pred, protected)
@@ -100,6 +116,14 @@ def validate_fairness_enhanced(
 
     # Warnings qualité données
     warnings = _check_data_quality(group_analyses)
+
+    # Ajouter info sur les exclusions
+    if excluded_count > 0:
+        warnings.insert(0, (
+            f"INFO: {excluded_count} échantillons exclus (attribut protégé vide). "
+            "Pour ligue_code, ceci représente les compétitions nationales "
+            "où le code ligue n'est pas applicable."
+        ))
 
     # Recommandations de mitigation
     mitigations = _recommend_mitigations(metrics, group_analyses, root_cause)
