@@ -1,0 +1,179 @@
+{
+  "iso_standard": "ISO/IEC 42005:2025",
+  "assessment_id": "ALICE-IA-20260117-181634",
+  "assessment_date": "2026-01-17T18:16:34.980255",
+  "assessment_phase": "operational",
+  "version": "2.0.0",
+  "model_id": "unknown",
+  "system_name": "ALICE Chess Prediction Engine",
+  "system_purpose": "Predict chess game outcomes for team composition optimization",
+  "system_domain": "Sports analytics - Team chess competitions",
+  "intended_users": [
+    "Club managers",
+    "Team captains",
+    "Chess coaches"
+  ],
+  "impact_dimensions": [
+    {
+      "dimension": "individual",
+      "description": "Impact on individual players whose game outcomes are predicted",
+      "risk_level": "LOW",
+      "justification": "Predictions are advisory only. Human team captain makes final decisions on team composition. No automated decision-making.",
+      "affected_stakeholders": [
+        "Chess players",
+        "Team members"
+      ],
+      "potential_harms": [
+        "Player may not be selected based on prediction",
+        "Potential over-reliance on predictions by team captain"
+      ],
+      "potential_benefits": [
+        "Better team composition for competition success",
+        "Objective data to support selection decisions"
+      ]
+    },
+    {
+      "dimension": "group",
+      "description": "Impact on regional groups (ligues) due to prediction disparities",
+      "risk_level": "HIGH",
+      "justification": "Demographic parity ratio: 59.84%. Below EEOC 80% threshold. Disparity may reflect underlying ELO distributions across regions.",
+      "affected_stakeholders": [
+        "Regional leagues",
+        "Clubs by region"
+      ],
+      "potential_harms": [
+        "Regional bias in predictions (PACA disadvantaged)",
+        "Systematic under-prediction for certain leagues"
+      ],
+      "potential_benefits": [
+        "Equal opportunity once fairness improved",
+        "Transparent fairness metrics for accountability"
+      ]
+    },
+    {
+      "dimension": "societal",
+      "description": "Broader impact on chess community and sports analytics",
+      "risk_level": "LOW",
+      "justification": "Sports context with no life-critical decisions. Positive contribution to data-driven sports management. No impact on fundamental rights.",
+      "affected_stakeholders": [
+        "French Chess Federation",
+        "Chess community"
+      ],
+      "potential_harms": [
+        "Over-reliance on AI in sports decisions",
+        "Potential gaming of prediction system"
+      ],
+      "potential_benefits": [
+        "Advancement of sports analytics",
+        "More competitive and balanced team compositions",
+        "Educational value for AI governance in sports"
+      ]
+    }
+  ],
+  "overall_impact_level": "HIGH",
+  "transparency_assessment": {
+    "model_card_available": true,
+    "model_card_complete": false,
+    "feature_importance_available": true,
+    "data_lineage_tracked": false,
+    "fairness_tested": true,
+    "fairness_documented": false,
+    "robustness_tested": true,
+    "robustness_documented": false,
+    "intended_use_documented": false,
+    "limitations_documented": true
+  },
+  "accountability_chain": [
+    "Data Scientist: Model development and validation",
+    "ML Engineer: Deployment and monitoring",
+    "Product Owner: Business decisions",
+    "Compliance Officer: Regulatory oversight"
+  ],
+  "mitigations": [
+    {
+      "measure": "Human-in-the-loop",
+      "status": "IMPLEMENTED",
+      "description": "Team captain makes final decisions, predictions are advisory only",
+      "effectiveness": "HIGH",
+      "responsible_party": "Product Owner"
+    },
+    {
+      "measure": "Drift monitoring",
+      "status": "IMPLEMENTED",
+      "description": "PSI threshold monitoring with automatic alerts",
+      "effectiveness": "MEDIUM",
+      "responsible_party": "ML Engineer"
+    },
+    {
+      "measure": "Fairness monitoring",
+      "status": "IMPLEMENTED",
+      "description": "Demographic parity tracked per deployment",
+      "effectiveness": "MEDIUM",
+      "responsible_party": "Data Scientist"
+    },
+    {
+      "measure": "Fairness improvement",
+      "status": "PLANNED",
+      "description": "Investigate PACA regional bias, apply reweighting or data collection",
+      "effectiveness": "HIGH",
+      "responsible_party": "Data Scientist"
+    },
+    {
+      "measure": "Periodic fairness audit",
+      "status": "PLANNED",
+      "description": "Quarterly bias review with external auditor",
+      "effectiveness": "HIGH",
+      "responsible_party": "Compliance Officer"
+    }
+  ],
+  "monitoring_triggers": [
+    {
+      "trigger_name": "fairness_critical",
+      "metric": "demographic_parity_ratio",
+      "threshold": 0.6,
+      "current_value": 0.5984130748761314,
+      "is_triggered": true,
+      "action_required": "IMMEDIATE: Stop deployment, investigate bias"
+    },
+    {
+      "trigger_name": "fairness_warning",
+      "metric": "demographic_parity_ratio",
+      "threshold": 0.8,
+      "current_value": 0.5984130748761314,
+      "is_triggered": true,
+      "action_required": "PLANNED: Schedule fairness improvement"
+    },
+    {
+      "trigger_name": "robustness_degradation",
+      "metric": "noise_tolerance",
+      "threshold": 0.95,
+      "current_value": 0.9933855046729863,
+      "is_triggered": false,
+      "action_required": "None"
+    },
+    {
+      "trigger_name": "drift_detection",
+      "metric": "psi",
+      "threshold": 0.25,
+      "current_value": 0.0,
+      "is_triggered": false,
+      "action_required": "RETRAIN: Model drift detected"
+    },
+    {
+      "trigger_name": "quarterly_review",
+      "metric": "days_since_assessment",
+      "threshold": 90,
+      "current_value": 0,
+      "is_triggered": false,
+      "action_required": "REVIEW: Scheduled quarterly impact re-assessment"
+    }
+  ],
+  "next_assessment_date": "2026-02-01",
+  "recommendation": "REJECTED",
+  "conditions": [
+    "Address all critical triggers before deployment",
+    "Conduct root cause analysis on fairness issues",
+    "Re-submit for impact assessment after remediation"
+  ],
+  "approver": ""
+}

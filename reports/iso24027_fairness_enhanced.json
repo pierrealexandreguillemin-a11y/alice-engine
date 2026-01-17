@@ -1,0 +1,175 @@
+{
+  "model_id": "C:\\Dev\\Alice-Engine\\models\\autogluon\\autogluon_20260117_042708",
+  "protected_attribute": "ligue_code",
+  "metrics": {
+    "demographic_parity_ratio": 0.5984130748761314,
+    "equalized_odds_ratio": 0.5130840291980185,
+    "predictive_parity_ratio": 0.7781639289585591,
+    "calibration_score": 0.9575203420587795
+  },
+  "group_analyses": [
+    {
+      "group_name": "(vide)",
+      "sample_count": 118007,
+      "positive_rate": 0.2646622657977917,
+      "true_positive_rate": 0.42271741113972305,
+      "false_positive_rate": 0.15858920118962844,
+      "precision": 0.6675204918032787,
+      "is_disadvantaged": "True",
+      "deviation_from_mean": -0.08275611058878657
+    },
+    {
+      "group_name": "ARA",
+      "sample_count": 4374,
+      "positive_rate": 0.407864654778235,
+      "true_positive_rate": 0.6206060606060606,
+      "false_positive_rate": 0.30655821047280124,
+      "precision": 0.5739910313901345,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": 0.06044627839165678
+    },
+    {
+      "group_name": "BFC",
+      "sample_count": 1730,
+      "positive_rate": 0.3109826589595376,
+      "true_positive_rate": 0.5348484848484848,
+      "false_positive_rate": 0.18449197860962566,
+      "precision": 0.6561338289962825,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": -0.03643571742704066
+    },
+    {
+      "group_name": "BRE",
+      "sample_count": 4748,
+      "positive_rate": 0.3527801179443976,
+      "true_positive_rate": 0.5208449138410228,
+      "false_positive_rate": 0.2455031599416626,
+      "precision": 0.5594029850746268,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": 0.005361741557819377
+    },
+    {
+      "group_name": "COR",
+      "sample_count": 563,
+      "positive_rate": 0.4422735346358792,
+      "true_positive_rate": 0.678030303030303,
+      "false_positive_rate": 0.21031746031746032,
+      "precision": 0.7188755020080321,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": 0.09485515824930096
+    },
+    {
+      "group_name": "CVL",
+      "sample_count": 2509,
+      "positive_rate": 0.32044639298525307,
+      "true_positive_rate": 0.43882244710211593,
+      "false_positive_rate": 0.2302867383512545,
+      "precision": 0.5932835820895522,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": -0.026971983401325172
+    },
+    {
+      "group_name": "GES",
+      "sample_count": 10762,
+      "positive_rate": 0.4030849284519606,
+      "true_positive_rate": 0.5756539235412474,
+      "false_positive_rate": 0.24640171858216972,
+      "precision": 0.6595205163669894,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": 0.055666552065382346
+    },
+    {
+      "group_name": "HDF",
+      "sample_count": 4725,
+      "positive_rate": 0.35555555555555557,
+      "true_positive_rate": 0.5144181256436663,
+      "false_positive_rate": 0.22770303936223218,
+      "precision": 0.5946428571428571,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": 0.008137179168977327
+    },
+    {
+      "group_name": "IDF",
+      "sample_count": 21845,
+      "positive_rate": 0.3383382925154498,
+      "true_positive_rate": 0.46509871615060955,
+      "false_positive_rate": 0.2471185365337845,
+      "precision": 0.5832769584629955,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": -0.009080083871128464
+    },
+    {
+      "group_name": "NAQ",
+      "sample_count": 4784,
+      "positive_rate": 0.34845317725752506,
+      "true_positive_rate": 0.4759572573463936,
+      "false_positive_rate": 0.20939334637964774,
+      "precision": 0.6412717456508699,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": 0.001034800870946817
+    },
+    {
+      "group_name": "NOR",
+      "sample_count": 2950,
+      "positive_rate": 0.33491525423728813,
+      "true_positive_rate": 0.5302642796248934,
+      "false_positive_rate": 0.2145716573258607,
+      "precision": 0.6295546558704453,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": -0.012503122149290113
+    },
+    {
+      "group_name": "OCC",
+      "sample_count": 8953,
+      "positive_rate": 0.3212331062213783,
+      "true_positive_rate": 0.5338600451467269,
+      "false_positive_rate": 0.1864620030196276,
+      "precision": 0.6578581363004172,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": -0.026185270165199948
+    },
+    {
+      "group_name": "PACA",
+      "sample_count": 7240,
+      "positive_rate": 0.3104972375690608,
+      "true_positive_rate": 0.4799585348997927,
+      "false_positive_rate": 0.21156868909148066,
+      "precision": 0.6178825622775801,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": -0.03692113881751746
+    },
+    {
+      "group_name": "PDL",
+      "sample_count": 4432,
+      "positive_rate": 0.34724729241877256,
+      "true_positive_rate": 0.48142333856619574,
+      "false_positive_rate": 0.24279835390946503,
+      "precision": 0.5977907732293697,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": -0.00017108396780568524
+    },
+    {
+      "group_name": "REU",
+      "sample_count": 221,
+      "positive_rate": 0.35294117647058826,
+      "true_positive_rate": 0.5196078431372549,
+      "false_positive_rate": 0.12345679012345678,
+      "precision": 0.6794871794871795,
+      "is_disadvantaged": "False",
+      "deviation_from_mean": 0.0055228000840100155
+    }
+  ],
+  "root_cause": "QUALIT\u00c9 DONN\u00c9ES: 60% des \u00e9chantillons sans ligue_code. La valeur vide cr\u00e9e un biais syst\u00e9mique. ACTION: Enrichir les donn\u00e9es manquantes ou exclure du calcul fairness.",
+  "mitigations": [
+    "PR\u00c9-PROCESSING: Imputer ou exclure les valeurs manquantes de l'attribut prot\u00e9g\u00e9 avant l'entra\u00eenement.",
+    "IN-PROCESSING: Ajouter une contrainte d'\u00e9quit\u00e9 (fairness constraint) \u00e0 la fonction de perte pendant l'entra\u00eenement.",
+    "MONITORING: Surveiller les m\u00e9triques de fairness \u00e0 chaque d\u00e9ploiement et d\u00e9clencher une alerte si demographic_parity < 0.6."
+  ],
+  "status": "CRITICAL",
+  "compliant": false,
+  "data_quality_warnings": [
+    "CRITIQUE: 118007 \u00e9chantillons sans attribut prot\u00e9g\u00e9 (>50% des donn\u00e9es). Ceci biaise le calcul de fairness.",
+    "ATTENTION: Groupes avec <500 \u00e9chantillons: ['REU']. M\u00e9triques potentiellement non significatives.",
+    "D\u00c9S\u00c9QUILIBRE: Ratio max/min \u00e9chantillons >10x. Consid\u00e9rer un \u00e9chantillonnage stratifi\u00e9."
+  ]
+}

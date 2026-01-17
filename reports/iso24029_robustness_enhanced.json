@@ -1,0 +1,145 @@
+{
+  "model_id": "C:\\Dev\\Alice-Engine\\models\\autogluon\\autogluon_20260117_042708",
+  "noise_tests": [
+    {
+      "noise_level": 0.01,
+      "baseline_accuracy": 0.5294652830779962,
+      "noisy_accuracy": 0.5261747951658639,
+      "tolerance": 0.993785262193201,
+      "status": "ROBUST"
+    },
+    {
+      "noise_level": 0.05,
+      "baseline_accuracy": 0.5294652830779962,
+      "noisy_accuracy": 0.5260737049074266,
+      "tolerance": 0.9935943332283222,
+      "status": "ROBUST"
+    },
+    {
+      "noise_level": 0.1,
+      "baseline_accuracy": 0.5294652830779962,
+      "noisy_accuracy": 0.5258866879293177,
+      "tolerance": 0.9932411146432969,
+      "status": "ROBUST"
+    }
+  ],
+  "feature_dropout_tests": [
+    {
+      "feature_name": "diff_elo",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.45441587521418497,
+      "impact": 0.07504940786381126,
+      "is_critical": "True"
+    },
+    {
+      "feature_name": "echiquier",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5117037246705721,
+      "impact": 0.017761558407424105,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "blanc_elo",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5269784627204399,
+      "impact": 0.0024868203575563186,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "saison",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5294652830779962,
+      "impact": 0.0,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "score_dom",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5294652830779962,
+      "impact": 0.0,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "score_ext",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5294652830779962,
+      "impact": 0.0,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "resultat_noir",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5294652830779962,
+      "impact": 0.0,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "niveau",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5297331722628549,
+      "impact": -0.00026788918485864954,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "ronde",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.530461022123603,
+      "impact": -0.0009957390456067916,
+      "is_critical": "False"
+    },
+    {
+      "feature_name": "noir_elo",
+      "baseline_accuracy": 0.5294652830779962,
+      "dropout_accuracy": 0.5347320855425767,
+      "impact": -0.0052668024645804445,
+      "is_critical": "False"
+    }
+  ],
+  "consistency_test": {
+    "n_perturbations": 5,
+    "consistency_rate": 0.9319999999999999,
+    "flip_rate": 0.068,
+    "status": "UNSTABLE"
+  },
+  "monotonicity_tests": [
+    {
+      "feature_name": "blanc_elo",
+      "expected_direction": "positive",
+      "actual_correlation": -0.016246763101176072,
+      "is_monotonic": "False",
+      "violations_count": 36197
+    },
+    {
+      "feature_name": "noir_elo",
+      "expected_direction": "positive",
+      "actual_correlation": -0.34692277767914115,
+      "is_monotonic": "False",
+      "violations_count": 29851
+    },
+    {
+      "feature_name": "diff_elo",
+      "expected_direction": "positive",
+      "actual_correlation": 0.5419071812455984,
+      "is_monotonic": "True",
+      "violations_count": 22397
+    }
+  ],
+  "overall_noise_tolerance": 0.9933855046729863,
+  "overall_stability_score": 0.9438081610165635,
+  "critical_features": [
+    "diff_elo"
+  ],
+  "status": "ACCEPTABLE",
+  "compliant": true,
+  "formal_verification": {
+    "noise_tolerance_bounds": {
+      "lower_bound": 0.9932411146432969,
+      "upper_bound": 0.993785262193201,
+      "certified_noise_level": 0.1
+    },
+    "monotonicity_verified": false,
+    "monotonicity_violations_total": 88445,
+    "formal_method": "statistical_verification",
+    "confidence_level": 0.95
+  }
+}
