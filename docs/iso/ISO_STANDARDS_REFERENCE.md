@@ -26,6 +26,7 @@
 | Norme | Focus | Priorité | Exigences Clés |
 |-------|-------|----------|----------------|
 | **ISO/IEC 42001:2023** | AI Management System (certifiable) | 🔴 Critique | Model Card, Traçabilité, Gouvernance AI |
+| **ISO/IEC 42005:2025** | AI System Impact Assessment | 🔴 Critique | Évaluation impacts individus/groupes/société |
 | **ISO/IEC 23894:2023** | AI Risk Management | 🔴 Critique | Évaluation risques AI, Mitigation biais |
 | **ISO/IEC 5259:2024** | Data Quality for ML | 🔴 Critique | Qualité données entraînement, Lineage |
 | **ISO/IEC 25059:2023** | AI Quality Model | 🟠 Important | Métriques qualité modèles, Benchmarks |
@@ -47,6 +48,7 @@
 | ISO 23894 | Risques AI | Drift monitoring PSI, alertes seuils |
 | ISO 24027 | Biais | `scripts/fairness/bias_detection.py` - SPD, EOD, DIR |
 | ISO 24029 | Robustesse | `scripts/robustness/adversarial_tests.py` - Tests adversariaux |
+| ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - Individus/Groupes/Société |
 
 ---
 
@@ -544,7 +546,8 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 | `scripts/autogluon/iso_robustness.py` | ISO 24029, 5055 | Validation robustesse, Perturbations bruit |
 | `scripts/autogluon/iso_fairness.py` | ISO 24027, 5055 | Validation fairness, Demographic parity |
 | `scripts/autogluon/iso_model_card.py` | ISO 42001, 5055 | Génération Model Card JSON |
-| `scripts/autogluon/iso_validator.py` | ISO 42001, 24029, 24027 | Orchestration validations ISO |
+| `scripts/autogluon/iso_impact_assessment.py` | ISO 42005, 5055 | Impact Assessment individus/groupes/société |
+| `scripts/autogluon/iso_validator.py` | ISO 42001, 24029, 24027, 42005 | Orchestration validations ISO |
 
 ### Scripts Comparison (Statistical Tests)
 
