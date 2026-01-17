@@ -71,7 +71,27 @@ Makefile                   # Commandes (make help)
 scripts/
 ├── generate_graphs.py      # Graphs SVG architecture (pydeps)
 ├── update_iso_docs.py      # Génère docs/iso/IMPLEMENTATION_STATUS.md
-└── analyze_architecture.py # Score santé architecture (coupling, cycles)
+├── analyze_architecture.py # Score santé architecture (coupling, cycles)
+├── autogluon/              # Pipeline AutoGluon (ISO 42001)
+│   ├── trainer.py          # Training pipeline avec MLflow
+│   ├── run_training.py     # Runner Phase 3 (<50 lignes)
+│   ├── iso_robustness.py   # Validation ISO 24029
+│   ├── iso_fairness.py     # Validation ISO 24027
+│   └── iso_model_card.py   # Génération Model Card ISO 42001
+├── comparison/             # Tests statistiques (ISO 24029)
+│   ├── mcnemar_test.py     # Test McNemar 5x2cv
+│   └── run_mcnemar.py      # Runner Phase 4.4 (<50 lignes)
+└── reports/                # Rapports ISO
+    └── generate_iso25059.py # Rapport final ISO 25059 (<50 lignes)
+```
+
+## Hooks Claude Code
+
+```
+.claude/
+├── hooks/
+│   └── pre_check.py        # PreToolUse guards (ISO 5055, 27034)
+└── settings.json           # Configuration hooks
 ```
 
 ## Hooks actifs

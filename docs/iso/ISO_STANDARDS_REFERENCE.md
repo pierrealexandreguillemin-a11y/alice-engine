@@ -534,6 +534,39 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 | `scripts/fairness/bias_detection.py` | ISO 24027, 42001 | Détection biais, Fairness metrics |
 | `scripts/robustness/adversarial_tests.py` | ISO 24029, 42001 | Tests robustesse, Perturbations |
 
+### Scripts AutoGluon (ML Training Pipeline)
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/autogluon/trainer.py` | ISO 42001, 5055 | Pipeline AutoGluon, Traçabilité MLflow |
+| `scripts/autogluon/run_training.py` | ISO 42001, 5055 | Runner Phase 3, <50 lignes |
+| `scripts/autogluon/config.py` | ISO 42001 | Configuration YAML, Presets |
+| `scripts/autogluon/iso_robustness.py` | ISO 24029, 5055 | Validation robustesse, Perturbations bruit |
+| `scripts/autogluon/iso_fairness.py` | ISO 24027, 5055 | Validation fairness, Demographic parity |
+| `scripts/autogluon/iso_model_card.py` | ISO 42001, 5055 | Génération Model Card JSON |
+| `scripts/autogluon/iso_validator.py` | ISO 42001, 24029, 24027 | Orchestration validations ISO |
+
+### Scripts Comparison (Statistical Tests)
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/comparison/mcnemar_test.py` | ISO 24029, 5055 | Test McNemar 5x2cv (Dietterich 1998) |
+| `scripts/comparison/run_mcnemar.py` | ISO 24029, 5055 | Runner Phase 4.4, <50 lignes |
+| `scripts/comparison/pipeline.py` | ISO 24029, 42001 | Pipeline comparaison complète |
+
+### Scripts Reports
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/reports/generate_iso25059.py` | ISO 25059, 5055 | Rapport final qualité AI, <50 lignes |
+
+### Hooks Claude Code
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `.claude/hooks/pre_check.py` | ISO 5055, 27034 | PreToolUse guards, Validation pré-exécution |
+| `.claude/settings.json` | ISO 27034 | Configuration hooks sécurisée |
+
 ### Services
 
 | Fichier | Normes Applicables | Exigences |
