@@ -4,22 +4,22 @@
     {
       "noise_level": 0.01,
       "baseline_accuracy": 0.5294652830779962,
-      "noisy_accuracy": 0.5261747951658639,
-      "tolerance": 0.993785262193201,
+      "noisy_accuracy": 0.5265892652254566,
+      "tolerance": 0.9945680709492033,
       "status": "ROBUST"
     },
     {
       "noise_level": 0.05,
       "baseline_accuracy": 0.5294652830779962,
-      "noisy_accuracy": 0.5260737049074266,
-      "tolerance": 0.9935943332283222,
+      "noisy_accuracy": 0.5257704341321149,
+      "tolerance": 0.9930215463336866,
       "status": "ROBUST"
     },
     {
       "noise_level": 0.1,
       "baseline_accuracy": 0.5294652830779962,
-      "noisy_accuracy": 0.5258866879293177,
-      "tolerance": 0.9932411146432969,
+      "noisy_accuracy": 0.5255126539730999,
+      "tolerance": 0.992534677473246,
       "status": "ROBUST"
     }
   ],
@@ -97,9 +97,9 @@
   ],
   "consistency_test": {
     "n_perturbations": 5,
-    "consistency_rate": 0.9319999999999999,
-    "flip_rate": 0.068,
-    "status": "UNSTABLE"
+    "consistency_rate": 0.956,
+    "flip_rate": 0.044,
+    "status": "SENSITIVE"
   },
   "monotonicity_tests": [
     {
@@ -124,8 +124,8 @@
       "violations_count": 22397
     }
   ],
-  "overall_noise_tolerance": 0.9933855046729863,
-  "overall_stability_score": 0.9438081610165635,
+  "overall_noise_tolerance": 0.992813911084381,
+  "overall_stability_score": 0.9558081610165635,
   "critical_features": [
     "diff_elo"
   ],
@@ -133,8 +133,8 @@
   "compliant": true,
   "formal_verification": {
     "noise_tolerance_bounds": {
-      "lower_bound": 0.9932411146432969,
-      "upper_bound": 0.993785262193201,
+      "lower_bound": 0.992534677473246,
+      "upper_bound": 0.9945680709492033,
       "certified_noise_level": 0.1
     },
     "monotonicity_verified": false,

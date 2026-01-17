@@ -1,7 +1,7 @@
 {
   "iso_standard": "ISO/IEC 42005:2025",
-  "assessment_id": "ALICE-IA-20260117-181634",
-  "assessment_date": "2026-01-17T18:16:34.980255",
+  "assessment_id": "ALICE-IA-20260117-182320",
+  "assessment_date": "2026-01-17T18:23:20.809474",
   "assessment_phase": "operational",
   "version": "2.0.0",
   "model_id": "unknown",
@@ -35,8 +35,8 @@
     {
       "dimension": "group",
       "description": "Impact on regional groups (ligues) due to prediction disparities",
-      "risk_level": "HIGH",
-      "justification": "Demographic parity ratio: 59.84%. Below EEOC 80% threshold. Disparity may reflect underlying ELO distributions across regions.",
+      "risk_level": "MEDIUM",
+      "justification": "Demographic parity ratio: 70.20%. Below EEOC 80% threshold. Disparity may reflect underlying ELO distributions across regions.",
       "affected_stakeholders": [
         "Regional leagues",
         "Clubs by region"
@@ -70,7 +70,7 @@
       ]
     }
   ],
-  "overall_impact_level": "HIGH",
+  "overall_impact_level": "MEDIUM",
   "transparency_assessment": {
     "model_card_available": true,
     "model_card_complete": false,
@@ -131,15 +131,15 @@
       "trigger_name": "fairness_critical",
       "metric": "demographic_parity_ratio",
       "threshold": 0.6,
-      "current_value": 0.5984130748761314,
-      "is_triggered": true,
-      "action_required": "IMMEDIATE: Stop deployment, investigate bias"
+      "current_value": 0.7020479708890812,
+      "is_triggered": false,
+      "action_required": "None"
     },
     {
       "trigger_name": "fairness_warning",
       "metric": "demographic_parity_ratio",
       "threshold": 0.8,
-      "current_value": 0.5984130748761314,
+      "current_value": 0.7020479708890812,
       "is_triggered": true,
       "action_required": "PLANNED: Schedule fairness improvement"
     },
@@ -147,7 +147,7 @@
       "trigger_name": "robustness_degradation",
       "metric": "noise_tolerance",
       "threshold": 0.95,
-      "current_value": 0.9933855046729863,
+      "current_value": 0.992813911084381,
       "is_triggered": false,
       "action_required": "None"
     },
@@ -168,12 +168,14 @@
       "action_required": "REVIEW: Scheduled quarterly impact re-assessment"
     }
   ],
-  "next_assessment_date": "2026-02-01",
-  "recommendation": "REJECTED",
+  "next_assessment_date": "2026-03-03",
+  "recommendation": "APPROVED_WITH_MONITORING",
   "conditions": [
-    "Address all critical triggers before deployment",
-    "Conduct root cause analysis on fairness issues",
-    "Re-submit for impact assessment after remediation"
+    "Maintain human oversight for team composition",
+    "Monitor regional fairness metrics quarterly",
+    "Retrain model if PSI exceeds 0.25",
+    "Review if demographic parity drops below 0.6",
+    "Schedule fairness improvement for next release"
   ],
   "approver": ""
 }

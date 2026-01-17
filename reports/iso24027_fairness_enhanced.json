@@ -2,22 +2,12 @@
   "model_id": "C:\\Dev\\Alice-Engine\\models\\autogluon\\autogluon_20260117_042708",
   "protected_attribute": "ligue_code",
   "metrics": {
-    "demographic_parity_ratio": 0.5984130748761314,
-    "equalized_odds_ratio": 0.5130840291980185,
+    "demographic_parity_ratio": 0.7020479708890812,
+    "equalized_odds_ratio": 0.524960368566934,
     "predictive_parity_ratio": 0.7781639289585591,
-    "calibration_score": 0.9575203420587795
+    "calibration_score": 0.9624594862690564
   },
   "group_analyses": [
-    {
-      "group_name": "(vide)",
-      "sample_count": 118007,
-      "positive_rate": 0.2646622657977917,
-      "true_positive_rate": 0.42271741113972305,
-      "false_positive_rate": 0.15858920118962844,
-      "precision": 0.6675204918032787,
-      "is_disadvantaged": "True",
-      "deviation_from_mean": -0.08275611058878657
-    },
     {
       "group_name": "ARA",
       "sample_count": 4374,
@@ -26,7 +16,7 @@
       "false_positive_rate": 0.30655821047280124,
       "precision": 0.5739910313901345,
       "is_disadvantaged": "False",
-      "deviation_from_mean": 0.06044627839165678
+      "deviation_from_mean": 0.05453512763531493
     },
     {
       "group_name": "BFC",
@@ -36,7 +26,7 @@
       "false_positive_rate": 0.18449197860962566,
       "precision": 0.6561338289962825,
       "is_disadvantaged": "False",
-      "deviation_from_mean": -0.03643571742704066
+      "deviation_from_mean": -0.04234686818338251
     },
     {
       "group_name": "BRE",
@@ -46,7 +36,7 @@
       "false_positive_rate": 0.2455031599416626,
       "precision": 0.5594029850746268,
       "is_disadvantaged": "False",
-      "deviation_from_mean": 0.005361741557819377
+      "deviation_from_mean": -0.0005494091985224769
     },
     {
       "group_name": "COR",
@@ -56,7 +46,7 @@
       "false_positive_rate": 0.21031746031746032,
       "precision": 0.7188755020080321,
       "is_disadvantaged": "False",
-      "deviation_from_mean": 0.09485515824930096
+      "deviation_from_mean": 0.08894400749295911
     },
     {
       "group_name": "CVL",
@@ -66,7 +56,7 @@
       "false_positive_rate": 0.2302867383512545,
       "precision": 0.5932835820895522,
       "is_disadvantaged": "False",
-      "deviation_from_mean": -0.026971983401325172
+      "deviation_from_mean": -0.03288313415766703
     },
     {
       "group_name": "GES",
@@ -76,7 +66,7 @@
       "false_positive_rate": 0.24640171858216972,
       "precision": 0.6595205163669894,
       "is_disadvantaged": "False",
-      "deviation_from_mean": 0.055666552065382346
+      "deviation_from_mean": 0.04975540130904049
     },
     {
       "group_name": "HDF",
@@ -86,7 +76,7 @@
       "false_positive_rate": 0.22770303936223218,
       "precision": 0.5946428571428571,
       "is_disadvantaged": "False",
-      "deviation_from_mean": 0.008137179168977327
+      "deviation_from_mean": 0.0022260284126354724
     },
     {
       "group_name": "IDF",
@@ -96,7 +86,7 @@
       "false_positive_rate": 0.2471185365337845,
       "precision": 0.5832769584629955,
       "is_disadvantaged": "False",
-      "deviation_from_mean": -0.009080083871128464
+      "deviation_from_mean": -0.014991234627470318
     },
     {
       "group_name": "NAQ",
@@ -106,7 +96,7 @@
       "false_positive_rate": 0.20939334637964774,
       "precision": 0.6412717456508699,
       "is_disadvantaged": "False",
-      "deviation_from_mean": 0.001034800870946817
+      "deviation_from_mean": -0.004876349885395037
     },
     {
       "group_name": "NOR",
@@ -116,7 +106,7 @@
       "false_positive_rate": 0.2145716573258607,
       "precision": 0.6295546558704453,
       "is_disadvantaged": "False",
-      "deviation_from_mean": -0.012503122149290113
+      "deviation_from_mean": -0.018414272905631968
     },
     {
       "group_name": "OCC",
@@ -126,7 +116,7 @@
       "false_positive_rate": 0.1864620030196276,
       "precision": 0.6578581363004172,
       "is_disadvantaged": "False",
-      "deviation_from_mean": -0.026185270165199948
+      "deviation_from_mean": -0.0320964209215418
     },
     {
       "group_name": "PACA",
@@ -136,7 +126,7 @@
       "false_positive_rate": 0.21156868909148066,
       "precision": 0.6178825622775801,
       "is_disadvantaged": "False",
-      "deviation_from_mean": -0.03692113881751746
+      "deviation_from_mean": -0.04283228957385932
     },
     {
       "group_name": "PDL",
@@ -146,7 +136,7 @@
       "false_positive_rate": 0.24279835390946503,
       "precision": 0.5977907732293697,
       "is_disadvantaged": "False",
-      "deviation_from_mean": -0.00017108396780568524
+      "deviation_from_mean": -0.006082234724147539
     },
     {
       "group_name": "REU",
@@ -156,19 +146,19 @@
       "false_positive_rate": 0.12345679012345678,
       "precision": 0.6794871794871795,
       "is_disadvantaged": "False",
-      "deviation_from_mean": 0.0055228000840100155
+      "deviation_from_mean": -0.0003883506723318386
     }
   ],
-  "root_cause": "QUALIT\u00c9 DONN\u00c9ES: 60% des \u00e9chantillons sans ligue_code. La valeur vide cr\u00e9e un biais syst\u00e9mique. ACTION: Enrichir les donn\u00e9es manquantes ou exclure du calcul fairness.",
+  "root_cause": "Aucun groupe significativement d\u00e9savantag\u00e9 d\u00e9tect\u00e9.",
   "mitigations": [
-    "PR\u00c9-PROCESSING: Imputer ou exclure les valeurs manquantes de l'attribut prot\u00e9g\u00e9 avant l'entra\u00eenement.",
+    "PR\u00c9-PROCESSING: Appliquer reweighting ou resampling pour \u00e9quilibrer les groupes d\u00e9savantag\u00e9s.",
     "IN-PROCESSING: Ajouter une contrainte d'\u00e9quit\u00e9 (fairness constraint) \u00e0 la fonction de perte pendant l'entra\u00eenement.",
     "MONITORING: Surveiller les m\u00e9triques de fairness \u00e0 chaque d\u00e9ploiement et d\u00e9clencher une alerte si demographic_parity < 0.6."
   ],
-  "status": "CRITICAL",
+  "status": "CAUTION",
   "compliant": false,
   "data_quality_warnings": [
-    "CRITIQUE: 118007 \u00e9chantillons sans attribut prot\u00e9g\u00e9 (>50% des donn\u00e9es). Ceci biaise le calcul de fairness.",
+    "INFO: 118007 \u00e9chantillons exclus (attribut prot\u00e9g\u00e9 vide). Pour ligue_code, ceci repr\u00e9sente les comp\u00e9titions nationales o\u00f9 le code ligue n'est pas applicable.",
     "ATTENTION: Groupes avec <500 \u00e9chantillons: ['REU']. M\u00e9triques potentiellement non significatives.",
     "D\u00c9S\u00c9QUILIBRE: Ratio max/min \u00e9chantillons >10x. Consid\u00e9rer un \u00e9chantillonnage stratifi\u00e9."
   ]
