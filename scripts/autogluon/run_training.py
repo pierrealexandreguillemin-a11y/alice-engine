@@ -1,16 +1,8 @@
 """Script: run_training.py - AutoGluon Training Runner.
 
 Document ID: ALICE-SCRIPT-AG-TRAIN-001
-Version: 1.0.0
-
-Runner script pour Phase 3 du plan ML ISO.
-Utilise le module trainer.py existant.
-
-ISO Compliance:
-- ISO/IEC 5055:2021 - Code Quality (<50 lignes)
-- ISO/IEC 42001:2023 - AI Management System
-
-Author: ALICE Engine Team
+Version: 1.1.0
+ISO: 5055 (<50 lignes/fonction), 42001 (tracabilite)
 """
 
 from __future__ import annotations
@@ -36,7 +28,7 @@ FEATURES = [
 
 
 def main() -> None:
-    """Execute AutoGluon training pipeline."""
+    """Execute AutoGluon training pipeline (ISO 42001)."""
     train_df = pd.read_parquet("data/features/train.parquet")
     valid_df = pd.read_parquet("data/features/valid.parquet")
     test_df = pd.read_parquet("data/features/test.parquet")
@@ -45,26 +37,17 @@ def main() -> None:
         df["target"] = (df["resultat_blanc"] == 1.0).astype(int)
 
     combined = pd.concat([train_df, valid_df], ignore_index=True)
-    train_data = combined[FEATURES + ["target"]]
-    test_data = test_df[FEATURES + ["target"]]
+    result = train_autogluon(combined[FEATURES + ["target"]], label="target", config=load_autogluon_config())
 
-    config = load_autogluon_config()
-    result = train_autogluon(train_data, label="target", config=config)
+    test_proba = result.predictor.predict_proba(test_df[FEATURES])[1]
+    test_auc = roc_auc_score(test_df["target"], test_proba)
 
-    test_auc = roc_auc_score(
-        test_data["target"],
-        result.predictor.predict_proba(test_data.drop(columns="target"))[1],
-    )
-
-    report = {
-        "test_auc": test_auc,
-        "best_model": result.best_model,
-        "num_models": result.metrics["num_models"],
-        "leaderboard": result.leaderboard[["model", "score_val"]].to_dict("records"),
-    }
     Path("reports").mkdir(exist_ok=True)
-    Path("reports/autogluon_results.json").write_text(json.dumps(report, indent=2))
-    logger.info(f"Test AUC: {test_auc:.4f}")
+    Path("reports/autogluon_results.json").write_text(json.dumps({
+        "test_auc": test_auc, "best_model": result.best_model,
+        "num_models": result.metrics["num_models"],
+    }, indent=2))
+    logger.info("Test AUC: %.4f", test_auc)
 
 
 if __name__ == "__main__":

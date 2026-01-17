@@ -1,16 +1,8 @@
 """Script: run_mcnemar.py - McNemar Comparison Runner.
 
 Document ID: ALICE-SCRIPT-MCNEMAR-001
-Version: 1.0.0
-
-Runner script pour Phase 4.4 du plan ML ISO.
-Compare AutoGluon vs Baseline CatBoost.
-
-ISO Compliance:
-- ISO/IEC 5055:2021 - Code Quality (<50 lignes)
-- ISO/IEC 24029:2021 - Statistical Validation
-
-Author: ALICE Engine Team
+Version: 1.1.0
+ISO: 5055 (<50 lignes/fonction), 24029 (validation statistique)
 """
 
 from __future__ import annotations
@@ -19,7 +11,6 @@ import json
 from pathlib import Path
 
 import catboost
-import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
@@ -33,38 +24,29 @@ FEATURES = [
 
 
 def main() -> None:
-    """Execute McNemar comparison between AutoGluon and Baseline."""
+    """Execute McNemar comparison AutoGluon vs Baseline (ISO 24029)."""
     from autogluon.tabular import TabularPredictor
 
-    autogluon_model = TabularPredictor.load("models/autogluon/autogluon_extreme_v2")
-    baseline_path = sorted(Path("models").glob("v*/catboost.cbm"))[-1]
-    baseline_model = catboost.CatBoostClassifier()
-    baseline_model.load_model(str(baseline_path))
+    ag_model = TabularPredictor.load("models/autogluon/autogluon_extreme_v2")
+    bl_model = catboost.CatBoostClassifier()
+    bl_model.load_model(str(sorted(Path("models").glob("v*/catboost.cbm"))[-1]))
 
     test_df = pd.read_parquet("data/features/test.parquet")
     test_df["target"] = (test_df["resultat_blanc"] == 1.0).astype(int)
     features_df, labels = test_df[FEATURES], test_df["target"].values
 
-    auc_ag = roc_auc_score(labels, autogluon_model.predict_proba(features_df)[1])
-    auc_bl = roc_auc_score(labels, baseline_model.predict_proba(features_df.values)[:, 1])
+    auc_ag = roc_auc_score(labels, ag_model.predict_proba(features_df)[1])
+    auc_bl = roc_auc_score(labels, bl_model.predict_proba(features_df.values)[:, 1])
 
-    pred_ag = (autogluon_model.predict(features_df) == labels).astype(int)
-    pred_bl = (baseline_model.predict(features_df.values) == labels).astype(int)
-
-    mcnemar = mcnemar_simple_test(labels, pred_ag, pred_bl)
+    mcnemar = mcnemar_simple_test(labels, ag_model.predict(features_df).values, bl_model.predict(features_df.values))
     diff_pct = (auc_ag - auc_bl) * 100
-    winner = "AutoGluon" if mcnemar.significant and diff_pct >= 2.0 else "Baseline"
 
-    report = {
-        "autogluon_auc": float(auc_ag),
-        "baseline_auc": float(auc_bl),
-        "difference_pct": float(diff_pct),
-        "p_value": float(mcnemar.p_value),
-        "significant": mcnemar.significant,
+    Path("reports/mcnemar_comparison.json").write_text(json.dumps({
+        "autogluon_auc": auc_ag, "baseline_auc": auc_bl, "difference_pct": diff_pct,
+        "p_value": mcnemar.p_value, "significant": mcnemar.significant,
         "meets_2pct": diff_pct >= 2.0,
-        "winner": winner,
-    }
-    Path("reports/mcnemar_comparison.json").write_text(json.dumps(report, indent=2))
+        "winner": "AutoGluon" if mcnemar.significant and diff_pct >= 2.0 else "Baseline",
+    }, indent=2))
     print(f"AG:{auc_ag:.4f} BL:{auc_bl:.4f} diff:{diff_pct:+.2f}% p:{mcnemar.p_value:.4f}")
 
 
