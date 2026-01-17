@@ -35,21 +35,16 @@ def main() -> None:
         else:
             missing.append(label)
 
+    # Stop hooks use top-level fields only (no hookSpecificOutput)
     if missing:
-        context = (
-            f"ISO INCOMPLETE - Missing reports:\n"
-            + "\n".join(f"  - {m}" for m in missing)
-            + "\n\nRun remaining pipeline steps to complete."
+        reason = (
+            f"ISO INCOMPLETE - Missing: {', '.join(missing)}"
         )
+        output = {"stopReason": reason}
     else:
-        context = "ISO COMPLETE - All reports generated. Model ready for production."
+        # Empty object = success, no message needed
+        output = {}
 
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "Stop",
-            "additionalContext": context,
-        }
-    }
     print(json.dumps(output))
     sys.exit(0)
 
