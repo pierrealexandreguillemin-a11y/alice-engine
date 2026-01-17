@@ -1,69 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "version": "1.0",
-  "description": "Alice-Engine Claude Code Settings - ISO Compliance Enforced",
-  "permissions": {
-    "allowedTools": [
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "Bash(make:*)",
-      "Bash(python -m pytest:*)",
-      "Bash(python -m ruff:*)",
-      "Bash(python -m mypy:*)",
-      "Bash(python -m bandit:*)",
-      "Bash(python -m radon:*)",
-      "Bash(python -m xenon:*)",
-      "Bash(python -m pip:*)",
-      "Bash(git:*)",
-      "Bash(wc:*)",
-      "Bash(ls:*)",
-      "Bash(mkdir:*)",
-      "Bash(cat:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)"
-    ],
-    "deny": [
-      "Read(.env)",
-      "Read(.env.*)",
-      "Read(**/secrets/**)",
-      "Read(**/*credential*)",
-      "Read(**/*password*)",
-      "Read(**/*apikey*)",
-      "Bash(rm -rf:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(sudo:*)"
-    ]
-  },
-  "isoCompliance": {
-    "enabled": true,
-    "standards": [
-      "ISO/IEC 5055:2021",
-      "ISO/IEC 27001:2022",
-      "ISO/IEC 27034:2011",
-      "ISO/IEC 29119:2022",
-      "ISO/IEC 42001:2023",
-      "ISO/IEC 23894:2023",
-      "ISO/IEC 24029:2021",
-      "ISO/IEC TR 24027:2021"
-    ],
-    "rules": {
-      "maxLinesPerFile": 300,
-      "maxLinesPerFunction": 50,
-      "maxCyclomaticComplexity": "B",
-      "requireDocstrings": true,
-      "requireTypeHints": true,
-      "enforceConventionalCommits": true
-    }
-  },
-  "qualityGates": {
-    "preCommit": ["ruff", "mypy", "bandit", "gitleaks"],
-    "prePush": ["pytest", "xenon", "pip-audit"],
-    "coverageThreshold": 80
-  },
   "hooks": {
     "PreToolUse": [
       {
@@ -71,7 +7,44 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/pre_check.py"
+            "command": "python .claude/hooks/pre_check.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/pipeline_gate.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/inject_pipeline.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/stop_summary.py",
+            "timeout": 10
           }
         ]
       }

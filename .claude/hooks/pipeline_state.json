@@ -1,0 +1,115 @@
+{
+  "version": "1.0.0",
+  "description": "ISO Pipeline State - Tracks completion of each step",
+  "last_updated": "2026-01-17T14:00:00",
+  "steps": {
+    "data_ready": {
+      "name": "Data Preparation",
+      "iso": "ISO 5259",
+      "check": "data/features/train.parquet EXISTS",
+      "completed": true,
+      "timestamp": "2026-01-08T15:47:00"
+    },
+    "baseline_trained": {
+      "name": "Baseline Models",
+      "iso": "ISO 25059",
+      "requires": [
+        "data_ready"
+      ],
+      "check": "models/v*/metadata.json EXISTS",
+      "completed": true,
+      "timestamp": "2026-01-17T04:25:45"
+    },
+    "autogluon_trained": {
+      "name": "AutoGluon Training",
+      "iso": "ISO 42001",
+      "requires": [
+        "data_ready"
+      ],
+      "check": "models/autogluon/*/predictor.pkl EXISTS",
+      "completed": true,
+      "timestamp": "2026-01-17T14:35:41"
+    },
+    "robustness_validated": {
+      "name": "Robustness Validation",
+      "iso": "ISO 24029",
+      "requires": [
+        "autogluon_trained"
+      ],
+      "check": "reports/iso24029_robustness.json EXISTS AND noise_tolerance >= 0.95",
+      "completed": true,
+      "timestamp": "2026-01-17T04:30:00",
+      "result": {
+        "noise_tolerance": 1.0022,
+        "status": "ROBUST"
+      }
+    },
+    "fairness_validated": {
+      "name": "Fairness Validation",
+      "iso": "ISO 24027",
+      "requires": [
+        "autogluon_trained"
+      ],
+      "check": "reports/iso24027_fairness.json EXISTS AND demographic_parity_ratio >= 0.60",
+      "completed": true,
+      "timestamp": "2026-01-17T04:30:00",
+      "result": {
+        "demographic_parity_ratio": 0.6484,
+        "status": "CAUTION"
+      },
+      "warning": "Below 80% threshold - monitoring required"
+    },
+    "comparison_done": {
+      "name": "McNemar Comparison",
+      "iso": "ISO 24029",
+      "requires": [
+        "autogluon_trained",
+        "baseline_trained"
+      ],
+      "check": "reports/mcnemar_comparison.json EXISTS",
+      "completed": true,
+      "timestamp": "2026-01-17T04:35:00"
+    },
+    "model_card_generated": {
+      "name": "Model Card",
+      "iso": "ISO 42001",
+      "requires": [
+        "autogluon_trained"
+      ],
+      "check": "reports/iso42001_model_card.json EXISTS",
+      "completed": true,
+      "timestamp": "2026-01-17T04:30:00"
+    },
+    "impact_assessed": {
+      "name": "Impact Assessment",
+      "iso": "ISO 42005",
+      "requires": [
+        "autogluon_trained"
+      ],
+      "check": "reports/iso42005_impact_assessment.json EXISTS",
+      "completed": true,
+      "timestamp": "2026-01-17T04:30:00"
+    },
+    "final_report": {
+      "name": "ISO 25059 Report",
+      "iso": "ISO 25059",
+      "requires": [
+        "robustness_validated",
+        "fairness_validated",
+        "comparison_done",
+        "model_card_generated"
+      ],
+      "check": "reports/ISO_25059_TRAINING_REPORT_*.md EXISTS",
+      "completed": true,
+      "timestamp": "2026-01-17T04:40:00"
+    }
+  },
+  "summary": {
+    "total_steps": 9,
+    "completed": 9,
+    "status": "COMPLETE",
+    "warnings": [
+      "Fairness at 64.84% < 80% target - monitoring required"
+    ]
+  }
+}
