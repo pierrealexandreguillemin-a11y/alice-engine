@@ -87,10 +87,14 @@ def _generate_report(results: list[BaselineMetrics], compare_ag: bool) -> None:
     output = PROJECT_DIR / "models" / "baseline" / "comparison.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w") as f:
-        json.dump({
-            "baselines": [{"model": r.model_name, "auc": r.auc_roc} for r in results],
-            "best": best_model,
-        }, f, indent=2)
+        json.dump(
+            {
+                "baselines": [{"model": r.model_name, "auc": r.auc_roc} for r in results],
+                "best": best_model,
+            },
+            f,
+            indent=2,
+        )
     logger.info(f"\nReport: {output}")
 
 

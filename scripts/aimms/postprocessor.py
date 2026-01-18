@@ -198,9 +198,7 @@ class AIMSPostprocessor:
                     "CALIBRATION: Dégradation détectée - considérer méthode Platt"
                 )
             elif result.calibration.ece_after > 0.1:
-                recommendations.append(
-                    "CALIBRATION: ECE > 10% - recalibration recommandée"
-                )
+                recommendations.append("CALIBRATION: ECE > 10% - recalibration recommandée")
 
         # Uncertainty recommendations
         if result.uncertainty:
@@ -210,9 +208,7 @@ class AIMSPostprocessor:
                     "réduire alpha ou augmenter données calibration"
                 )
             if result.uncertainty.empty_set_rate > 0.05:
-                recommendations.append(
-                    "UNCERTAINTY: >5% ensembles vides - vérifier qualité modèle"
-                )
+                recommendations.append("UNCERTAINTY: >5% ensembles vides - vérifier qualité modèle")
 
         # Alerting recommendations
         if result.alerting and not result.alerting.slack_configured:

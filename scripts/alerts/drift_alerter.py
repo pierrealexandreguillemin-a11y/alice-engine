@@ -107,7 +107,9 @@ class DriftAlerter:
         severity = self._determine_severity(latest, recommendation)
 
         if severity < self.config.min_severity:
-            logger.debug(f"Drift severity {severity.name} below threshold {self.config.min_severity.name}")
+            logger.debug(
+                f"Drift severity {severity.name} below threshold {self.config.min_severity.name}"
+            )
             return None
 
         # Vérifier cooldown

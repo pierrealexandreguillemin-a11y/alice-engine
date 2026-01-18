@@ -246,9 +246,7 @@ class ISOSemanticMemory:
         threshold = self._standards["robustness"].thresholds[0]
         return threshold.evaluate(noise_tolerance)
 
-    def get_mitigations(
-        self, domain: str, status: ComplianceStatus
-    ) -> list[MitigationStrategy]:
+    def get_mitigations(self, domain: str, status: ComplianceStatus) -> list[MitigationStrategy]:
         """Retourne les mitigations recommandées pour un statut donné."""
         if domain not in self._standards:
             return []
@@ -269,9 +267,7 @@ class ISOSemanticMemory:
         """Retourne toutes les normes ISO."""
         return self._standards.copy()
 
-    def generate_compliance_report(
-        self, metrics: dict[str, float]
-    ) -> dict[str, Any]:
+    def generate_compliance_report(self, metrics: dict[str, float]) -> dict[str, Any]:
         """Génère un rapport de conformité complet.
 
         Args:

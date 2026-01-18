@@ -30,23 +30,23 @@ def main() -> None:
 ## Resume
 | Critere | Resultat | Statut |
 |---------|----------|--------|
-| AutoGluon AUC | {ag['test_auc']:.4f} | {_status(ag['test_auc'] >= 0.70)} |
-| ISO 24029 | {rob['status']} | {_status(rob['status'] != 'FRAGILE')} |
-| ISO 24027 | {fair['status']} | {_status(fair['status'] != 'CRITICAL')} |
-| Diff vs Baseline | {mcn['difference_pct']:+.2f}% | {_status(mcn['meets_2pct'])} |
-| p-value | {mcn['p_value']:.4f} | {_status(mcn['significant'])} |
+| AutoGluon AUC | {ag["test_auc"]:.4f} | {_status(ag["test_auc"] >= 0.70)} |
+| ISO 24029 | {rob["status"]} | {_status(rob["status"] != "FRAGILE")} |
+| ISO 24027 | {fair["status"]} | {_status(fair["status"] != "CRITICAL")} |
+| Diff vs Baseline | {mcn["difference_pct"]:+.2f}% | {_status(mcn["meets_2pct"])} |
+| p-value | {mcn["p_value"]:.4f} | {_status(mcn["significant"])} |
 
-**Recommandation:** {mcn['winner']}
+**Recommandation:** {mcn["winner"]}
 
 ## Baseline
 | Model | Test AUC |
 |-------|----------|
-| CatBoost | {bl['metrics']['CatBoost']['test_auc']:.4f} |
-| XGBoost | {bl['metrics']['XGBoost']['test_auc']:.4f} |
-| LightGBM | {bl['metrics']['LightGBM']['test_auc']:.4f} |
+| CatBoost | {bl["metrics"]["CatBoost"]["test_auc"]:.4f} |
+| XGBoost | {bl["metrics"]["XGBoost"]["test_auc"]:.4f} |
+| LightGBM | {bl["metrics"]["LightGBM"]["test_auc"]:.4f} |
 
 ## Decision
--> **{mcn['winner']}**
+-> **{mcn["winner"]}**
 """
     Path("reports/ISO_25059_TRAINING_REPORT_v2.md").write_text(report)
     print("Generated: reports/ISO_25059_TRAINING_REPORT_v2.md")

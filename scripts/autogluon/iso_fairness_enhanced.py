@@ -119,11 +119,14 @@ def validate_fairness_enhanced(
 
     # Ajouter info sur les exclusions
     if excluded_count > 0:
-        warnings.insert(0, (
-            f"INFO: {excluded_count} échantillons exclus (attribut protégé vide). "
-            "Pour ligue_code, ceci représente les compétitions nationales "
-            "où le code ligue n'est pas applicable."
-        ))
+        warnings.insert(
+            0,
+            (
+                f"INFO: {excluded_count} échantillons exclus (attribut protégé vide). "
+                "Pour ligue_code, ceci représente les compétitions nationales "
+                "où le code ligue n'est pas applicable."
+            ),
+        )
 
     # Recommandations de mitigation
     mitigations = _recommend_mitigations(metrics, group_analyses, root_cause)
@@ -234,9 +237,7 @@ def _compute_fairness_metrics(group_analyses: list[GroupAnalysis]) -> FairnessMe
     )
 
 
-def _identify_root_cause(
-    group_analyses: list[GroupAnalysis], protected_attribute: str
-) -> str:
+def _identify_root_cause(group_analyses: list[GroupAnalysis], protected_attribute: str) -> str:
     """Identifie la cause racine du biais."""
     disadvantaged = [g for g in group_analyses if g.is_disadvantaged]
 

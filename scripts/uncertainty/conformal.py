@@ -190,7 +190,9 @@ class ConformalPredictor:
         coverage = 0.0
         if y_true is not None:
             y_arr = np.asarray(y_true)
-            coverage = np.mean([y_arr[i] in intervals[i].in_prediction_set for i in range(len(y_arr))])
+            coverage = np.mean(
+                [y_arr[i] in intervals[i].in_prediction_set for i in range(len(y_arr))]
+            )
 
         metrics = UncertaintyMetrics(
             mean_interval_width=float(np.mean(widths)),
@@ -209,7 +211,9 @@ class ConformalPredictor:
             intervals=intervals,
             metrics=metrics,
             method=UncertaintyMethod.CONFORMAL,
-            calibration_scores=self._calibration_scores.tolist() if self._calibration_scores is not None else [],
+            calibration_scores=self._calibration_scores.tolist()
+            if self._calibration_scores is not None
+            else [],
         )
 
 

@@ -187,9 +187,7 @@ class IterativeRefinement:
         min_count = min(c for c in counts if c > 0)
         return max_count / min_count > 2
 
-    def _calculate_reweighting(
-        self, group_analyses: list[dict[str, Any]]
-    ) -> dict[str, float]:
+    def _calculate_reweighting(self, group_analyses: list[dict[str, Any]]) -> dict[str, float]:
         """Calcule les poids de reweighting par groupe."""
         if not group_analyses:
             return {}

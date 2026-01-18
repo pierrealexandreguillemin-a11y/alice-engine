@@ -17,9 +17,18 @@ from sklearn.metrics import roc_auc_score
 from scripts.comparison.mcnemar_test import mcnemar_simple_test
 
 FEATURES = [
-    "blanc_elo", "noir_elo", "diff_elo", "echiquier", "niveau", "ronde",
-    "type_competition", "division", "ligue_code", "blanc_titre",
-    "noir_titre", "jour_semaine",
+    "blanc_elo",
+    "noir_elo",
+    "diff_elo",
+    "echiquier",
+    "niveau",
+    "ronde",
+    "type_competition",
+    "division",
+    "ligue_code",
+    "blanc_titre",
+    "noir_titre",
+    "jour_semaine",
 ]
 
 
@@ -38,15 +47,25 @@ def main() -> None:
     auc_ag = roc_auc_score(labels, ag_model.predict_proba(features_df)[1])
     auc_bl = roc_auc_score(labels, bl_model.predict_proba(features_df.values)[:, 1])
 
-    mcnemar = mcnemar_simple_test(labels, ag_model.predict(features_df).values, bl_model.predict(features_df.values))
+    mcnemar = mcnemar_simple_test(
+        labels, ag_model.predict(features_df).values, bl_model.predict(features_df.values)
+    )
     diff_pct = (auc_ag - auc_bl) * 100
 
-    Path("reports/mcnemar_comparison.json").write_text(json.dumps({
-        "autogluon_auc": auc_ag, "baseline_auc": auc_bl, "difference_pct": diff_pct,
-        "p_value": mcnemar.p_value, "significant": mcnemar.significant,
-        "meets_2pct": diff_pct >= 2.0,
-        "winner": "AutoGluon" if mcnemar.significant and diff_pct >= 2.0 else "Baseline",
-    }, indent=2))
+    Path("reports/mcnemar_comparison.json").write_text(
+        json.dumps(
+            {
+                "autogluon_auc": auc_ag,
+                "baseline_auc": auc_bl,
+                "difference_pct": diff_pct,
+                "p_value": mcnemar.p_value,
+                "significant": mcnemar.significant,
+                "meets_2pct": diff_pct >= 2.0,
+                "winner": "AutoGluon" if mcnemar.significant and diff_pct >= 2.0 else "Baseline",
+            },
+            indent=2,
+        )
+    )
     print(f"AG:{auc_ag:.4f} BL:{auc_bl:.4f} diff:{diff_pct:+.2f}% p:{mcnemar.p_value:.4f}")
 
 

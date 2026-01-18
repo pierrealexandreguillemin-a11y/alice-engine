@@ -1,4 +1,5 @@
 """Script: run_iso42001_postprocessing.py - AIMMS Runner (ISO 42001/5055)."""
+
 from __future__ import annotations
 
 import json
@@ -15,8 +16,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 FEATURES = [
-    "blanc_elo", "noir_elo", "diff_elo", "echiquier", "niveau", "ronde",
-    "type_competition", "division", "ligue_code", "blanc_titre", "noir_titre", "jour_semaine",
+    "blanc_elo",
+    "noir_elo",
+    "diff_elo",
+    "echiquier",
+    "niveau",
+    "ronde",
+    "type_competition",
+    "division",
+    "ligue_code",
+    "blanc_titre",
+    "noir_titre",
+    "jour_semaine",
 ]
 
 

@@ -49,8 +49,12 @@ logger = logging.getLogger(__name__)
 
 NUMERIC_FEATURES = ["blanc_elo", "noir_elo", "diff_elo", "echiquier", "niveau", "ronde"]
 CATEGORICAL_FEATURES = [
-    "type_competition", "division", "ligue_code",
-    "blanc_titre", "noir_titre", "jour_semaine",
+    "type_competition",
+    "division",
+    "ligue_code",
+    "blanc_titre",
+    "noir_titre",
+    "jour_semaine",
 ]
 
 
@@ -100,6 +104,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
         encoders_path = artifacts.get("encoders_path")
         if encoders_path and Path(encoders_path).exists():
             import joblib
+
             self.encoders = joblib.load(encoders_path)
             logger.info(f"Loaded encoders from {encoders_path}")
 
@@ -115,6 +120,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
     def _load_autogluon(self, model_path: str) -> None:
         """Charge un modèle AutoGluon."""
         from autogluon.tabular import TabularPredictor
+
         self.model = TabularPredictor.load(model_path)
         self.model_type = "autogluon"
         logger.info(f"Loaded AutoGluon model from {model_path}")
@@ -122,6 +128,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
     def _load_catboost(self, model_path: str) -> None:
         """Charge un modèle CatBoost."""
         from catboost import CatBoostClassifier
+
         self.model = CatBoostClassifier()
         self.model.load_model(model_path)
         self.model_type = "catboost"
@@ -130,6 +137,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
     def _load_xgboost(self, model_path: str) -> None:
         """Charge un modèle XGBoost."""
         from xgboost import XGBClassifier
+
         self.model = XGBClassifier()
         self.model.load_model(model_path)
         self.model_type = "xgboost"
@@ -138,6 +146,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
     def _load_lightgbm(self, model_path: str) -> None:
         """Charge un modèle LightGBM."""
         import lightgbm as lgb
+
         self.model = lgb.Booster(model_file=model_path)
         self.model_type = "lightgbm"
         logger.info(f"Loaded LightGBM model from {model_path}")
@@ -145,6 +154,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
     def _load_generic(self, model_path: str) -> None:
         """Charge un modèle générique via joblib."""
         import joblib
+
         self.model = joblib.load(model_path)
         self.model_type = "generic"
         logger.info(f"Loaded generic model from {model_path}")
@@ -250,23 +260,27 @@ def register_model_to_mlflow(
         artifacts["features_path"] = features_path
 
     # Créer la signature
-    input_schema = mlflow.types.Schema([
-        mlflow.types.ColSpec("double", "blanc_elo"),
-        mlflow.types.ColSpec("double", "noir_elo"),
-        mlflow.types.ColSpec("double", "diff_elo"),
-        mlflow.types.ColSpec("long", "echiquier"),
-        mlflow.types.ColSpec("long", "niveau"),
-        mlflow.types.ColSpec("long", "ronde"),
-        mlflow.types.ColSpec("string", "type_competition"),
-        mlflow.types.ColSpec("string", "division"),
-        mlflow.types.ColSpec("string", "ligue_code"),
-        mlflow.types.ColSpec("string", "blanc_titre"),
-        mlflow.types.ColSpec("string", "noir_titre"),
-        mlflow.types.ColSpec("string", "jour_semaine"),
-    ])
-    output_schema = mlflow.types.Schema([
-        mlflow.types.ColSpec("double", "probability"),
-    ])
+    input_schema = mlflow.types.Schema(
+        [
+            mlflow.types.ColSpec("double", "blanc_elo"),
+            mlflow.types.ColSpec("double", "noir_elo"),
+            mlflow.types.ColSpec("double", "diff_elo"),
+            mlflow.types.ColSpec("long", "echiquier"),
+            mlflow.types.ColSpec("long", "niveau"),
+            mlflow.types.ColSpec("long", "ronde"),
+            mlflow.types.ColSpec("string", "type_competition"),
+            mlflow.types.ColSpec("string", "division"),
+            mlflow.types.ColSpec("string", "ligue_code"),
+            mlflow.types.ColSpec("string", "blanc_titre"),
+            mlflow.types.ColSpec("string", "noir_titre"),
+            mlflow.types.ColSpec("string", "jour_semaine"),
+        ]
+    )
+    output_schema = mlflow.types.Schema(
+        [
+            mlflow.types.ColSpec("double", "probability"),
+        ]
+    )
     signature = mlflow.models.signature.ModelSignature(
         inputs=input_schema,
         outputs=output_schema,

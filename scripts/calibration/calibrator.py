@@ -75,6 +75,7 @@ class AutoGluonWrapper:
         if hasattr(X, "columns"):
             return X
         import pandas as pd
+
         if self._feature_names:
             return pd.DataFrame(X, columns=self._feature_names)
         return pd.DataFrame(X)

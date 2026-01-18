@@ -263,7 +263,13 @@ def _test_prediction_consistency(
     flip_rate = flip_count / total_comparisons if total_comparisons > 0 else 0
     consistency_rate = 1 - flip_rate
 
-    status = "STABLE" if consistency_rate >= 0.99 else "SENSITIVE" if consistency_rate >= 0.95 else "UNSTABLE"
+    status = (
+        "STABLE"
+        if consistency_rate >= 0.99
+        else "SENSITIVE"
+        if consistency_rate >= 0.95
+        else "UNSTABLE"
+    )
 
     return PredictionConsistencyTest(
         n_perturbations=n_perturbations,

@@ -114,9 +114,7 @@ def main() -> None:
     logger.info("=" * 60)
 
 
-def _get_model_paths(
-    model_type: str, custom_path: Path | None
-) -> tuple[str, str | None]:
+def _get_model_paths(model_type: str, custom_path: Path | None) -> tuple[str, str | None]:
     """Détermine les chemins du modèle et des encoders."""
     if custom_path:
         return str(custom_path), None

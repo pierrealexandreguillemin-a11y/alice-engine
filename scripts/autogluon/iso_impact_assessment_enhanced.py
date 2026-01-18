@@ -264,7 +264,13 @@ def _analyze_all_dimensions(
     )
 
     # Group Impact
-    group_risk = RiskLevel.LOW if dp_ratio >= 0.8 else RiskLevel.MEDIUM if dp_ratio >= 0.6 else RiskLevel.HIGH
+    group_risk = (
+        RiskLevel.LOW
+        if dp_ratio >= 0.8
+        else RiskLevel.MEDIUM
+        if dp_ratio >= 0.6
+        else RiskLevel.HIGH
+    )
     group = ImpactDimension(
         dimension="group",
         description="Impact on regional groups (ligues) due to prediction disparities",
@@ -310,9 +316,7 @@ def _analyze_all_dimensions(
     return [individual, group, societal]
 
 
-def _determine_overall_impact(
-    dimensions: list[ImpactDimension], dp_ratio: float
-) -> RiskLevel:
+def _determine_overall_impact(dimensions: list[ImpactDimension], dp_ratio: float) -> RiskLevel:
     """Détermine le niveau d'impact global."""
     risk_levels = [d.risk_level for d in dimensions]
 
@@ -327,13 +331,12 @@ def _determine_overall_impact(
     return RiskLevel.LOW
 
 
-def _assess_transparency(
-    model_card: dict, fairness: dict, robustness: dict
-) -> dict[str, bool]:
+def _assess_transparency(model_card: dict, fairness: dict, robustness: dict) -> dict[str, bool]:
     """Évalue la transparence du système AI."""
     return {
         "model_card_available": bool(model_card),
-        "model_card_complete": bool(model_card.get("metrics")) and bool(model_card.get("hyperparameters")),
+        "model_card_complete": bool(model_card.get("metrics"))
+        and bool(model_card.get("hyperparameters")),
         "feature_importance_available": bool(model_card.get("feature_importance")),
         "data_lineage_tracked": bool(model_card.get("training_data_hash")),
         "fairness_tested": bool(fairness),
@@ -354,7 +357,9 @@ def _define_monitoring_triggers(dp_ratio: float, noise_tolerance: float) -> list
             threshold=0.6,
             current_value=dp_ratio,
             is_triggered=dp_ratio < 0.6,
-            action_required="IMMEDIATE: Stop deployment, investigate bias" if dp_ratio < 0.6 else "None",
+            action_required="IMMEDIATE: Stop deployment, investigate bias"
+            if dp_ratio < 0.6
+            else "None",
         ),
         MonitoringTrigger(
             trigger_name="fairness_warning",
@@ -370,7 +375,9 @@ def _define_monitoring_triggers(dp_ratio: float, noise_tolerance: float) -> list
             threshold=0.95,
             current_value=noise_tolerance,
             is_triggered=noise_tolerance < 0.95,
-            action_required="INVESTIGATE: Model stability degraded" if noise_tolerance < 0.95 else "None",
+            action_required="INVESTIGATE: Model stability degraded"
+            if noise_tolerance < 0.95
+            else "None",
         ),
         MonitoringTrigger(
             trigger_name="drift_detection",

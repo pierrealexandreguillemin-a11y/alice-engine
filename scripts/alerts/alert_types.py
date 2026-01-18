@@ -114,11 +114,16 @@ class DriftAlert:
                         },
                         {
                             "type": "section",
-                            "text": {"type": "mrkdwn", "text": f"*Recommendation:* {self.recommendation}"},
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"*Recommendation:* {self.recommendation}",
+                            },
                         },
                         {
                             "type": "context",
-                            "elements": [{"type": "mrkdwn", "text": f"Timestamp: {self.timestamp}"}],
+                            "elements": [
+                                {"type": "mrkdwn", "text": f"Timestamp: {self.timestamp}"}
+                            ],
                         },
                     ],
                 }

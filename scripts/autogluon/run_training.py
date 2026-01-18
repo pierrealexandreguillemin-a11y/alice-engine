@@ -21,9 +21,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 FEATURES = [
-    "blanc_elo", "noir_elo", "diff_elo", "echiquier", "niveau", "ronde",
-    "type_competition", "division", "ligue_code", "blanc_titre",
-    "noir_titre", "jour_semaine",
+    "blanc_elo",
+    "noir_elo",
+    "diff_elo",
+    "echiquier",
+    "niveau",
+    "ronde",
+    "type_competition",
+    "division",
+    "ligue_code",
+    "blanc_titre",
+    "noir_titre",
+    "jour_semaine",
 ]
 
 
@@ -37,16 +46,24 @@ def main() -> None:
         df["target"] = (df["resultat_blanc"] == 1.0).astype(int)
 
     combined = pd.concat([train_df, valid_df], ignore_index=True)
-    result = train_autogluon(combined[FEATURES + ["target"]], label="target", config=load_autogluon_config())
+    result = train_autogluon(
+        combined[FEATURES + ["target"]], label="target", config=load_autogluon_config()
+    )
 
     test_proba = result.predictor.predict_proba(test_df[FEATURES])[1]
     test_auc = roc_auc_score(test_df["target"], test_proba)
 
     Path("reports").mkdir(exist_ok=True)
-    Path("reports/autogluon_results.json").write_text(json.dumps({
-        "test_auc": test_auc, "best_model": result.best_model,
-        "num_models": result.metrics["num_models"],
-    }, indent=2))
+    Path("reports/autogluon_results.json").write_text(
+        json.dumps(
+            {
+                "test_auc": test_auc,
+                "best_model": result.best_model,
+                "num_models": result.metrics["num_models"],
+            },
+            indent=2,
+        )
+    )
     logger.info("Test AUC: %.4f", test_auc)
 
 
