@@ -2,7 +2,7 @@
 
 Document ID: TEST-AIMMS-001
 Version: 1.0.0
-Tests count: 13
+Tests count: 15
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
@@ -201,6 +201,32 @@ class TestAIMSPostprocessor:
         assert len(result.recommendations) > 0
         # Au minimum, recommandation pour Slack non configuré
         assert any("ALERTING" in r or "AIMMS" in r for r in result.recommendations)
+
+    def test_calibrated_model_property(self, sample_data, trained_model) -> None:
+        """calibrated_model retourne le modèle calibré après run()."""
+        _, X_calib, X_test, _, y_calib, y_test = sample_data
+        pp = AIMSPostprocessor(AIMSConfig(calibration_cv=0))
+
+        # Avant run(), calibrated_model est None
+        assert pp.calibrated_model is None
+
+        # Après run(), calibrated_model est défini
+        pp.run(trained_model, X_calib, y_calib, X_test, y_test)
+        assert pp.calibrated_model is not None
+        # Le modèle calibré doit avoir predict_proba
+        assert hasattr(pp.calibrated_model, "predict_proba")
+
+    def test_conformal_predictor_property(self, sample_data, trained_model) -> None:
+        """conformal_predictor retourne le prédicteur après run()."""
+        _, X_calib, X_test, _, y_calib, y_test = sample_data
+        pp = AIMSPostprocessor(AIMSConfig(calibration_cv=0))
+
+        # Avant run(), conformal_predictor est None
+        assert pp.conformal_predictor is None
+
+        # Après run(), conformal_predictor est défini
+        pp.run(trained_model, X_calib, y_calib, X_test, y_test)
+        assert pp.conformal_predictor is not None
 
 
 class TestRunPostprocessing:

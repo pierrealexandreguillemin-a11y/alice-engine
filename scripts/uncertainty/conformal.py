@@ -89,7 +89,6 @@ class ConformalPredictor:
             y: Labels de calibration (0/1)
         """
         self._model = model
-        X_arr = np.asarray(X) if hasattr(X, "values") else X
         y_arr = np.asarray(y)
 
         # Validation taille minimale (ISO 24029 - robustesse statistique)

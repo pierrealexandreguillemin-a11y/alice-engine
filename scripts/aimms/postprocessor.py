@@ -39,7 +39,11 @@ from scripts.aimms.aimms_types import (
 )
 from scripts.alerts.alert_types import AlertConfig, AlertSeverity
 from scripts.calibration.calibrator import Calibrator
-from scripts.calibration.calibrator_types import CalibrationConfig, CalibrationMethod
+from scripts.calibration.calibrator_types import (
+    CalibrationConfig,
+    CalibrationMethod,
+    CalibrationResult,
+)
 from scripts.uncertainty.conformal import ConformalPredictor
 from scripts.uncertainty.uncertainty_types import UncertaintyConfig
 
@@ -63,7 +67,7 @@ class AIMSPostprocessor:
     def __init__(self, config: AIMSConfig | None = None) -> None:
         """Initialise le postprocessor."""
         self.config = config or AIMSConfig()
-        self._calibrator: Calibrator | None = None
+        self._calibration_result: CalibrationResult | None = None
         self._conformal: ConformalPredictor | None = None
 
     def run(
@@ -119,21 +123,22 @@ class AIMSPostprocessor:
             method=CalibrationMethod.ISOTONIC,
             cv=self.config.calibration_cv,
         )
-        self._calibrator = Calibrator(config)
-        result = self._calibrator.fit(model, X_calib, y_calib)
+        calibrator = Calibrator(config)
+        self._calibration_result = calibrator.fit(model, X_calib, y_calib)
 
         logger.info(
-            f"Calibration: Brier {result.metrics.brier_before:.4f} → "
-            f"{result.metrics.brier_after:.4f} ({result.metrics.improvement_pct:+.1f}%)"
+            f"Calibration: Brier {self._calibration_result.metrics.brier_before:.4f} → "
+            f"{self._calibration_result.metrics.brier_after:.4f} "
+            f"({self._calibration_result.metrics.improvement_pct:+.1f}%)"
         )
 
         return CalibrationSummary(
-            method=result.method.value,
-            brier_before=result.metrics.brier_before,
-            brier_after=result.metrics.brier_after,
-            ece_before=result.metrics.ece_before,
-            ece_after=result.metrics.ece_after,
-            improvement_pct=result.metrics.improvement_pct,
+            method=self._calibration_result.method.value,
+            brier_before=self._calibration_result.metrics.brier_before,
+            brier_after=self._calibration_result.metrics.brier_after,
+            ece_before=self._calibration_result.metrics.ece_before,
+            ece_after=self._calibration_result.metrics.ece_after,
+            improvement_pct=self._calibration_result.metrics.improvement_pct,
         )
 
     def _run_uncertainty(
@@ -223,10 +228,9 @@ class AIMSPostprocessor:
     @property
     def calibrated_model(self) -> Any | None:
         """Retourne le modèle calibré (si calibration effectuée)."""
-        if self._calibrator is None:
+        if self._calibration_result is None:
             return None
-        # Note: Le calibrator stocke le résultat en interne
-        return None  # TODO: Exposer le calibrated model
+        return self._calibration_result.calibrator
 
     @property
     def conformal_predictor(self) -> ConformalPredictor | None:

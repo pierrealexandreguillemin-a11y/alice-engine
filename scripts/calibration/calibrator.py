@@ -41,16 +41,30 @@ logger = logging.getLogger(__name__)
 
 
 class AutoGluonWrapper:
-    """Wrapper sklearn-compatible pour AutoGluon TabularPredictor."""
+    """Wrapper sklearn-compatible pour AutoGluon TabularPredictor.
+
+    Adapte l'API AutoGluon pour compatibilité avec sklearn CalibratedClassifierCV.
+    Gère la conversion DataFrame ↔ ndarray automatiquement.
+    """
 
     _estimator_type = "classifier"  # Requis pour sklearn
 
     def __init__(self, predictor: Any, feature_names: list[str] | None = None) -> None:
+        """Initialise le wrapper AutoGluon.
+
+        Args:
+            predictor: AutoGluon TabularPredictor entraîné
+            feature_names: Noms des features (pour conversion array→DataFrame)
+        """
         self.predictor = predictor
-        self.classes_ = np.array([0, 1])
+        # Extraire classes_ du predictor AutoGluon si possible
+        if hasattr(predictor, "class_labels"):
+            self.classes_ = np.array(predictor.class_labels)
+        else:
+            self.classes_ = np.array([0, 1])  # Fallback classification binaire
         self._feature_names = feature_names
 
-    def fit(self, X: Any, y: Any) -> "AutoGluonWrapper":
+    def fit(self, X: Any, y: Any) -> AutoGluonWrapper:
         """No-op: AutoGluon est déjà entraîné. Capture feature names."""
         if hasattr(X, "columns"):
             self._feature_names = list(X.columns)
