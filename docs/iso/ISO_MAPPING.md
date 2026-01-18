@@ -1,8 +1,8 @@
 # ISO Standards Mapping - ALICE Engine
 
 > **Document Type**: Quality Records (QR) - ISO 15289
-> **Version**: 2.1.0
-> **Date**: 17 Janvier 2026
+> **Version**: 2.2.0
+> **Date**: 18 Janvier 2026
 > **Objectif**: Traçabilité explicite des normes ISO par fichier/dossier
 
 ---
@@ -104,6 +104,14 @@
 | `scripts/uncertainty/uncertainty_types.py` | ISO 24029, 5055 | Types intervalles, métriques |
 | `scripts/uncertainty/conformal.py` | ISO 24029 | Conformal prediction, couverture garantie |
 
+### Scripts AIMMS (ISO 42001 - AI Management System)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/aimms/aimms_types.py` | ISO 42001, 5055 | Types lifecycle, configs, résultats |
+| `scripts/aimms/postprocessor.py` | ISO 42001 Clause 8.2/9.1 | Orchestration calibration→uncertainty→alerting |
+| `scripts/aimms/run_iso42001_postprocessing.py` | ISO 42001, 5055 | Runner post-training (<50 lignes) |
+
 ### Scripts Comparison
 
 | Fichier | Normes | Exigences Couvertes |
@@ -135,6 +143,7 @@
 | `tests/test_feature_engineering.py` | ISO 29119, 5259 | Tests features, validation schéma |
 | `tests/test_ffe_rules_features.py` | ISO 29119, 25012 | 66 tests - règles métier FFE |
 | `tests/test_ensemble_stacking.py` | ISO 29119, 42001 | Tests ensemble learning |
+| `tests/aimms/test_aimms.py` | ISO 29119, 42001 | 13 tests - AIMMS postprocessor |
 
 ### Documentation
 
@@ -158,6 +167,9 @@ Fichiers concernés:
 - `scripts/model_registry.py` - Model Card, versioning
 - `scripts/train_models_parallel.py` - Gouvernance training
 - `scripts/ensemble_stacking.py` - Explicabilité
+- `scripts/aimms/` - **AIMMS Lifecycle (Clause 8.2, 9.1, 10.2)**
+  - `postprocessor.py` - Orchestration calibration→uncertainty→alerting
+  - `run_iso42001_postprocessing.py` - Runner post-training
 - `services/inference.py` - Traçabilité prédictions
 - `docs/requirements/CDC_ALICE.md` - Spécifications AI
 
@@ -220,4 +232,4 @@ Last Updated: YYYY-MM-DD
 
 ---
 
-*Dernière MAJ: 2026-01-17 | ALICE Engine v0.5.0 - Pipeline ISO Complete*
+*Dernière MAJ: 2026-01-18 | ALICE Engine v0.6.0 - AIMMS Integration*

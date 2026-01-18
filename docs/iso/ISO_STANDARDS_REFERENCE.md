@@ -591,6 +591,14 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 | `scripts/agents/semantic_memory.py` | ISO 42001, 24027, 24029 | Base connaissance ISO, seuils, mitigations |
 | `scripts/agents/iterative_refinement.py` | ISO 42001, 24027 | Corrections automatiques fairness/robustness |
 
+### Scripts AIMMS (AI Management System Lifecycle)
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/aimms/aimms_types.py` | ISO 42001, 5055 | Types lifecycle (LifecyclePhase), configs, résultats |
+| `scripts/aimms/postprocessor.py` | ISO 42001 Clause 8.2/9.1/10.2 | Orchestration: calibration → uncertainty → alerting |
+| `scripts/aimms/run_iso42001_postprocessing.py` | ISO 42001, 5055 | Runner post-training (<50 lignes) |
+
 ### Hooks Claude Code
 
 | Fichier | Normes Applicables | Exigences |
@@ -720,4 +728,4 @@ Last Updated: YYYY-MM-DD
 
 ---
 
-*Dernière MAJ: 2026-01-17 | ALICE Engine v0.6.0*
+*Dernière MAJ: 2026-01-18 | ALICE Engine v0.6.1 - AIMMS Integration*
