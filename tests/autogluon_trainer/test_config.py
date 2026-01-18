@@ -26,7 +26,7 @@ class TestAutoGluonConfig:
         config = AutoGluonConfig()
 
         assert config.presets == "extreme"
-        assert config.time_limit == 3600
+        assert config.time_limit == 21600  # 6 hours default
         assert config.eval_metric == "roc_auc"
         assert config.num_bag_folds == 5
         assert config.num_stack_levels == 2
@@ -94,7 +94,7 @@ class TestLoadAutogluonConfig:
         config = load_autogluon_config(tmp_path / "nonexistent.yaml")
 
         assert config.presets == "extreme"
-        assert config.time_limit == 3600
+        assert config.time_limit == 21600  # 6 hours default
 
     def test_load_empty_autogluon_section(self, tmp_path: Path) -> None:
         """Test section autogluon vide."""

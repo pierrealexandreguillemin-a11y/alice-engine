@@ -45,7 +45,7 @@ class TestTrainAutogluonFunction:
         config = AutoGluonConfig()
 
         assert config.presets == "extreme"
-        assert config.time_limit == 3600
+        assert config.time_limit == 21600  # 6 hours default
         assert config.eval_metric == "roc_auc"
         assert config.num_bag_folds == 5
 
