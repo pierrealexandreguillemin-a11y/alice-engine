@@ -113,20 +113,18 @@ def main() -> int:
     return 0 if fairness.compliant and robustness.compliant else 1
 
 
-def _save_fairness_report(
-    report: ISO24027EnhancedReport, path: Path
-) -> None:
+def _save_fairness_report(report: ISO24027EnhancedReport, path: Path) -> None:
     """Sauvegarde le rapport fairness."""
     from dataclasses import asdict
+
     data = asdict(report)
     path.write_text(json.dumps(data, indent=2, default=str))
 
 
-def _save_robustness_report(
-    report: ISO24029EnhancedReport, path: Path
-) -> None:
+def _save_robustness_report(report: ISO24029EnhancedReport, path: Path) -> None:
     """Sauvegarde le rapport robustness."""
     from dataclasses import asdict
+
     data = asdict(report)
     path.write_text(json.dumps(data, indent=2, default=str))
 
