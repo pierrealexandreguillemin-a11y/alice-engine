@@ -100,7 +100,9 @@ class ConformalPredictor:
             )
 
         # Probabilités complètes (classe 0 et classe 1)
-        proba_all = model.predict_proba(X_arr)
+        # AutoGluon retourne DataFrame, sklearn retourne ndarray
+        proba_raw = model.predict_proba(X)
+        proba_all = proba_raw.values if hasattr(proba_raw, "values") else proba_raw
 
         # Score de non-conformité: 1 - p(y_true)
         # Pour y=1: score = 1 - proba[:,1]
@@ -142,10 +144,9 @@ class ConformalPredictor:
         if self._model is None or self._quantile is None:
             raise RuntimeError("Conformal predictor not fitted. Call fit() first.")
 
-        X_arr = np.asarray(X) if hasattr(X, "values") else X
-
-        # Probabilités complètes
-        proba_all = self._model.predict_proba(X_arr)
+        # Probabilités complètes (AutoGluon retourne DataFrame)
+        proba_raw = self._model.predict_proba(X)
+        proba_all = proba_raw.values if hasattr(proba_raw, "values") else proba_raw
         threshold = 1 - self._quantile  # Seuil d'inclusion
 
         intervals = []

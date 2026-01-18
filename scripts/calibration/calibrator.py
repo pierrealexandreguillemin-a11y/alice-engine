@@ -40,6 +40,54 @@ from scripts.calibration.calibrator_types import (
 logger = logging.getLogger(__name__)
 
 
+class AutoGluonWrapper:
+    """Wrapper sklearn-compatible pour AutoGluon TabularPredictor."""
+
+    _estimator_type = "classifier"  # Requis pour sklearn
+
+    def __init__(self, predictor: Any, feature_names: list[str] | None = None) -> None:
+        self.predictor = predictor
+        self.classes_ = np.array([0, 1])
+        self._feature_names = feature_names
+
+    def fit(self, X: Any, y: Any) -> "AutoGluonWrapper":
+        """No-op: AutoGluon est déjà entraîné. Capture feature names."""
+        if hasattr(X, "columns"):
+            self._feature_names = list(X.columns)
+        return self
+
+    def _to_dataframe(self, X: Any) -> Any:
+        """Convertit en DataFrame si nécessaire (pour AutoGluon)."""
+        if hasattr(X, "columns"):
+            return X
+        import pandas as pd
+        if self._feature_names:
+            return pd.DataFrame(X, columns=self._feature_names)
+        return pd.DataFrame(X)
+
+    def predict(self, X: Any) -> np.ndarray:
+        """Prédit les classes."""
+        X_df = self._to_dataframe(X)
+        return self.predictor.predict(X_df).values
+
+    def predict_proba(self, X: Any) -> np.ndarray:
+        """Prédit les probabilités."""
+        X_df = self._to_dataframe(X)
+        proba = self.predictor.predict_proba(X_df)
+        if hasattr(proba, "values"):
+            return proba.values
+        return proba
+
+
+def _wrap_if_autogluon(model: Any, feature_names: list[str] | None = None) -> Any:
+    """Wrap AutoGluon predictor si nécessaire."""
+    # Détecter AutoGluon par le nom de la classe
+    model_class = type(model).__name__
+    if "TabularPredictor" in model_class or "Predictor" in model_class:
+        return AutoGluonWrapper(model, feature_names)
+    return model
+
+
 def compute_ece(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10) -> float:
     """Calcule l'Expected Calibration Error (ECE).
 
@@ -106,11 +154,14 @@ class Calibrator:
         Returns:
             CalibrationResult avec modèle calibré et métriques
         """
+        # Wrapper pour AutoGluon si nécessaire
+        feature_names = list(X.columns) if hasattr(X, "columns") else None
+        wrapped_model = _wrap_if_autogluon(base_model, feature_names)
         X_arr = np.asarray(X) if hasattr(X, "values") else X
         y_arr = np.asarray(y)
 
         # Probabilités avant calibration
-        proba_before = base_model.predict_proba(X_arr)[:, 1]
+        proba_before = wrapped_model.predict_proba(X)[:, 1]
 
         # Métriques avant
         brier_before = brier_score_loss(y_arr, proba_before)
@@ -124,12 +175,12 @@ class Calibrator:
         if self.config.cv == 0:
             # FrozenEstimator remplace cv="prefit" (deprecated sklearn 1.6+)
             calibrated = CalibratedClassifierCV(
-                estimator=FrozenEstimator(base_model),
+                estimator=FrozenEstimator(wrapped_model),
                 method=method_str,
             )
         else:
             calibrated = CalibratedClassifierCV(
-                estimator=base_model,
+                estimator=wrapped_model,
                 method=method_str,
                 cv=self.config.cv,
             )
