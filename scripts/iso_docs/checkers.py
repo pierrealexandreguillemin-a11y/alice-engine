@@ -1,13 +1,16 @@
 """Tool installation and metrics checking functions."""
 
+from __future__ import annotations
+
 import subprocess  # nosec B404 - subprocess for internal dev tools only
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).parent.parent.parent
 
 
-def _get_startupinfo() -> subprocess.STARTUPINFO | None:
+def _get_startupinfo() -> Any:
     """Get startupinfo for Windows to prevent console window blocking."""
     if sys.platform == "win32":
         startupinfo = subprocess.STARTUPINFO()
