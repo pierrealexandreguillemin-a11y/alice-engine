@@ -10,20 +10,25 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from scripts.autogluon.iso_fairness_enhanced import ISO24027EnhancedReport
+    from scripts.autogluon.iso_robustness_enhanced import ISO24029EnhancedReport
 
 
 def main() -> int:
     """Exécute les validations ISO améliorées."""
-    from autogluon.tabular import TabularPredictor
     import pandas as pd
+    from autogluon.tabular import TabularPredictor
 
     from scripts.autogluon.iso_fairness_enhanced import validate_fairness_enhanced
-    from scripts.autogluon.iso_robustness_enhanced import validate_robustness_enhanced
     from scripts.autogluon.iso_impact_assessment_enhanced import (
+        AssessmentPhase,
         assess_impact_enhanced,
         save_report,
-        AssessmentPhase,
     )
+    from scripts.autogluon.iso_robustness_enhanced import validate_robustness_enhanced
 
     # Chemins
     model_path = Path("models/autogluon/autogluon_20260117_042708")
@@ -108,14 +113,18 @@ def main() -> int:
     return 0 if fairness.compliant and robustness.compliant else 1
 
 
-def _save_fairness_report(report, path: Path) -> None:
+def _save_fairness_report(
+    report: ISO24027EnhancedReport, path: Path
+) -> None:
     """Sauvegarde le rapport fairness."""
     from dataclasses import asdict
     data = asdict(report)
     path.write_text(json.dumps(data, indent=2, default=str))
 
 
-def _save_robustness_report(report, path: Path) -> None:
+def _save_robustness_report(
+    report: ISO24029EnhancedReport, path: Path
+) -> None:
     """Sauvegarde le rapport robustness."""
     from dataclasses import asdict
     data = asdict(report)
