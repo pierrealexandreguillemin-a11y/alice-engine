@@ -2,7 +2,7 @@
 
 Document ID: TEST-CALIBRATION-001
 Version: 1.0.0
-Tests count: 19
+Tests count: 22
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
@@ -227,6 +227,32 @@ class TestAutoGluonWrapper:
         # Vérifier que DataFrame a été créé avec les bons noms
         call_args = mock_autogluon_predictor.predict_proba.call_args[0][0]
         assert list(call_args.columns) == ["a", "b"]
+
+    def test_predict_method(self, mock_autogluon_predictor) -> None:
+        """predict() retourne les classes prédites."""
+        wrapper = AutoGluonWrapper(mock_autogluon_predictor)
+        X_df = pd.DataFrame({"a": [1, 2, 3, 4, 5], "b": [5, 4, 3, 2, 1]})
+        pred = wrapper.predict(X_df)
+        assert isinstance(pred, np.ndarray)
+        assert len(pred) == 5
+
+    def test_predict_proba_array_no_feature_names(self, mock_autogluon_predictor) -> None:
+        """predict_proba avec array sans feature_names crée DataFrame sans colonnes."""
+        wrapper = AutoGluonWrapper(mock_autogluon_predictor)  # Pas de feature_names
+        X_arr = np.array([[1, 5], [2, 4], [3, 3], [4, 2], [5, 1]])
+        proba = wrapper.predict_proba(X_arr)
+        assert isinstance(proba, np.ndarray)
+        assert proba.shape == (5, 2)
+
+    def test_predict_proba_returns_ndarray_directly(self) -> None:
+        """predict_proba retourne ndarray si predictor ne retourne pas DataFrame."""
+        predictor = MagicMock()
+        predictor.predict_proba.return_value = np.array([[0.8, 0.2], [0.3, 0.7]])
+        wrapper = AutoGluonWrapper(predictor)
+        X_df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+        proba = wrapper.predict_proba(X_df)
+        assert isinstance(proba, np.ndarray)
+        assert proba.shape == (2, 2)
 
 
 class TestWrapIfAutogluon:
