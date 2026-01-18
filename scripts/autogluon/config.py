@@ -38,12 +38,13 @@ class AutoGluonConfig:
         num_bag_folds: Nombre de folds pour bagging
         num_stack_levels: Nombre de niveaux de stacking
         models_include: Liste des modeles a inclure
+        ag_args_fit: Arguments supplementaires pour fit() (ex: max_memory_usage_ratio)
         random_seed: Graine pour reproductibilite
         verbosity: Niveau de verbosity (0-4)
     """
 
     presets: str = "extreme"
-    time_limit: int = 3600
+    time_limit: int = 21600  # 6 heures par defaut
     eval_metric: str = "roc_auc"
     num_bag_folds: int = 5
     num_stack_levels: int = 2
@@ -59,6 +60,7 @@ class AutoGluonConfig:
     )
     tabpfn_enabled: bool = True
     tabpfn_n_ensemble: int = 16
+    ag_args_fit: dict[str, Any] = field(default_factory=dict)
     random_seed: int = 42
     verbosity: int = 2
     output_dir: Path = field(default_factory=lambda: Path("models/autogluon"))
@@ -70,13 +72,17 @@ class AutoGluonConfig:
         -------
             Dict des arguments pour .fit()
         """
-        return {
+        kwargs = {
             "presets": self.presets,
             "time_limit": self.time_limit,
             "num_bag_folds": self.num_bag_folds,
             "num_stack_levels": self.num_stack_levels,
+            "use_bag_holdout": True,  # Required when using tuning_data with bagging
             "verbosity": self.verbosity,
         }
+        if self.ag_args_fit:
+            kwargs["ag_args_fit"] = self.ag_args_fit
+        return kwargs
 
 
 def load_autogluon_config(
@@ -107,13 +113,14 @@ def load_autogluon_config(
 
     return AutoGluonConfig(
         presets=ag_config.get("presets", "extreme"),
-        time_limit=ag_config.get("time_limit", 3600),
+        time_limit=ag_config.get("time_limit", 21600),
         eval_metric=ag_config.get("eval_metric", "roc_auc"),
         num_bag_folds=ag_config.get("num_bag_folds", 5),
         num_stack_levels=ag_config.get("num_stack_levels", 2),
         models_include=ag_config.get("models", {}).get("include", []),
         tabpfn_enabled=ag_config.get("tabpfn", {}).get("enabled", True),
         tabpfn_n_ensemble=ag_config.get("tabpfn", {}).get("n_ensemble_configurations", 16),
+        ag_args_fit=ag_config.get("ag_args_fit", {}),
         random_seed=ag_config.get("random_seed", 42),
         verbosity=ag_config.get("verbosity", 2),
     )

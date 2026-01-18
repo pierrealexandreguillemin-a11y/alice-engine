@@ -1,8 +1,8 @@
 # ISO Standards Mapping - ALICE Engine
 
 > **Document Type**: Quality Records (QR) - ISO 15289
-> **Version**: 1.0.0
-> **Date**: 9 Janvier 2026
+> **Version**: 2.1.0
+> **Date**: 17 Janvier 2026
 > **Objectif**: Traçabilité explicite des normes ISO par fichier/dossier
 
 ---
@@ -36,7 +36,7 @@
 
 ## Mapping Complet par Fichier
 
-### Scripts ML/AI
+### Scripts ML/AI Core
 
 | Fichier | Normes | Exigences Couvertes |
 |---------|--------|---------------------|
@@ -48,6 +48,68 @@
 | `scripts/evaluate_models.py` | ISO 25059, 29119 | Benchmarks, Tests modèles |
 | `scripts/parse_dataset.py` | ISO 5259, 25012 | Parsing qualité, Validation schéma |
 | `scripts/ml_types.py` | ISO 5055, 5259 | Types stricts, Qualité code |
+
+### Scripts AutoGluon (ISO Validation)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/autogluon/trainer.py` | ISO 42001, 5055 | Pipeline AutoGluon, MLflow tracking |
+| `scripts/autogluon/iso_fairness_enhanced.py` | ISO 24027 Clause 7-8 | Root cause, equalized odds, mitigations |
+| `scripts/autogluon/iso_robustness_enhanced.py` | ISO 24029-1/2 | Bruit, dropout, consistance, monotonicité |
+| `scripts/autogluon/iso_impact_assessment_enhanced.py` | ISO 42005:2025 | 10-step process, monitoring triggers |
+| `scripts/autogluon/iso_model_card.py` | ISO 42001 | Model Card JSON |
+| `scripts/autogluon/run_iso_validation_enhanced.py` | ISO 24027/24029/42005 | Runner validation complète |
+
+### Scripts Baseline (Comparaison Indépendante)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/baseline/catboost_baseline.py` | ISO 24029, 5055 | CatBoost isolé, réutilise training |
+| `scripts/baseline/xgboost_baseline.py` | ISO 24029, 5055 | XGBoost isolé |
+| `scripts/baseline/lightgbm_baseline.py` | ISO 24029, 5055 | LightGBM isolé |
+| `scripts/baseline/run_baselines.py` | ISO 24029, 5055 | Runner séquentiel |
+
+### Scripts Serving (Déploiement)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/serving/pyfunc_wrapper.py` | ISO 42001, 5055 | MLflow PyFunc pour Render |
+| `scripts/serving/deploy_to_mlflow.py` | ISO 42001 | Déploiement automatisé |
+
+### Scripts Agents (Architecture AG-A)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/agents/semantic_memory.py` | ISO 42001, 24027, 24029 | Base connaissance ISO |
+| `scripts/agents/iterative_refinement.py` | ISO 42001, 24027 | Corrections automatiques |
+
+### Scripts Alerts (ISO 23894)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/alerts/alert_types.py` | ISO 23894, 5055 | Types alertes, severity levels |
+| `scripts/alerts/drift_alerter.py` | ISO 23894 | Slack webhook, cooldown, auto-alerting |
+
+### Scripts Calibration (ISO 24029)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/calibration/calibrator_types.py` | ISO 24029, 5055 | Types calibration, métriques |
+| `scripts/calibration/calibrator.py` | ISO 24029 | Platt scaling, isotonic regression, ECE |
+
+### Scripts Uncertainty (ISO 24029)
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/uncertainty/uncertainty_types.py` | ISO 24029, 5055 | Types intervalles, métriques |
+| `scripts/uncertainty/conformal.py` | ISO 24029 | Conformal prediction, couverture garantie |
+
+### Scripts Comparison
+
+| Fichier | Normes | Exigences Couvertes |
+|---------|--------|---------------------|
+| `scripts/comparison/mcnemar_test.py` | ISO 24029, 29119 | Test McNemar 5x2cv |
+| `scripts/comparison/run_mcnemar.py` | ISO 24029, 5055 | Runner comparaison |
 
 ### Services
 
@@ -112,7 +174,8 @@ Fichiers concernés:
 ### ISO/IEC 23894:2023 - AI Risk Management
 
 Fichiers concernés:
-- `scripts/model_registry.py` - Drift monitoring
+- `scripts/model_registry/drift.py` - Drift monitoring (PSI, KS)
+- `scripts/alerts/drift_alerter.py` - Alerting automatique (Slack webhook)
 - `scripts/train_models_parallel.py` - Gestion risques training
 
 ### ISO 27001 - Information Security
@@ -121,6 +184,14 @@ Fichiers concernés:
 - `scripts/model_registry.py` - Intégrité (SHA-256), Signatures (HMAC), Chiffrement (AES-256)
 - `app/api/routes.py` - Sécurité API
 - `app/config.py` - Gestion secrets
+
+### ISO/IEC 24029 - Neural Network Robustness
+
+Fichiers concernés:
+- `scripts/calibration/calibrator.py` - Confidence calibration (Platt, isotonic)
+- `scripts/uncertainty/conformal.py` - Uncertainty quantification (conformal prediction)
+- `scripts/autogluon/iso_robustness_enhanced.py` - Tests robustesse (bruit, dropout)
+- `scripts/robustness/` - Module robustesse adversariale
 
 ### ISO 29119 - Software Testing
 
@@ -149,4 +220,4 @@ Last Updated: YYYY-MM-DD
 
 ---
 
-*Dernière MAJ: 2026-01-09 | ALICE Engine v0.4.0*
+*Dernière MAJ: 2026-01-17 | ALICE Engine v0.5.0 - Pipeline ISO Complete*

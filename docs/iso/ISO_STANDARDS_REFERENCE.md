@@ -567,6 +567,30 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 |---------|-------------------|-----------|
 | `scripts/reports/generate_iso25059.py` | ISO 25059, 5055 | Rapport final qualité AI, <50 lignes |
 
+### Scripts Baseline (Comparaison Indépendante)
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/baseline/catboost_baseline.py` | ISO 24029, 5055 | CatBoost isolé, réutilise `scripts/training` |
+| `scripts/baseline/xgboost_baseline.py` | ISO 24029, 5055 | XGBoost isolé, réutilise `scripts/training` |
+| `scripts/baseline/lightgbm_baseline.py` | ISO 24029, 5055 | LightGBM isolé, réutilise `scripts/training` |
+| `scripts/baseline/run_baselines.py` | ISO 24029, 5055 | Runner séquentiel, comparaison AutoGluon |
+| `scripts/baseline/types.py` | ISO 5055 | Types partagés (BaselineMetrics) |
+
+### Scripts Serving (Déploiement MLflow/Render)
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/serving/pyfunc_wrapper.py` | ISO 42001, 5055 | MLflow PyFunc wrapper universel |
+| `scripts/serving/deploy_to_mlflow.py` | ISO 42001, 5055 | Script déploiement Render |
+
+### Scripts Agents (Architecture AG-A/MLZero)
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/agents/semantic_memory.py` | ISO 42001, 24027, 24029 | Base connaissance ISO, seuils, mitigations |
+| `scripts/agents/iterative_refinement.py` | ISO 42001, 24027 | Corrections automatiques fairness/robustness |
+
 ### Hooks Claude Code
 
 | Fichier | Normes Applicables | Exigences |

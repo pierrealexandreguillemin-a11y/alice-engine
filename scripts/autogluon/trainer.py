@@ -89,6 +89,59 @@ class AutoGluonTrainer:
         self.predictor: TabularPredictor | None = None
         self.run_id: str | None = None
 
+    def _init_training_run(self) -> Path:
+        """Initialize run_id and model path for training.
+
+        Returns:
+            Path to the model output directory.
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.run_id = f"autogluon_{timestamp}"
+        return self.save_path / self.run_id
+
+    def _fit_predictor(
+        self,
+        train_data: pd.DataFrame,
+        label: str,
+        tuning_data: pd.DataFrame | None,
+        model_path: Path,
+    ) -> float:
+        """Create and fit the TabularPredictor.
+
+        Returns:
+            Training time in seconds.
+        """
+        from autogluon.tabular import TabularPredictor
+
+        start_time = time.time()
+        self.predictor = TabularPredictor(
+            label=label,
+            eval_metric=self.config.eval_metric,
+            path=str(model_path),
+        )
+        self.predictor.fit(
+            train_data=train_data,
+            tuning_data=tuning_data,
+            **self.config.to_fit_kwargs(),
+        )
+        return time.time() - start_time
+
+    def _extract_leaderboard_metrics(self) -> tuple[pd.DataFrame, str, dict[str, float]]:
+        """Extract leaderboard and metrics from trained predictor.
+
+        Returns:
+            Tuple of (leaderboard, best_model_name, metrics_dict).
+        """
+        leaderboard = self.predictor.leaderboard(silent=True)
+        best_model = leaderboard.iloc[0]["model"]
+        metrics = {
+            "score_val": float(leaderboard.iloc[0]["score_val"]),
+            "pred_time_val": float(leaderboard.iloc[0]["pred_time_val"]),
+            "fit_time": float(leaderboard.iloc[0]["fit_time"]),
+            "num_models": len(leaderboard),
+        }
+        return leaderboard, best_model, metrics
+
     def train(
         self,
         train_data: pd.DataFrame,
@@ -109,55 +162,20 @@ class AutoGluonTrainer:
 
         ISO 42001: Logging complet pour reproductibilite.
         """
-        from autogluon.tabular import TabularPredictor
-
-        # Generer run_id unique
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_id = f"autogluon_{timestamp}"
-        model_path = self.save_path / self.run_id
-
-        # Hash des donnees pour tracabilite
+        model_path = self._init_training_run()
         data_hash = self._compute_data_hash(train_data)
 
         logger.info(f"[AutoGluon] Starting training with preset='{self.config.presets}'")
         logger.info(f"[AutoGluon] Model path: {model_path}")
         logger.info(f"[AutoGluon] Data hash: {data_hash[:16]}...")
 
-        # Demarrer le chrono
-        start_time = time.time()
-
-        # Creer et entrainer le predictor
-        self.predictor = TabularPredictor(
-            label=label,
-            eval_metric=self.config.eval_metric,
-            path=str(model_path),
-        )
-
-        self.predictor.fit(
-            train_data=train_data,
-            tuning_data=tuning_data,
-            **self.config.to_fit_kwargs(),
-        )
-
-        train_time = time.time() - start_time
-
-        # Recuperer le leaderboard
-        leaderboard = self.predictor.leaderboard(silent=True)
-        best_model = leaderboard.iloc[0]["model"]
-
-        # Extraire les metriques du meilleur modele
-        metrics = {
-            "score_val": float(leaderboard.iloc[0]["score_val"]),
-            "pred_time_val": float(leaderboard.iloc[0]["pred_time_val"]),
-            "fit_time": float(leaderboard.iloc[0]["fit_time"]),
-            "num_models": len(leaderboard),
-        }
+        train_time = self._fit_predictor(train_data, label, tuning_data, model_path)
+        leaderboard, best_model, metrics = self._extract_leaderboard_metrics()
 
         logger.info(f"[AutoGluon] Training completed in {train_time:.1f}s")
         logger.info(f"[AutoGluon] Best model: {best_model}")
         logger.info(f"[AutoGluon] Best score: {metrics['score_val']:.4f}")
 
-        # Log MLflow si disponible
         self._log_to_mlflow(train_data, metrics, leaderboard)
 
         return AutoGluonTrainingResult(

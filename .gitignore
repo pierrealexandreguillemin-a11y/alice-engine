@@ -87,6 +87,20 @@ htmlcov/
 catboost_info/
 lightgbm_info/
 xgboost_info/
+mlflow.db
+mlruns/
+
+# ============================================
+# Trained Models (binary artifacts)
+# ============================================
+models/autogluon/
+models/current/
+models/v*/
+
+# ============================================
+# Generated Reports (JSON artifacts)
+# ============================================
+reports/*.json
 
 # ============================================
 # Large Binary Files

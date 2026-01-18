@@ -55,6 +55,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _log_header() -> None:
+    """Log training header."""
+    logger.info("=" * 60)
+    logger.info("ALICE Engine - Parallel ML Training")
+    logger.info("ISO/IEC 42001, 5259, 29119 Conformant")
+    logger.info("=" * 60)
+
+
+def _prepare_all_features(
+    train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, dict, list]:
+    """Prepare features for all datasets."""
+    logger.info("\n[3/5] Preparing features...")
+    X_train, y_train, encoders = prepare_features(train, fit_encoders=True)
+    X_valid, y_valid, _ = prepare_features(valid, label_encoders=encoders)
+    X_test, y_test, _ = prepare_features(test, label_encoders=encoders)
+    logger.info(f"  Features: {X_train.shape[1]}")
+    logger.info(f"  Target balance: {y_train.mean():.2%} positive class")
+    cat_features = [c for c in CATEGORICAL_FEATURES if c in X_train.columns]
+    return X_train, y_train, X_valid, y_valid, X_test, y_test, encoders, cat_features
+
+
 def run_training(
     data_dir: Path,
     config_path: Path,
@@ -63,54 +85,33 @@ def run_training(
     use_mlflow: bool = True,
 ) -> dict[str, object]:
     """Pipeline complet d'entrainement parallele."""
-    logger.info("=" * 60)
-    logger.info("ALICE Engine - Parallel ML Training")
-    logger.info("ISO/IEC 42001, 5259, 29119 Conformant")
-    logger.info("=" * 60)
+    _log_header()
 
-    # Charger config
     logger.info("\n[1/5] Loading configuration...")
     config = load_hyperparameters(config_path)
     logger.info(f"  Config: {config_path}")
-
-    # Setup MLflow
     if use_mlflow:
         setup_mlflow(config)
 
-    # Charger donnees
     logger.info("\n[2/5] Loading data...")
     train, valid, test = _load_datasets(data_dir)
+    X_train, y_train, X_valid, y_valid, X_test, y_test, encoders, cat_features = (
+        _prepare_all_features(train, valid, test)
+    )
 
-    # Preparer features
-    logger.info("\n[3/5] Preparing features...")
-    X_train, y_train, encoders = prepare_features(train, fit_encoders=True)
-    X_valid, y_valid, _ = prepare_features(valid, label_encoders=encoders)
-    X_test, y_test, _ = prepare_features(test, label_encoders=encoders)
-
-    logger.info(f"  Features: {X_train.shape[1]}")
-    logger.info(f"  Target balance: {y_train.mean():.2%} positive class")
-
-    cat_features = [c for c in CATEGORICAL_FEATURES if c in X_train.columns]
-
-    # Entrainement parallele
     logger.info("\n[4/5] Training models in parallel...")
     results = train_all_models_parallel(X_train, y_train, X_valid, y_valid, cat_features, config)
 
-    # Evaluation sur test set
     logger.info("\n[4.5/5] Evaluating on test set...")
     _evaluate_on_test(results, X_test, y_test)
 
-    # Sauvegarder modeles (ISO 42001/5259/27001)
     logger.info("\n[5/5] Saving models with production compliance...")
     version_dir = _save_models(
         results, config, models_dir, train, valid, test, data_dir, X_train, encoders
     )
-
-    # MLflow logging
     if use_mlflow:
         log_to_mlflow(results, config)
 
-    # Resume
     return _build_summary(results, version_dir)
 
 
