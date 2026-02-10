@@ -31,9 +31,13 @@ def main() -> None:
     """Genere un rapport fairness standalone."""
     test_df = pd.read_parquet("data/features/test.parquet")
     y_true = (test_df["resultat_blanc"] == 1.0).astype(int).values
-    y_pred = (
-        np.load("reports/predictions.npy") if Path("reports/predictions.npy").exists() else y_true
-    )
+    predictions_path = Path("reports/predictions.npy")
+    if not predictions_path.exists():
+        logger.error(
+            "No predictions found at %s. Cannot generate fairness report.", predictions_path
+        )
+        return
+    y_pred = np.load(predictions_path)
 
     report = generate_comprehensive_report(
         y_true,
