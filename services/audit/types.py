@@ -2,8 +2,8 @@
 
 Ce module contient les types pour le logging d'audit:
 - OperationType: Enum des operations CRUD
-- AuditEntry: Model Pydantic d'une entree d'audit
-- AuditConfig: Configuration du logger
+- AuditEntry: Model Pydantic d'une entree d'audit (immutable)
+- AuditConfig: Configuration du logger (immutable)
 
 Chaque entry suit NIST SP 800-92:
 timestamp, operation, collection, user, query, result, duration, success.
@@ -13,7 +13,7 @@ ISO Compliance:
 - NIST SP 800-92 - Log Management
 - OWASP Logging Cheat Sheet
 - ISO/IEC 27034 - Secure Coding (Pydantic validation)
-- ISO/IEC 5055:2021 - Code Quality (<100 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -21,10 +21,13 @@ Last Updated: 2026-02-10
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_ISO_8601_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
 
 class OperationType(str, Enum):
@@ -37,7 +40,7 @@ class OperationType(str, Enum):
 
 
 class AuditEntry(BaseModel):
-    """Entree d'audit conforme NIST SP 800-92.
+    """Entree d'audit conforme NIST SP 800-92 (immutable).
 
     Attributes
     ----------
@@ -53,15 +56,26 @@ class AuditEntry(BaseModel):
 
     """
 
-    timestamp: str
+    model_config = ConfigDict(frozen=True)
+
+    timestamp: str = Field(min_length=1)
     operation_type: OperationType
-    collection: str
-    user_source: str = "system"
-    query_summary: str = ""
+    collection: str = Field(min_length=1, max_length=256)
+    user_source: str = Field(default="system", min_length=1, max_length=256)
+    query_summary: str = Field(default="", max_length=2000)
     result_count: int = Field(default=0, ge=0)
     duration_ms: float = Field(default=0.0, ge=0.0)
     success: bool = True
-    error_message: str | None = None
+    error_message: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("timestamp")
+    @classmethod
+    def _validate_timestamp(cls, v: str) -> str:
+        """Validate timestamp is ISO 8601 format."""
+        if not _ISO_8601_RE.match(v):
+            msg = f"timestamp must be ISO 8601, got: {v!r}"
+            raise ValueError(msg)
+        return v
 
     def to_dict(self) -> dict[str, Any]:
         """Convertit en dictionnaire pour insertion MongoDB."""
@@ -71,7 +85,7 @@ class AuditEntry(BaseModel):
 
 
 class AuditConfig(BaseModel):
-    """Configuration du logger d'audit.
+    """Configuration du logger d'audit (immutable).
 
     Attributes
     ----------
@@ -82,7 +96,9 @@ class AuditConfig(BaseModel):
 
     """
 
+    model_config = ConfigDict(frozen=True)
+
     enabled: bool = True
-    collection_name: str = "audit_logs"
-    batch_size: int = Field(default=50, gt=0)
-    flush_interval_s: float = Field(default=5.0, gt=0.0)
+    collection_name: str = Field(default="audit_logs", min_length=1, max_length=256)
+    batch_size: int = Field(default=50, gt=0, le=10000)
+    flush_interval_s: float = Field(default=5.0, gt=0.0, le=300.0)

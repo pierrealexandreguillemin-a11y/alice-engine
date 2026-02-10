@@ -1,17 +1,19 @@
 """Audit Logger asynchrone - ISO 27001:2022 A.8.15.
 
 Logger d'audit non-bloquant avec batch insert MongoDB.
+Fallback fichier si MongoDB echoue (NIST SP 800-92).
 
 Architecture:
 - asyncio.Queue fire-and-forget
 - Worker background: batch insert toutes les N entries ou T secondes
 - _sanitize_query: garde cles, remplace valeurs par "***"
+- Fallback: ecriture fichier JSONL si insert MongoDB echoue
 
 ISO Compliance:
 - ISO/IEC 27001:2022 A.8.15 - Logging
-- NIST SP 800-92 - Structured log entries
+- NIST SP 800-92 - No silent data loss, structured log entries
 - OWASP Logging Cheat Sheet - No PII in logs
-- ISO/IEC 5055:2021 - Code Quality (<140 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -20,7 +22,9 @@ Last Updated: 2026-02-10
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -30,6 +34,8 @@ from services.audit.types import AuditConfig, AuditEntry, OperationType
 logger = structlog.get_logger(__name__)
 
 _MAX_QUEUE_SIZE = 10000
+_MAX_SANITIZE_DEPTH = 10
+_FALLBACK_PATH = Path("logs/audit_fallback.jsonl")
 
 
 def _sanitize_query(query: dict[str, Any] | None) -> str:
@@ -39,16 +45,18 @@ def _sanitize_query(query: dict[str, Any] | None) -> str:
     """
     if query is None:
         return ""
-    return _sanitize_value(query)
+    return _sanitize_value(query, depth=0)
 
 
-def _sanitize_value(value: Any) -> str:
-    """Sanitise recursivement une valeur."""
+def _sanitize_value(value: Any, *, depth: int = 0) -> str:
+    """Sanitise recursivement une valeur (avec limite profondeur)."""
+    if depth >= _MAX_SANITIZE_DEPTH:
+        return "***"
     if isinstance(value, dict):
-        parts = [f"{k}: {_sanitize_value(v)}" for k, v in value.items()]
+        parts = [f"{k}: {_sanitize_value(v, depth=depth + 1)}" for k, v in value.items()]
         return "{" + ", ".join(parts) + "}"
     if isinstance(value, list):
-        return "[" + ", ".join(_sanitize_value(v) for v in value) + "]"
+        return "[" + ", ".join(_sanitize_value(v, depth=depth + 1) for v in value) + "]"
     return "***"
 
 
@@ -57,6 +65,7 @@ class AuditLogger:
 
     Pattern fire-and-forget: log() ne bloque jamais.
     Worker background flush les entries par batch.
+    Fallback fichier JSONL si MongoDB insert echoue (NIST SP 800-92).
     """
 
     def __init__(self, db: Any, config: AuditConfig | None = None) -> None:
@@ -66,6 +75,7 @@ class AuditLogger:
         self._queue: asyncio.Queue[AuditEntry] = asyncio.Queue(maxsize=_MAX_QUEUE_SIZE)
         self._running = False
         self._worker_task: asyncio.Task[None] | None = None
+        self._dropped_count = 0
 
     async def start(self) -> None:
         """Demarre le worker background.
@@ -89,6 +99,8 @@ class AuditLogger:
             except asyncio.CancelledError:
                 pass
         await self._flush_remaining()
+        if self._dropped_count > 0:
+            logger.warning("audit_entries_dropped", count=self._dropped_count)
         logger.info("audit_logger_stopped")
 
     async def log(  # noqa: PLR0913
@@ -120,7 +132,8 @@ class AuditLogger:
         try:
             self._queue.put_nowait(entry)
         except asyncio.QueueFull:
-            logger.warning("audit_queue_full")
+            self._dropped_count += 1
+            logger.warning("audit_queue_full", dropped_total=self._dropped_count)
 
     async def _worker(self) -> None:
         """Worker: batch insert a intervalles reguliers."""
@@ -141,6 +154,9 @@ class AuditLogger:
                 if batch:
                     await self._insert_batch(collection, batch)
                     batch = []
+        # Flush remaining batch on shutdown (fix race condition)
+        if batch:
+            await self._insert_batch(collection, batch)
 
     async def _flush_remaining(self) -> None:
         """Flush les entrees restantes dans la queue."""
@@ -160,9 +176,21 @@ class AuditLogger:
         collection: Any,
         batch: list[dict[str, Any]],
     ) -> None:
-        """Insere un batch dans MongoDB."""
+        """Insere un batch dans MongoDB. Fallback fichier si echec."""
         try:
             await collection.insert_many(batch)
             logger.debug("audit_batch_inserted", count=len(batch))
         except Exception:
             logger.exception("audit_batch_insert_failed", count=len(batch))
+            self._fallback_to_file(batch)
+
+    def _fallback_to_file(self, batch: list[dict[str, Any]]) -> None:
+        """Ecrit les entries dans un fichier JSONL en fallback (NIST SP 800-92)."""
+        try:
+            _FALLBACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with _FALLBACK_PATH.open("a", encoding="utf-8") as f:
+                for entry in batch:
+                    f.write(json.dumps(entry) + "\n")
+            logger.info("audit_fallback_written", count=len(batch), path=str(_FALLBACK_PATH))
+        except Exception:
+            logger.exception("audit_fallback_failed", count=len(batch))
