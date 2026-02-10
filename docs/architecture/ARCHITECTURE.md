@@ -18,7 +18,6 @@ Ce document decrit l'architecture logicielle d'ALICE (Adversarial Lineup Inferen
 
 ### Documents lies
 - [CDC_ALICE.md](../requirements/CDC_ALICE.md) - Cahier des charges
-- [API_CONTRACT.md](../api/API_CONTRACT.md) - Contrat API
 
 ---
 

@@ -31,9 +31,6 @@ theme:
 
 nav:
   - Home: index.md
-  - API:
-      - Contract: api/API_CONTRACT.md
-      - Reference: api/reference.md
   - ISO Compliance:
       - Standards: iso/ISO_STANDARDS_REFERENCE.md
       - Status: iso/IMPLEMENTATION_STATUS.md

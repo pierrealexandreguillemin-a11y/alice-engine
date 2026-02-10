@@ -39,7 +39,5 @@ See [ISO Standards Reference](iso/ISO_STANDARDS_REFERENCE.md) for details.
 
 ## Documentation
 
-- [API Contract](api/API_CONTRACT.md) - REST API documentation
-- [API Reference](api/reference.md) - Auto-generated from docstrings
 - [ISO Standards](iso/ISO_STANDARDS_REFERENCE.md) - Compliance mapping
 - [Deployment](operations/DEPLOIEMENT_RENDER.md) - Render deployment guide
