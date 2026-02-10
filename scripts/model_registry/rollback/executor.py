@@ -1,12 +1,12 @@
 """Executeur de rollback - ISO 23894.
 
 Fonctions:
-- execute_rollback: execute le rollback via versioning.py
-- log_rollback_event: append JSONL historique
+- execute_rollback: execute le rollback via versioning.py (avec safety)
+- log_rollback_event: append JSONL historique (avec error handling)
 
 ISO Compliance:
 - ISO/IEC 23894:2023 - AI Risk Management
-- ISO/IEC 5055:2021 - Code Quality (<95 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -46,15 +46,23 @@ def execute_rollback(
     timestamp = datetime.now(tz=UTC).isoformat()
 
     if dry_run:
+        # Verify target exists before reporting success
+        target_exists = (
+            (models_dir / decision.target_version).exists() if decision.target_version else False
+        )
         result = RollbackResult(
-            success=True,
+            success=target_exists,
             rolled_back_from=decision.current_version,
             rolled_back_to=decision.target_version or "",
             reason=f"DRY RUN: {decision.reason}",
             timestamp=timestamp,
+            error_message=None if target_exists else "Target version not found",
         )
         logger.info(
-            "DRY RUN: would rollback %s -> %s", decision.current_version, decision.target_version
+            "DRY RUN: would rollback %s -> %s (exists=%s)",
+            decision.current_version,
+            decision.target_version,
+            target_exists,
         )
         return result
 
@@ -68,7 +76,20 @@ def execute_rollback(
             error_message="No target version specified",
         )
 
-    success = rollback_to_version(models_dir, decision.target_version)
+    try:
+        success = rollback_to_version(models_dir, decision.target_version)
+    except Exception as e:
+        logger.exception(
+            "Rollback raised exception: %s -> %s", decision.current_version, decision.target_version
+        )
+        return RollbackResult(
+            success=False,
+            rolled_back_from=decision.current_version,
+            rolled_back_to=decision.target_version,
+            reason=decision.reason,
+            timestamp=timestamp,
+            error_message=str(e),
+        )
 
     result = RollbackResult(
         success=success,
@@ -79,8 +100,8 @@ def execute_rollback(
         error_message=None if success else f"Failed to rollback to {decision.target_version}",
     )
 
+    log_rollback_event(models_dir, result)
     if success:
-        log_rollback_event(models_dir, result)
         logger.info("Rolled back: %s -> %s", decision.current_version, decision.target_version)
     else:
         logger.error("Rollback failed: %s -> %s", decision.current_version, decision.target_version)
@@ -99,5 +120,8 @@ def log_rollback_event(models_dir: Path, result: RollbackResult) -> None:
         "reason": result.reason,
         "error_message": result.error_message,
     }
-    with history_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
+    try:
+        with history_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError as e:
+        logger.error("Failed to write rollback history: %s", e)

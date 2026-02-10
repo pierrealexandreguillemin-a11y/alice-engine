@@ -3,12 +3,12 @@
 Fonctions:
 - detect_degradation: detection principale
 - _find_previous_version: tri par pattern vYYYYMMDD_HHMMSS
-- _load_version_metrics: parse metadata.json
+- _load_version_metrics: parse metadata.json (avec error handling)
 - _compare_metrics: comparaison pourcentage
 
 ISO Compliance:
 - ISO/IEC 23894:2023 - AI Risk Management
-- ISO/IEC 5055:2021 - Code Quality (<130 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.model_registry.drift_types import DriftSeverity
 from scripts.model_registry.rollback.types import (
     DegradationThresholds,
     RollbackDecision,
@@ -56,7 +57,17 @@ def detect_degradation(
         thresholds = DegradationThresholds()
 
     timestamp = datetime.now(tz=UTC).isoformat()
-    prev = _find_previous_version(models_dir, current_version)
+
+    try:
+        prev = _find_previous_version(models_dir, current_version)
+    except FileNotFoundError:
+        logger.warning("Models directory not found: %s", models_dir)
+        return RollbackDecision(
+            should_rollback=False,
+            reason=f"Models directory not found: {models_dir}",
+            current_version=current_version,
+            timestamp=timestamp,
+        )
 
     if prev is None:
         return RollbackDecision(
@@ -81,6 +92,11 @@ def detect_degradation(
     previous_metrics = _load_version_metrics(models_dir, prev)
 
     if current_metrics is None or previous_metrics is None:
+        logger.warning(
+            "Cannot load metrics: current=%s previous=%s",
+            current_metrics is not None,
+            previous_metrics is not None,
+        )
         return RollbackDecision(
             should_rollback=False,
             reason="Cannot load metrics for comparison",
@@ -124,13 +140,18 @@ def _load_version_metrics(
     models_dir: Path,
     version: str,
 ) -> dict[str, float] | None:
-    """Charge les metriques depuis metadata.json."""
+    """Charge les metriques depuis metadata.json (avec error handling)."""
     metadata_path = models_dir / version / "metadata.json"
     if not metadata_path.exists():
         return None
-    data = json.loads(metadata_path.read_text())
+    try:
+        data = json.loads(metadata_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("Failed to parse %s: %s", metadata_path, e)
+        return None
     best_model = data.get("metrics", {}).get("best_model", {})
     if not best_model:
+        logger.warning("No best_model metrics in %s", metadata_path)
         return None
     return {
         "auc": best_model.get("auc", 0.0),
@@ -167,6 +188,4 @@ def _compare_metrics(
 
 def _is_drift_critical(drift_result: Any) -> bool:
     """Verifie si le drift est critique."""
-    from scripts.model_registry.drift_types import DriftSeverity  # noqa: PLC0415
-
     return getattr(drift_result, "overall_severity", None) == DriftSeverity.CRITICAL

@@ -9,7 +9,7 @@ et le rollback automatique:
 ISO Compliance:
 - ISO/IEC 23894:2023 - AI Risk Management
 - ISO/IEC 27034 - Secure Coding (Pydantic validation)
-- ISO/IEC 5055:2021 - Code Quality (<100 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -33,8 +33,8 @@ class DegradationThresholds(BaseModel):
         accuracy_drop_pct: Drop accuracy maximum tolere (%)
     """
 
-    auc_drop_pct: float = Field(default=2.0, gt=0.0)
-    accuracy_drop_pct: float = Field(default=3.0, gt=0.0)
+    auc_drop_pct: float = Field(default=2.0, gt=0.0, le=100.0)
+    accuracy_drop_pct: float = Field(default=3.0, gt=0.0, le=100.0)
 
 
 class RollbackDecision(BaseModel):
