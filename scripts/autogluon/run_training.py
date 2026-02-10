@@ -24,34 +24,13 @@ from scripts.fairness.protected import validate_features
 from scripts.fairness.protected.config import DEFAULT_PROTECTED_ATTRIBUTES
 from scripts.model_registry.rollback import detect_degradation
 from scripts.model_registry.versioning import get_current_version
+from scripts.training.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-FEATURES = [
-    "blanc_elo",
-    "noir_elo",
-    "diff_elo",
-    "echiquier",
-    "niveau",
-    "ronde",
-    "type_competition",
-    "division",
-    "ligue_code",
-    "blanc_titre",
-    "noir_titre",
-    "jour_semaine",
-]
-
-
-_CATEGORICAL = [
-    "type_competition",
-    "division",
-    "ligue_code",
-    "blanc_titre",
-    "noir_titre",
-    "jour_semaine",
-]
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+_CATEGORICAL = CATEGORICAL_FEATURES
 
 
 def _run_protected_attrs_check(train_df: pd.DataFrame) -> None:
