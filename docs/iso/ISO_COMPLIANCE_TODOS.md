@@ -63,7 +63,9 @@
 - [x] **Audit log MongoDB** - Logger les acces DB (read/write) ✅
   - Fichiers: `services/audit/types.py`, `services/audit/logger.py`
   - Integration: `services/data_loader.py`, `app/config.py`
-  - Tests: `tests/audit/test_types.py`, `tests/audit/test_logger.py` (22 tests)
+  - Tests: `tests/audit/test_types.py`, `test_logger.py`, `test_error_paths.py` (34 tests)
+  - Pydantic validators: ISO 8601 timestamp, Field constraints, frozen=True
+  - NIST SP 800-92: fallback fichier JSONL si MongoDB echoue
   - Session: 2026-02-10
 
 ### ISO 23894 (AI Risk)
@@ -75,7 +77,8 @@
 - [x] **Model rollback** - Detection degradation + rollback automatique N-1 ✅
   - Fichiers: `scripts/model_registry/rollback/types.py`, `detector.py`, `executor.py`
   - Runner: `scripts/model_registry/check_rollback.py`
-  - Tests: `tests/model_registry_rollback/test_detector.py`, `test_executor.py` (23 tests)
+  - Tests: `tests/model_registry_rollback/test_detector.py`, `test_executor.py`, `test_error_paths.py` (32 tests)
+  - Error handling: corrupted JSON, missing models dir, rollback exceptions
   - Session: 2026-02-10
 
 ### ISO 24029 (Robustness)
@@ -93,14 +96,20 @@
 - [x] **Protected attributes check** - Validation absence features sensibles ✅
   - Fichiers: `scripts/fairness/protected/types.py`, `config.py`, `validator.py`
   - Integration: `scripts/autogluon/run_training.py`, `scripts/baseline/run_baselines.py`
-  - Tests: `tests/protected_attrs/test_validator.py` (17 tests)
+  - Tests: `tests/protected_attrs/test_validator.py`, `test_error_paths.py` (28 tests)
+  - blanc_titre/noir_titre: FORBIDDEN (proxy direct genre)
+  - Nominal attrs: Cramer's V (pas Pearson sur LabelEncoded)
+  - DRY: run_training.py importe de training/features.py
   - Session: 2026-02-10
 
 - [x] **Fairness report automatique** - Rapport multi-attributs post-training ✅
   - Fichiers: `scripts/fairness/auto_report/types.py`, `generator.py`, `formatter.py`
   - Runner: `scripts/fairness/auto_report/runner.py`
   - Integration: `scripts/autogluon/run_training.py`, `scripts/baseline/run_baselines.py`
-  - Tests: `tests/fairness_auto_report/test_generator.py`, `test_formatter.py` (24 tests)
+  - Tests: `tests/fairness_auto_report/test_generator.py`, `test_formatter.py`, `test_error_paths.py` (41 tests)
+  - _status_from_metrics uses ALL 5 metrics (DP, TPR, FPR, PP, min_acc)
+  - calibration_gap computed per group (NIST AI 100-1)
+  - Bootstrap N=1000 for CI (was 200)
   - Session: 2026-02-10
 
 ---
@@ -284,4 +293,4 @@ scripts/fairness/auto_report/
 **Score global P1:** 100% ✅
 **Score global P2:** 100% (9/9) ✅
 **Pipeline ISO:** COMPLETE + ALL P2 IMPLEMENTED
-**Total new tests:** 86 (17+24+23+22)
+**Total new tests:** 135 (34+32+28+41)
