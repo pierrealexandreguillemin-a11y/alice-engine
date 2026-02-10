@@ -8,9 +8,9 @@ Fonctions:
 
 ISO Compliance:
 - ISO/IEC TR 24027:2021 - Bias in AI systems
-- NIST AI 100-1 MEASURE 2.11 - Fairness evaluation
+- NIST AI 100-1 MEASURE 2.11 - Fairness evaluation + calibration
 - EU AI Act Art.13 - Transparency (disaggregated metrics)
-- ISO/IEC 5055:2021 - Code Quality (<250 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -42,8 +42,15 @@ logger = logging.getLogger(__name__)
 # Seuils EEOC 80% rule
 _EEOC_THRESHOLD = 0.80
 _CAUTION_THRESHOLD = 0.85
-_BOOTSTRAP_N = 200
+_BOOTSTRAP_N = 1000
 _BOOTSTRAP_CI = 0.95
+# Seuils pour toutes les metriques (utilises par _status_from_metrics)
+_FPR_DIFF_CRITICAL = 0.20
+_FPR_DIFF_CAUTION = 0.10
+_PP_DIFF_CRITICAL = 0.20
+_PP_DIFF_CAUTION = 0.10
+_MIN_ACC_CRITICAL = 0.50
+_MIN_ACC_CAUTION = 0.60
 
 
 def generate_comprehensive_report(
@@ -58,22 +65,13 @@ def generate_comprehensive_report(
 
     Model-agnostic: accepte y_true/y_pred numpy arrays.
     Reutilise compute_bias_metrics_by_group (ISO 5055 - pas de duplication).
-
-    Args:
-    ----
-        y_true: Labels reels (0/1)
-        y_pred: Predictions (0/1)
-        test_data: DataFrame avec colonnes des attributs proteges
-        model_name: Nom du modele
-        model_version: Version du modele
-        protected_attributes: Liste des attributs a analyser
-
-    Returns:
-    -------
-        ComprehensiveFairnessReport avec analyses et recommandations
     """
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
+
+    if len(y_true) != len(y_pred):
+        msg = f"y_true/y_pred length mismatch: {len(y_true)} vs {len(y_pred)}"
+        raise ValueError(msg)
 
     analyses: list[AttributeAnalysis] = []
     for attr in protected_attributes:
@@ -86,6 +84,7 @@ def generate_comprehensive_report(
 
     overall_status = _determine_overall_status(analyses)
     recommendations = _generate_recommendations(analyses)
+    has_analyses = len(analyses) > 0
 
     return ComprehensiveFairnessReport(
         model_name=model_name,
@@ -96,10 +95,13 @@ def generate_comprehensive_report(
         overall_status=overall_status,
         recommendations=recommendations,
         iso_compliance={
-            "iso_24027": len(analyses) > 0,
-            "nist_ai_100_1": len(analyses) > 0 and all(a.group_count >= 2 for a in analyses),
-            "eu_ai_act_art13": len(analyses) > 0,
-            "eeoc_80_percent": all(a.demographic_parity_ratio >= _EEOC_THRESHOLD for a in analyses),
+            "iso_24027": has_analyses,
+            "nist_ai_100_1": has_analyses and all(a.group_count >= 2 for a in analyses),
+            "eu_ai_act_art13": has_analyses,
+            "eeoc_80_percent": (
+                has_analyses
+                and all(a.demographic_parity_ratio >= _EEOC_THRESHOLD for a in analyses)
+            ),
         },
     )
 
@@ -110,16 +112,15 @@ def _analyze_attribute(
     groups: np.ndarray,
     attr_name: str,
 ) -> AttributeAnalysis:
-    """Analyse fairness pour un attribut protege.
-
-    Reutilise compute_bias_metrics_by_group() pour les metriques par groupe,
-    puis derive les metriques aggregees (DP ratio, equalized odds, etc.).
-    """
+    """Analyse fairness pour un attribut protege."""
     groups = np.asarray(groups)
     unique_groups = np.unique(groups)
     n_groups = len(unique_groups)
 
     if n_groups <= 1:
+        acc = float(np.mean(y_true == y_pred)) if len(y_true) > 0 else 0.0
+        actual_rate = float(np.mean(y_true)) if len(y_true) > 0 else 0.0
+        pred_rate = float(np.mean(y_pred)) if len(y_pred) > 0 else 0.0
         return AttributeAnalysis(
             attribute_name=attr_name,
             sample_count=len(y_true),
@@ -128,7 +129,8 @@ def _analyze_attribute(
             equalized_odds_tpr_diff=0.0,
             equalized_odds_fpr_diff=0.0,
             predictive_parity_diff=0.0,
-            min_group_accuracy=1.0,
+            min_group_accuracy=round(acc, 4),
+            max_calibration_gap=round(abs(pred_rate - actual_rate), 4),
             status="fair",
         )
 
@@ -144,14 +146,16 @@ def _analyze_attribute(
     fprs = [g.fpr for g in group_details]
     precisions = [g.precision for g in group_details]
     accuracies = [g.accuracy for g in group_details]
+    cal_gaps = [g.calibration_gap for g in group_details]
 
     dp_ratio = min(rates) / max(rates) if max(rates) > 0 else 1.0
     tpr_diff = max(tprs) - min(tprs)
     fpr_diff = max(fprs) - min(fprs)
     pp_diff = max(precisions) - min(precisions) if precisions else 0.0
-    min_acc = min(accuracies) if accuracies else 1.0
+    min_acc = min(accuracies) if accuracies else 0.0
+    max_cal = max(cal_gaps) if cal_gaps else 0.0
 
-    status = _status_from_metrics(dp_ratio, tpr_diff)
+    status = _status_from_metrics(dp_ratio, tpr_diff, fpr_diff, pp_diff, min_acc)
     ci = _bootstrap_dp_ci(y_pred, groups, unique_groups)
 
     return AttributeAnalysis(
@@ -163,6 +167,7 @@ def _analyze_attribute(
         equalized_odds_fpr_diff=round(fpr_diff, 4),
         predictive_parity_diff=round(pp_diff, 4),
         min_group_accuracy=round(float(min_acc), 4),
+        max_calibration_gap=round(float(max_cal), 4),
         status=status,
         group_details=group_details,
         confidence_intervals=ci,
@@ -175,10 +180,7 @@ def _build_group_details(
     groups: np.ndarray,
     bias_metrics: list[BiasMetrics],
 ) -> list[GroupMetrics]:
-    """Construit les GroupMetrics a partir des BiasMetrics existants.
-
-    Enrichit avec FPR, precision, accuracy non fournis par BiasMetrics.
-    """
+    """Construit les GroupMetrics a partir des BiasMetrics existants."""
     details: list[GroupMetrics] = []
     for bm in bias_metrics:
         mask = groups == bm.group_name
@@ -189,16 +191,20 @@ def _build_group_details(
         fpr = float(np.sum((yt == 0) & (yp == 1)) / negatives) if negatives > 0 else 0.0
         precision = float(tp / pred_pos) if pred_pos > 0 else 0.0
         accuracy = float(np.sum(yt == yp) / len(yt)) if len(yt) > 0 else 0.0
+        actual_rate = float(np.mean(yt)) if len(yt) > 0 else 0.0
+        cal_gap = abs(bm.positive_rate - actual_rate)
+        group_name = str(bm.group_name) if str(bm.group_name) else "(empty)"
 
         details.append(
             GroupMetrics(
-                group_name=str(bm.group_name),
+                group_name=group_name,
                 sample_count=bm.group_size,
                 positive_rate=bm.positive_rate,
                 tpr=bm.true_positive_rate,
                 fpr=round(fpr, 4),
                 precision=round(precision, 4),
                 accuracy=round(accuracy, 4),
+                calibration_gap=round(cal_gap, 4),
             )
         )
     return details
@@ -208,9 +214,11 @@ def _bootstrap_dp_ci(
     y_pred: np.ndarray,
     groups: np.ndarray,
     unique_groups: np.ndarray,
+    *,
+    seed: int | None = 42,
 ) -> dict[str, list[float]]:
     """Bootstrap CI pour le demographic parity ratio (NIST AI 100-1)."""
-    rng = np.random.default_rng(42)
+    rng = np.random.default_rng(seed)
     n = len(y_pred)
     dp_ratios: list[float] = []
 
@@ -234,11 +242,31 @@ def _bootstrap_dp_ci(
     return {"demographic_parity_ratio": [round(lo, 4), round(hi, 4)]}
 
 
-def _status_from_metrics(dp_ratio: float, tpr_diff: float) -> str:
-    """Determine le status a partir des metriques."""
-    if dp_ratio < _EEOC_THRESHOLD or tpr_diff > 0.2:
+def _status_from_metrics(
+    dp_ratio: float,
+    tpr_diff: float,
+    fpr_diff: float,
+    pp_diff: float,
+    min_acc: float,
+) -> str:
+    """Determine le status a partir de TOUTES les metriques (NIST AI 100-1)."""
+    # Critical: any metric exceeds critical threshold
+    if (
+        dp_ratio < _EEOC_THRESHOLD
+        or tpr_diff > 0.2
+        or fpr_diff > _FPR_DIFF_CRITICAL
+        or pp_diff > _PP_DIFF_CRITICAL
+        or min_acc < _MIN_ACC_CRITICAL
+    ):
         return "critical"
-    if dp_ratio < _CAUTION_THRESHOLD or tpr_diff > 0.1:
+    # Caution: any metric in caution zone
+    if (
+        dp_ratio < _CAUTION_THRESHOLD
+        or tpr_diff > 0.1
+        or fpr_diff > _FPR_DIFF_CAUTION
+        or pp_diff > _PP_DIFF_CAUTION
+        or min_acc < _MIN_ACC_CAUTION
+    ):
         return "caution"
     return "fair"
 
@@ -256,21 +284,35 @@ def _determine_overall_status(analyses: list[AttributeAnalysis]) -> str:
 
 
 def _generate_recommendations(analyses: list[AttributeAnalysis]) -> list[str]:
-    """Genere des recommandations actionnables."""
+    """Genere des recommandations actionnables et specifiques."""
     recs: list[str] = []
     for a in analyses:
         if a.status == "critical":
+            details = _build_rec_details(a)
             recs.append(
-                f"URGENT: '{a.attribute_name}' shows critical bias "
-                f"(DP={a.demographic_parity_ratio:.2f}). "
+                f"URGENT: '{a.attribute_name}' shows critical bias. {details} "
                 "Apply pre/in/post-processing mitigation."
             )
         elif a.status == "caution":
+            details = _build_rec_details(a)
             recs.append(
-                f"MONITOR: '{a.attribute_name}' shows moderate bias "
-                f"(DP={a.demographic_parity_ratio:.2f}). "
+                f"MONITOR: '{a.attribute_name}' shows moderate bias. {details} "
                 "Increase monitoring frequency."
             )
     if not recs:
-        recs.append("Maintenir monitoring regulier. Aucun biais significatif.")
+        recs.append("No significant bias detected. Maintain regular monitoring.")
     return recs
+
+
+def _build_rec_details(a: AttributeAnalysis) -> str:
+    """Construit les details des metriques pour une recommandation."""
+    parts = [f"DP={a.demographic_parity_ratio:.2f}"]
+    if a.equalized_odds_tpr_diff > 0.1:
+        parts.append(f"TPR_diff={a.equalized_odds_tpr_diff:.2f}")
+    if a.equalized_odds_fpr_diff > 0.1:
+        parts.append(f"FPR_diff={a.equalized_odds_fpr_diff:.2f}")
+    if a.predictive_parity_diff > 0.1:
+        parts.append(f"PP_diff={a.predictive_parity_diff:.2f}")
+    if a.min_group_accuracy < 0.6:
+        parts.append(f"min_acc={a.min_group_accuracy:.2f}")
+    return f"({', '.join(parts)})"

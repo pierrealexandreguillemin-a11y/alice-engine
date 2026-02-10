@@ -111,6 +111,8 @@ def _format_attribute_table(analysis: AttributeAnalysis) -> str:
         f"| <= 0.10 | {_diff_status(analysis.predictive_parity_diff, 0.10)} |\n"
         f"| Min Group Accuracy | {analysis.min_group_accuracy:.4f} "
         f"| >= 0.60 | {_metric_status(analysis.min_group_accuracy, 0.60)} |\n"
+        f"| Max Calibration Gap | {analysis.max_calibration_gap:.4f} "
+        f"| <= 0.10 | {_diff_status(analysis.max_calibration_gap, 0.10)} |\n"
         f"| Groups | {analysis.group_count} | - | - |\n"
         f"| Samples | {analysis.sample_count:,} | - | - |\n"
         f"| **Overall** | **{analysis.status}** | - | - |"
@@ -130,14 +132,15 @@ def _format_group_details(analysis: AttributeAnalysis) -> str:
     """Formate le tableau disaggrege par groupe (EU AI Act Art.13)."""
     lines = [
         "\n**Disaggregated Metrics by Group:**\n",
-        "| Group | N | Pos Rate | TPR | FPR | Precision | Accuracy |",
-        "|-------|---|----------|-----|-----|-----------|----------|",
+        "| Group | N | Pos Rate | TPR | FPR | Precision | Accuracy | Cal Gap |",
+        "|-------|---|----------|-----|-----|-----------|----------|---------|",
     ]
     for g in analysis.group_details:
         lines.append(
             f"| {g.group_name} | {g.sample_count} "
             f"| {g.positive_rate:.3f} | {g.tpr:.3f} "
-            f"| {g.fpr:.3f} | {g.precision:.3f} | {g.accuracy:.3f} |"
+            f"| {g.fpr:.3f} | {g.precision:.3f} | {g.accuracy:.3f} "
+            f"| {g.calibration_gap:.3f} |"
         )
     return "\n".join(lines)
 
