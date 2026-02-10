@@ -1,19 +1,19 @@
 # ISO Compliance TODOs - Plan de reprise
 
-> Session: 2026-01-17 (mise à jour)
-> Status: Pipeline ISO complet + P2 implémentés
+> Session: 2026-02-10 (mise a jour)
+> Status: Pipeline ISO complet + P2 100% (9/9)
 
 ## Scores actuels
 
 | Norme | Score | Status |
 |-------|-------|--------|
 | ISO 5055 (Code Quality) | 100% | ✅ Complete |
-| ISO 27001 (Security) | ~90% | 🔶 P2/P3 restants |
+| ISO 27001 (Security) | 100% | ✅ Complete (audit log) |
 | ISO 42001 (AI Management) | 100% | ✅ Complete |
 | ISO 5259 (Data Quality ML) | 100% | ✅ Complete |
-| ISO 23894 (AI Risk) | 100% | ✅ Complete |
+| ISO 23894 (AI Risk) | 100% | ✅ Complete + Rollback |
 | ISO 24029 (Robustness) | 100% | ✅ Complete + Enhanced |
-| ISO 24027 (Bias) | 100% | ✅ Complete + Enhanced |
+| ISO 24027 (Bias) | 100% | ✅ Complete + Protected + Fairness Report |
 | ISO 42005 (Impact) | 100% | ✅ Complete + Enhanced |
 | ISO 25059 (AI Quality) | 100% | ✅ Report Generated |
 
@@ -50,18 +50,21 @@
 
 ---
 
-## P2 - Importants (9 items) - 5/9 TERMINÉS ✅
+## P2 - Importants (9 items) - 9/9 TERMINES ✅
 
 ### ISO 27001 (Security)
 
-- [x] ~~Rotation des clés API~~ - YAGNI (non nécessaire)
+- [x] ~~Rotation des cles API~~ - YAGNI (non necessaire)
 
-- [x] **Chiffrement données au repos** - AES-256-GCM pour modèles ✅
+- [x] **Chiffrement donnees au repos** - AES-256-GCM pour modeles ✅
   - Fichier: `scripts/model_registry/security_encryption.py` (297 lignes)
-  - Session: DÉJÀ EXISTANT
+  - Session: DEJA EXISTANT
 
-- [ ] Audit log MongoDB - Logger les accès DB (read/write)
-  - Fichier: `app/services/mongodb.py`
+- [x] **Audit log MongoDB** - Logger les acces DB (read/write) ✅
+  - Fichiers: `services/audit/types.py`, `services/audit/logger.py`
+  - Integration: `services/data_loader.py`, `app/config.py`
+  - Tests: `tests/audit/test_types.py`, `tests/audit/test_logger.py` (22 tests)
+  - Session: 2026-02-10
 
 ### ISO 23894 (AI Risk)
 
@@ -69,8 +72,11 @@
   - Fichiers: `scripts/alerts/alert_types.py`, `scripts/alerts/drift_alerter.py`
   - Session: 2026-01-17
 
-- [ ] Model rollback - Mécanisme retour version N-1 si dégradation
-  - Fichier: `scripts/model_registry/versioning.py` (partiellement implémenté)
+- [x] **Model rollback** - Detection degradation + rollback automatique N-1 ✅
+  - Fichiers: `scripts/model_registry/rollback/types.py`, `detector.py`, `executor.py`
+  - Runner: `scripts/model_registry/check_rollback.py`
+  - Tests: `tests/model_registry_rollback/test_detector.py`, `test_executor.py` (23 tests)
+  - Session: 2026-02-10
 
 ### ISO 24029 (Robustness)
 
@@ -84,11 +90,18 @@
 
 ### ISO 24027 (Bias)
 
-- [ ] Protected attributes check - Validation absence features sensibles
-  - Fichier: `scripts/data/bias_validator.py`
+- [x] **Protected attributes check** - Validation absence features sensibles ✅
+  - Fichiers: `scripts/fairness/protected/types.py`, `config.py`, `validator.py`
+  - Integration: `scripts/autogluon/run_training.py`, `scripts/baseline/run_baselines.py`
+  - Tests: `tests/protected_attrs/test_validator.py` (17 tests)
+  - Session: 2026-02-10
 
-- [ ] Fairness report automatique - Génération rapport post-training
-  - Fichier: `scripts/model_registry/fairness_report.py`
+- [x] **Fairness report automatique** - Rapport multi-attributs post-training ✅
+  - Fichiers: `scripts/fairness/auto_report/types.py`, `generator.py`, `formatter.py`
+  - Runner: `scripts/fairness/auto_report/runner.py`
+  - Integration: `scripts/autogluon/run_training.py`, `scripts/baseline/run_baselines.py`
+  - Tests: `tests/fairness_auto_report/test_generator.py`, `test_formatter.py` (24 tests)
+  - Session: 2026-02-10
 
 ---
 
@@ -223,7 +236,52 @@ scripts/uncertainty/
 
 ---
 
-**Dernière mise à jour:** 2026-01-17
+---
+
+## Modules crees session 2026-02-10
+
+### Audit Log (ISO 27001:2022 A.8.15)
+```
+services/audit/
+├── __init__.py            # Re-exports
+├── types.py               # ~96 lignes - OperationType, AuditEntry, AuditConfig
+└── logger.py              # ~160 lignes - AuditLogger async, batch insert
+```
+
+### Model Rollback (ISO 23894)
+```
+scripts/model_registry/rollback/
+├── __init__.py            # Re-exports
+├── types.py               # ~91 lignes - DegradationThresholds, RollbackDecision/Result
+├── detector.py            # ~169 lignes - detect_degradation, compare metrics
+└── executor.py            # ~101 lignes - execute_rollback, log_rollback_event
+scripts/model_registry/
+└── check_rollback.py      # ~51 lignes - CLI runner
+```
+
+### Protected Attributes (ISO 24027)
+```
+scripts/fairness/protected/
+├── __init__.py            # Re-exports
+├── types.py               # ~107 lignes - ProtectionLevel, ProtectedAttribute, ValidationResult
+├── config.py              # ~45 lignes - FFE protected attrs config
+└── validator.py           # ~208 lignes - validate_features, proxy detection
+```
+
+### Comprehensive Fairness Report (ISO 24027 + NIST AI 100-1)
+```
+scripts/fairness/auto_report/
+├── __init__.py            # Re-exports
+├── types.py               # ~91 lignes - AttributeAnalysis, ComprehensiveFairnessReport
+├── generator.py           # ~213 lignes - generate_comprehensive_report
+├── formatter.py           # ~138 lignes - format_markdown_report
+└── runner.py              # ~49 lignes - Standalone runner
+```
+
+---
+
+**Derniere mise a jour:** 2026-02-10
 **Score global P1:** 100% ✅
-**Score global P2:** 56% (5/9) ✅
-**Pipeline ISO:** COMPLETE + P2 ENHANCED
+**Score global P2:** 100% (9/9) ✅
+**Pipeline ISO:** COMPLETE + ALL P2 IMPLEMENTED
+**Total new tests:** 86 (17+24+23+22)
