@@ -33,8 +33,6 @@ CATEGORICAL_FEATURES: list[str] = [
     "type_competition",
     "division",
     "ligue_code",
-    "blanc_titre",
-    "noir_titre",
     "jour_semaine",
 ]
 
