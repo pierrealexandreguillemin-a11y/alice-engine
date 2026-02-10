@@ -10,8 +10,7 @@ Fonctions:
 
 ISO Compliance:
 - ISO/IEC TR 24027:2021 - Bias in AI systems
-- EEOC 80% rule - Disparate impact
-- ISO/IEC 5055:2021 - Code Quality (<150 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -164,17 +163,19 @@ def _compute_correlation(
 ) -> tuple[float, str]:
     """Calcule la correlation entre une feature et un attribut protege.
 
-    Note: pour numeric-vs-categorical, utilise Pearson apres LabelEncoding.
-    Valide pour ordinal; pour nominal pur, Cramer's V serait preferable.
+    Pour numeric-vs-categorical (nominal): utilise Cramer's V apres
+    discretisation de la feature numerique. Pearson sur LabelEncoded
+    nominal est statistiquement invalide (ordre arbitraire des labels).
     """
     if is_categorical or df[feature].dtype == object:
         return _cramers_v(df[feature].values, df[protected].values), "cramers_v"
     if df[protected].dtype == object:
-        from sklearn.preprocessing import LabelEncoder  # noqa: PLC0415
+        # Nominal protected attr: discretiser la feature numerique
+        # et utiliser Cramer's V (pas Pearson sur LabelEncoded nominal)
+        import pandas as _pd  # noqa: PLC0415
 
-        encoded = LabelEncoder().fit_transform(df[protected].astype(str))
-        corr = np.corrcoef(df[feature].values.astype(float), encoded)[0, 1]
-        return (0.0 if np.isnan(corr) else float(corr)), "pearson"
+        binned = _pd.qcut(df[feature], q=10, duplicates="drop").astype(str).values
+        return _cramers_v(binned, df[protected].values), "cramers_v"
     corr = np.corrcoef(
         df[feature].values.astype(float),
         df[protected].values.astype(float),

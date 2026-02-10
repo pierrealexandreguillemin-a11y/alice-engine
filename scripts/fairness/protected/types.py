@@ -10,7 +10,7 @@ des attributs proteges:
 ISO Compliance:
 - ISO/IEC TR 24027:2021 - Bias in AI systems
 - ISO/IEC 27034 - Secure Coding (Pydantic validation)
-- ISO/IEC 5055:2021 - Code Quality (<120 lignes, SRP)
+- ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
 Last Updated: 2026-02-10
@@ -19,7 +19,7 @@ Last Updated: 2026-02-10
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -46,9 +46,9 @@ class ProtectedAttribute(BaseModel):
         proxy_for: Attribut sensible dont c'est un proxy (optionnel)
     """
 
-    name: str
+    name: str = Field(min_length=1)
     level: ProtectionLevel
-    reason: str
+    reason: str = Field(min_length=1)
     proxy_for: str | None = None
 
 
@@ -63,10 +63,10 @@ class ProxyCorrelation(BaseModel):
         method: Methode utilisee (pearson ou cramers_v)
     """
 
-    feature: str
-    protected_attr: str
+    feature: str = Field(min_length=1)
+    protected_attr: str = Field(min_length=1)
     correlation: float = Field(ge=0.0, le=1.0)
-    method: str
+    method: Literal["pearson", "cramers_v"]
 
 
 class ValidationResult(BaseModel):

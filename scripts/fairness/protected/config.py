@@ -6,7 +6,6 @@ Attributs proteges identifies dans le dataset FFE:
 
 ISO Compliance:
 - ISO/IEC TR 24027:2021 - Bias in AI systems
-- EEOC 80% rule - Disparate impact
 - GDPR Art.9 - Special categories of data
 
 Author: ALICE Engine Team
@@ -30,16 +29,19 @@ DEFAULT_PROTECTED_ATTRIBUTES: list[ProtectedAttribute] = [
         reason="discrimination geographique regionale",
         proxy_for="region",
     ),
+    # FORBIDDEN: titres feminins (WGM, WIM, WFM) = proxy direct du genre.
+    # Rationale ISO 24027 + GDPR Art.9: les titres feminins permettent
+    # de reconstruire le genre avec certitude. Usage = discrimination directe.
     ProtectedAttribute(
         name="blanc_titre",
-        level=ProtectionLevel.PROXY_CHECK,
-        reason="proxy genre via titres feminins (WGM, WIM, WFM)",
+        level=ProtectionLevel.FORBIDDEN,
+        reason="proxy direct genre via titres feminins (WGM, WIM, WFM)",
         proxy_for="gender",
     ),
     ProtectedAttribute(
         name="noir_titre",
-        level=ProtectionLevel.PROXY_CHECK,
-        reason="proxy genre via titres feminins (WGM, WIM, WFM)",
+        level=ProtectionLevel.FORBIDDEN,
+        reason="proxy direct genre via titres feminins (WGM, WIM, WFM)",
         proxy_for="gender",
     ),
 ]
