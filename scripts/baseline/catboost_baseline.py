@@ -22,6 +22,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import joblib
+import numpy as np
 
 from scripts.baseline.types import BaselineMetrics
 from scripts.training import (
@@ -102,6 +103,7 @@ def train_catboost_baseline(
     output_dir.mkdir(parents=True, exist_ok=True)
     result.model.save_model(str(output_dir / "catboost_baseline.cbm"))
     joblib.dump(encoders, output_dir / "catboost_encoders.pkl")
+    np.save(output_dir / "catboost_predictions.npy", y_pred)
     with open(output_dir / "catboost_metrics.json", "w") as f:
         json.dump(asdict(metrics), f, indent=2)
 

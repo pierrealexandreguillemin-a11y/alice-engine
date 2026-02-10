@@ -14,6 +14,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import joblib
+import numpy as np
 
 from scripts.baseline.types import BaselineMetrics
 from scripts.training import (
@@ -76,6 +77,7 @@ def train_lightgbm_baseline(
     output_dir.mkdir(parents=True, exist_ok=True)
     result.model.booster_.save_model(str(output_dir / "lightgbm_baseline.txt"))
     joblib.dump(encoders, output_dir / "lightgbm_encoders.pkl")
+    np.save(output_dir / "lightgbm_predictions.npy", y_pred)
     with open(output_dir / "lightgbm_metrics.json", "w") as f:
         json.dump(asdict(metrics), f, indent=2)
 

@@ -14,6 +14,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import joblib
+import numpy as np
 
 from scripts.baseline.types import BaselineMetrics
 from scripts.training import (
@@ -74,6 +75,7 @@ def train_xgboost_baseline(
     output_dir.mkdir(parents=True, exist_ok=True)
     result.model.save_model(str(output_dir / "xgboost_baseline.json"))
     joblib.dump(encoders, output_dir / "xgboost_encoders.pkl")
+    np.save(output_dir / "xgboost_predictions.npy", y_pred)
     with open(output_dir / "xgboost_metrics.json", "w") as f:
         json.dump(asdict(metrics), f, indent=2)
 

@@ -41,7 +41,7 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application lifecycle.
 
-    Startup: Chargement des modeles ML
+    Startup: Chargement des modeles ML + audit logger
     Shutdown: Nettoyage des ressources
     """
     # Startup
@@ -51,11 +51,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         debug=settings.debug,
         log_level=settings.log_level,
     )
+
+    # Audit logger (ISO 27001:2022 A.8.15)
+    audit_logger = None
+    if settings.audit_enabled and settings.mongodb_uri:
+        from motor.motor_asyncio import AsyncIOMotorClient  # noqa: PLC0415
+
+        from services.audit import AuditConfig, AuditLogger  # noqa: PLC0415
+
+        audit_client = AsyncIOMotorClient(settings.mongodb_uri)
+        audit_db = audit_client[settings.mongodb_database]
+        audit_config = AuditConfig(
+            enabled=settings.audit_enabled,
+            collection_name=settings.audit_collection,
+        )
+        audit_logger = AuditLogger(db=audit_db, config=audit_config)
+        await audit_logger.start()
+        app.state.audit_logger = audit_logger
+
     # TODO: Charger le modele XGBoost/CatBoost ici
 
     yield
 
     # Shutdown
+    if audit_logger is not None:
+        await audit_logger.stop()
     logger.info("service_stopped", version=settings.app_version)
 
 

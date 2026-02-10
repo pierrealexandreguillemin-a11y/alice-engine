@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     api_key: str = ""  # Pour endpoint /train
     cors_origins: list[str] = []  # ISO 27001: Whitelist origins (vide = restrictif)
 
+    # Audit (ISO 27001:2022 A.8.15)
+    audit_enabled: bool = True
+    audit_collection: str = "audit_logs"
+
     # Modeles ML
     model_path: str = "./models"
     default_scenario_count: int = 20
