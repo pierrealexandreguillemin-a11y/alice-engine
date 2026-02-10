@@ -44,7 +44,7 @@ def sample_dataframe() -> pd.DataFrame:
 
 @pytest.fixture
 def ffe_protected_attributes() -> list[ProtectedAttribute]:
-    """Configuration des attributs proteges FFE."""
+    """Configuration des attributs proteges FFE (matches production config)."""
     return [
         ProtectedAttribute(
             name="ligue_code",
@@ -53,7 +53,8 @@ def ffe_protected_attributes() -> list[ProtectedAttribute]:
         ),
         ProtectedAttribute(
             name="blanc_titre",
-            level=ProtectionLevel.PROXY_CHECK,
-            reason="proxy genre via titres feminins (WGM, WIM, WFM)",
+            level=ProtectionLevel.FORBIDDEN,
+            reason="proxy direct genre via titres feminins (WGM, WIM, WFM)",
+            proxy_for="gender",
         ),
     ]

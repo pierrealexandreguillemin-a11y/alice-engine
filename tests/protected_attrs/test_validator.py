@@ -93,7 +93,7 @@ class TestValidateFeaturesProxyCheck:
         ffe_protected_attributes: list[ProtectedAttribute],
     ) -> None:
         """Avec seulement des PROXY_CHECK, is_valid=True."""
-        features = ["blanc_elo", "ligue_code", "blanc_titre"]
+        features = ["blanc_elo", "ligue_code"]
         result = validate_features(features, ffe_protected_attributes)
         assert result.is_valid is True
 
@@ -291,16 +291,31 @@ class TestIntegration:
         sample_dataframe: pd.DataFrame,
         ffe_protected_attributes: list[ProtectedAttribute],
     ) -> None:
-        """Validation complete avec les features FFE."""
-        features = ["blanc_elo", "noir_elo", "diff_elo", "ligue_code", "blanc_titre"]
+        """Validation complete avec les features FFE (sans FORBIDDEN attrs)."""
+        features = ["blanc_elo", "noir_elo", "diff_elo", "ligue_code"]
         result = validate_features(
             features,
             ffe_protected_attributes,
             df=sample_dataframe,
         )
         assert result.is_valid is True
-        assert len(result.warnings) >= 2
+        assert len(result.warnings) >= 1
         assert result.timestamp != ""
+
+    def test_forbidden_attr_in_ffe_features_fails(
+        self,
+        sample_dataframe: pd.DataFrame,
+        ffe_protected_attributes: list[ProtectedAttribute],
+    ) -> None:
+        """FORBIDDEN blanc_titre in features triggers violation."""
+        features = ["blanc_elo", "noir_elo", "blanc_titre"]
+        result = validate_features(
+            features,
+            ffe_protected_attributes,
+            df=sample_dataframe,
+        )
+        assert result.is_valid is False
+        assert any("blanc_titre" in v for v in result.violations)
 
     def test_no_protected_in_features_all_clean(
         self,
