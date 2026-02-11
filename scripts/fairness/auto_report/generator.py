@@ -49,8 +49,12 @@ _FPR_DIFF_CRITICAL = 0.20
 _FPR_DIFF_CAUTION = 0.10
 _PP_DIFF_CRITICAL = 0.20
 _PP_DIFF_CAUTION = 0.10
+_TPR_DIFF_CRITICAL = 0.20
+_TPR_DIFF_CAUTION = 0.10
 _MIN_ACC_CRITICAL = 0.50
 _MIN_ACC_CAUTION = 0.60
+_CAL_GAP_CRITICAL = 0.20
+_CAL_GAP_CAUTION = 0.10
 
 
 def generate_comprehensive_report(
@@ -155,7 +159,7 @@ def _analyze_attribute(
     min_acc = min(accuracies) if accuracies else 0.0
     max_cal = max(cal_gaps) if cal_gaps else 0.0
 
-    status = _status_from_metrics(dp_ratio, tpr_diff, fpr_diff, pp_diff, min_acc)
+    status = _status_from_metrics(dp_ratio, tpr_diff, fpr_diff, pp_diff, min_acc, max_cal)
     ci = _bootstrap_dp_ci(y_pred, groups, unique_groups)
 
     return AttributeAnalysis(
@@ -248,24 +252,27 @@ def _status_from_metrics(
     fpr_diff: float,
     pp_diff: float,
     min_acc: float,
+    cal_gap: float = 0.0,
 ) -> str:
     """Determine le status a partir de TOUTES les metriques (NIST AI 100-1)."""
     # Critical: any metric exceeds critical threshold
     if (
         dp_ratio < _EEOC_THRESHOLD
-        or tpr_diff > 0.2
+        or tpr_diff > _TPR_DIFF_CRITICAL
         or fpr_diff > _FPR_DIFF_CRITICAL
         or pp_diff > _PP_DIFF_CRITICAL
         or min_acc < _MIN_ACC_CRITICAL
+        or cal_gap > _CAL_GAP_CRITICAL
     ):
         return "critical"
     # Caution: any metric in caution zone
     if (
         dp_ratio < _CAUTION_THRESHOLD
-        or tpr_diff > 0.1
+        or tpr_diff > _TPR_DIFF_CAUTION
         or fpr_diff > _FPR_DIFF_CAUTION
         or pp_diff > _PP_DIFF_CAUTION
         or min_acc < _MIN_ACC_CAUTION
+        or cal_gap > _CAL_GAP_CAUTION
     ):
         return "caution"
     return "fair"

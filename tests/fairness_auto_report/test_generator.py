@@ -2,7 +2,7 @@
 
 Document ID: ALICE-TEST-FAIRNESS-AUTO-GENERATOR
 Version: 1.1.0
-Tests count: 18
+Tests count: 19
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
@@ -90,6 +90,35 @@ class TestAnalyzeAttribute:
             assert g.sample_count > 0
             assert 0.0 <= g.tpr <= 1.0
             assert 0.0 <= g.fpr <= 1.0
+
+    def test_metrics_match_manual_calculation(self) -> None:
+        """Metriques correspondent au calcul manuel (M27)."""
+        # Groupe A: y_true=[1,1,0,0], y_pred=[1,0,1,0]
+        #   positive_rate = 2/4 = 0.5, TPR = 1/2 = 0.5, FPR = 1/2 = 0.5
+        #   precision = 1/2 = 0.5, accuracy = 2/4 = 0.5
+        # Groupe B: y_true=[1,1,1,0,0,0], y_pred=[1,1,1,0,0,0]
+        #   positive_rate = 3/6 = 0.5, TPR = 3/3 = 1.0, FPR = 0/3 = 0.0
+        #   precision = 3/3 = 1.0, accuracy = 6/6 = 1.0
+        # DP ratio = min(0.5,0.5) / max(0.5,0.5) = 1.0
+        # TPR diff = |1.0 - 0.5| = 0.5
+        # FPR diff = |0.5 - 0.0| = 0.5
+        y_true = np.array([1, 1, 0, 0, 1, 1, 1, 0, 0, 0])
+        y_pred = np.array([1, 0, 1, 0, 1, 1, 1, 0, 0, 0])
+        groups = np.array(["A", "A", "A", "A", "B", "B", "B", "B", "B", "B"])
+
+        import pytest
+
+        analysis = _analyze_attribute(y_true, y_pred, groups, "manual")
+        assert analysis.demographic_parity_ratio == pytest.approx(1.0, abs=0.01)
+        assert analysis.equalized_odds_tpr_diff == pytest.approx(0.5, abs=0.01)
+        assert analysis.equalized_odds_fpr_diff == pytest.approx(0.5, abs=0.01)
+        # Verify group details
+        grp_a = next(g for g in analysis.group_details if g.group_name == "A")
+        grp_b = next(g for g in analysis.group_details if g.group_name == "B")
+        assert grp_a.tpr == pytest.approx(0.5, abs=0.01)
+        assert grp_b.tpr == pytest.approx(1.0, abs=0.01)
+        assert grp_a.accuracy == pytest.approx(0.5, abs=0.01)
+        assert grp_b.accuracy == pytest.approx(1.0, abs=0.01)
 
     def test_reuses_existing_bias_metrics(
         self,
