@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import platform
+import shutil
 import subprocess  # nosec B404 - subprocess for internal dev tools only
 from datetime import datetime
 from pathlib import Path
@@ -271,10 +271,7 @@ def _remove_existing_link(current_link: Path) -> None:
     if current_link.is_symlink():
         current_link.unlink()
     elif current_link.is_dir():
-        try:
-            os.rmdir(current_link)
-        except OSError:
-            pass
+        shutil.rmtree(current_link, ignore_errors=True)
 
 
 def _create_symlink(link_path: Path, target_path: Path) -> None:
