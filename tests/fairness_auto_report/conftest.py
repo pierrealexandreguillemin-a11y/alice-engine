@@ -42,7 +42,9 @@ def sample_test_data() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "ligue_code": rng.choice(["IDF", "ARA", "OCC", "BRE"], n),
+            "ligue": rng.choice(["Ile-de-France", "Auvergne", "Occitanie", "Bretagne"], n),
             "blanc_titre": rng.choice(["GM", "IM", "FM", "WGM", "WIM", ""], n),
+            "noir_titre": rng.choice(["GM", "IM", "FM", "WGM", "WIM", ""], n),
         }
     )
 

@@ -2,7 +2,7 @@
 
 Document ID: ALICE-TEST-PROTECTED-ATTRS-VALIDATOR
 Version: 1.0.0
-Tests count: 16
+Tests count: 19
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
@@ -216,6 +216,38 @@ class TestDetectProxyCorrelations:
         )
         assert len(correlations) >= 1
         assert correlations[0].method == "pearson"
+
+    def test_realistic_correlation_detected(self) -> None:
+        """Correlation realiste (~0.8) est detectee (pas juste 1.0)."""
+        rng = np.random.default_rng(42)
+        n = 500
+        # Protected: 2 groups
+        protected_vals = rng.choice(["A", "B"], n)
+        # Feature correlated but not identical: group mean differs + noise
+        feature_vals = np.where(protected_vals == "A", 5.0, 0.0)
+        feature_vals = feature_vals + rng.normal(0, 1.0, n)
+        df = pd.DataFrame(
+            {
+                "feature_a": feature_vals,
+                "protected": protected_vals,
+            }
+        )
+        protected = [
+            ProtectedAttribute(
+                name="protected",
+                level=ProtectionLevel.PROXY_CHECK,
+                reason="test",
+            ),
+        ]
+        correlations = detect_proxy_correlations(
+            df,
+            ["feature_a"],
+            protected,
+            threshold=0.7,
+        )
+        assert len(correlations) >= 1
+        # Correlation should be high but NOT 1.0
+        assert 0.7 < correlations[0].correlation < 1.0
 
     def test_threshold_configurable(self) -> None:
         """Le seuil de correlation est configurable."""

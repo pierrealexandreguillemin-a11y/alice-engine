@@ -2,7 +2,7 @@
 
 Document ID: ALICE-TEST-ROLLBACK-ERROR-PATHS
 Version: 1.0.0
-Tests count: 10
+Tests count: 9
 
 Covers:
 - Corrupted metadata.json

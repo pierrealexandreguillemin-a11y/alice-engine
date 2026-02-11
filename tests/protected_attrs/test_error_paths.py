@@ -2,7 +2,7 @@
 
 Document ID: ALICE-TEST-PROTECTED-ERROR-PATHS
 Version: 1.0.0
-Tests count: 10
+Tests count: 11
 
 Covers:
 - Empty features list
