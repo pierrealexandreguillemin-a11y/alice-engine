@@ -18,13 +18,13 @@ Last Updated: 2026-02-10
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
-class ProtectionLevel(str, Enum):
+class ProtectionLevel(StrEnum):
     """Niveau de protection d'un attribut (ISO 24027).
 
     FORBIDDEN: bloque le training (violation directe).

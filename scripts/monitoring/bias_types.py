@@ -13,7 +13,7 @@ Last Updated: 2026-01-14
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # Constants (EEOC 80% rule)
@@ -23,7 +23,7 @@ EQUALIZED_ODDS_THRESHOLD = 0.1
 CALIBRATION_THRESHOLD = 0.1
 
 
-class FairnessStatus(str, Enum):
+class FairnessStatus(StrEnum):
     """Statut de fairness selon ISO 24027."""
 
     FAIR = "fair"
@@ -32,7 +32,7 @@ class FairnessStatus(str, Enum):
     CRITICAL = "critical"
 
 
-class BiasAlertLevel(str, Enum):
+class BiasAlertLevel(StrEnum):
     """Niveaux d'alerte pour le biais."""
 
     NONE = "none"

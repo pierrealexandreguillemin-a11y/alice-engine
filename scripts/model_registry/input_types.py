@@ -13,7 +13,7 @@ Last Updated: 2026-01-14
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -22,7 +22,7 @@ DEFAULT_STD_TOLERANCE = 4.0
 OOD_REJECTION_THRESHOLD = 0.3
 
 
-class OODSeverity(str, Enum):
+class OODSeverity(StrEnum):
     """Niveaux de sévérité pour les inputs OOD."""
 
     VALID = "valid"
@@ -31,7 +31,7 @@ class OODSeverity(str, Enum):
     EXTREME = "extreme"
 
 
-class OODAction(str, Enum):
+class OODAction(StrEnum):
     """Actions possibles pour les inputs OOD."""
 
     ACCEPT = "accept"

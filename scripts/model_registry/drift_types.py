@@ -13,7 +13,7 @@ Last Updated: 2026-01-14
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # Constants
@@ -26,7 +26,7 @@ KS_PVALUE_WARNING = 0.01
 KS_PVALUE_CRITICAL = 0.001
 
 
-class DriftSeverity(str, Enum):
+class DriftSeverity(StrEnum):
     """Niveaux de sévérité du drift."""
 
     NONE = "none"
@@ -36,7 +36,7 @@ class DriftSeverity(str, Enum):
     CRITICAL = "critical"
 
 
-class DriftType(str, Enum):
+class DriftType(StrEnum):
     """Types de drift détectables."""
 
     COVARIATE = "covariate"

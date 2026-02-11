@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -32,7 +32,7 @@ _ISO_8601_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 # Also validate with datetime.fromisoformat for semantic correctness
 
 
-class OperationType(str, Enum):
+class OperationType(StrEnum):
     """Types d'operations MongoDB (CRUD)."""
 
     READ = "read"
