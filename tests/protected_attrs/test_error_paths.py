@@ -1,8 +1,8 @@
 """Tests Error Paths - Protected Attributes - ISO 29119.
 
 Document ID: ALICE-TEST-PROTECTED-ERROR-PATHS
-Version: 1.0.0
-Tests count: 11
+Version: 1.1.0
+Tests count: 17
 
 Covers:
 - Empty features list
@@ -202,3 +202,70 @@ class TestTypesValidation:
                 level=ProtectionLevel.FORBIDDEN,
                 reason="test",
             )
+
+    def test_protected_attribute_empty_reason_rejected(self) -> None:
+        """ProtectedAttribute avec reason vide est rejete."""
+        with pytest.raises(ValidationError):
+            ProtectedAttribute(
+                name="gender",
+                level=ProtectionLevel.FORBIDDEN,
+                reason="",
+            )
+
+    def test_proxy_correlation_above_1_rejected(self) -> None:
+        """ProxyCorrelation avec correlation > 1.0 est rejetee."""
+        with pytest.raises(ValidationError):
+            ProxyCorrelation(
+                feature="test",
+                protected_attr="gender",
+                correlation=1.5,
+                method="pearson",
+            )
+
+    def test_proxy_correlation_negative_rejected(self) -> None:
+        """ProxyCorrelation avec correlation negative est rejetee."""
+        with pytest.raises(ValidationError):
+            ProxyCorrelation(
+                feature="test",
+                protected_attr="gender",
+                correlation=-0.1,
+                method="pearson",
+            )
+
+    def test_invalid_protection_level_rejected(self) -> None:
+        """ProtectedAttribute avec level invalide est rejete."""
+        with pytest.raises(ValidationError):
+            ProtectedAttribute(
+                name="test",
+                level="invalid_level",
+                reason="test",
+            )
+
+    def test_uses_default_protected_attrs_when_none(self) -> None:
+        """validate_features avec protected_attributes=None utilise les defauts."""
+        from scripts.fairness.protected.config import DEFAULT_PROTECTED_ATTRIBUTES
+
+        # blanc_titre is FORBIDDEN in default config
+        features_with_forbidden = [
+            a.name for a in DEFAULT_PROTECTED_ATTRIBUTES if a.level == ProtectionLevel.FORBIDDEN
+        ]
+        if features_with_forbidden:
+            result = validate_features(features_with_forbidden, protected_attributes=None)
+            assert result.is_valid is False
+
+    def test_negative_correlation_detected_as_positive(self) -> None:
+        """Correlation negative (-0.8) est detectee comme 0.8."""
+        rng = np.random.default_rng(42)
+        n = 500
+        base = rng.standard_normal(n)
+        df = pd.DataFrame({"feature_a": base, "protected": -base})
+        protected = [
+            ProtectedAttribute(
+                name="protected",
+                level=ProtectionLevel.PROXY_CHECK,
+                reason="test",
+            ),
+        ]
+        correlations = detect_proxy_correlations(df, ["feature_a"], protected, threshold=0.7)
+        assert len(correlations) >= 1
+        assert correlations[0].correlation > 0.7
