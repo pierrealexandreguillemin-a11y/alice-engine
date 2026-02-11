@@ -71,33 +71,49 @@ def validate_features(
 
     _check_direct_usage(features, protected_attributes, violations, warnings)
 
-    proxy_correlations: list[ProxyCorrelation] = []
-    if df is not None:
-        proxy_correlations = detect_proxy_correlations(
-            df,
-            features,
-            protected_attributes,
-            threshold,
-            categorical_features,
-        )
-        for proxy in proxy_correlations:
-            warnings.append(
-                f"Proxy detected: '{proxy.feature}' correlates with "
-                f"'{proxy.protected_attr}' ({proxy.method}={proxy.correlation:.3f})"
-            )
-
-    is_valid = len(violations) == 0
-    timestamp = datetime.now(tz=UTC).isoformat()
+    proxy_correlations, proxy_warnings = _detect_and_warn_proxies(
+        df,
+        features,
+        protected_attributes,
+        threshold,
+        categorical_features,
+    )
+    warnings.extend(proxy_warnings)
 
     result = ValidationResult(
-        is_valid=is_valid,
+        is_valid=len(violations) == 0,
         violations=violations,
         warnings=warnings,
         proxy_correlations=proxy_correlations,
-        timestamp=timestamp,
+        timestamp=datetime.now(tz=UTC).isoformat(),
     )
     _log_result(result)
     return result
+
+
+def _detect_and_warn_proxies(
+    df: pd.DataFrame | None,
+    features: list[str],
+    protected_attributes: list[ProtectedAttribute],
+    threshold: float,
+    categorical_features: list[str] | None,
+) -> tuple[list[ProxyCorrelation], list[str]]:
+    """Detecte les proxies et genere les warnings associes."""
+    if df is None:
+        return [], []
+    correlations = detect_proxy_correlations(
+        df,
+        features,
+        protected_attributes,
+        threshold,
+        categorical_features,
+    )
+    proxy_warnings = [
+        f"Proxy detected: '{p.feature}' correlates with "
+        f"'{p.protected_attr}' ({p.method}={p.correlation:.3f})"
+        for p in correlations
+    ]
+    return correlations, proxy_warnings
 
 
 def _check_direct_usage(
