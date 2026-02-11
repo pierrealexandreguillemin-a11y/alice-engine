@@ -47,7 +47,7 @@ class GroupMetrics(BaseModel):
     fpr: float = Field(ge=0.0, le=1.0)
     precision: float = Field(ge=0.0, le=1.0)
     accuracy: float = Field(ge=0.0, le=1.0)
-    calibration_gap: float = Field(default=0.0, ge=0.0)
+    calibration_gap: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class AttributeAnalysis(BaseModel):
@@ -77,7 +77,7 @@ class AttributeAnalysis(BaseModel):
     equalized_odds_fpr_diff: float = Field(ge=0.0, le=1.0)
     predictive_parity_diff: float = Field(ge=0.0, le=1.0)
     min_group_accuracy: float = Field(ge=0.0, le=1.0)
-    max_calibration_gap: float = Field(default=0.0, ge=0.0)
+    max_calibration_gap: float = Field(default=0.0, ge=0.0, le=1.0)
     status: _FairnessStatus = "fair"
     group_details: list[GroupMetrics] = Field(default_factory=list)
     confidence_intervals: dict[str, list[float]] = Field(default_factory=dict)
