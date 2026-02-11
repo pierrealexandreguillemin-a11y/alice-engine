@@ -20,9 +20,9 @@ import json
 import numpy as np
 import pandas as pd
 
+from scripts.fairness.auto_report.computations import bootstrap_dp_ci
 from scripts.fairness.auto_report.generator import (
     _analyze_attribute,
-    _bootstrap_dp_ci,
     _determine_overall_status,
     _generate_recommendations,
     generate_comprehensive_report,
@@ -142,7 +142,7 @@ class TestBootstrapCI:
     ) -> None:
         """Retourne CI pour demographic_parity_ratio."""
         groups = np.array(["A", "B"] * 250)
-        ci = _bootstrap_dp_ci(sample_y_pred, groups, np.array(["A", "B"]))
+        ci = bootstrap_dp_ci(sample_y_pred, groups, np.array(["A", "B"]))
         assert "demographic_parity_ratio" in ci
         lo, hi = ci["demographic_parity_ratio"]
         assert lo <= hi

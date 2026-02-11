@@ -21,6 +21,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from scripts.fairness.auto_report.thresholds import (
+    CAL_GAP_CAUTION,
+    CAL_GAP_CRITICAL,
+    CAUTION_DP_THRESHOLD,
+    EEOC_THRESHOLD,
+    FPR_DIFF_CAUTION,
+    FPR_DIFF_CRITICAL,
+    MIN_ACC_CAUTION,
+    MIN_ACC_CRITICAL,
+    PP_DIFF_CAUTION,
+    PP_DIFF_CRITICAL,
+    TPR_DIFF_CAUTION,
+    TPR_DIFF_CRITICAL,
+)
+
 if TYPE_CHECKING:
     from scripts.fairness.auto_report.types import (
         AttributeAnalysis,
@@ -102,17 +117,23 @@ def _format_attribute_table(analysis: AttributeAnalysis) -> str:
         f"\n| Metric | Value | Threshold | Status |\n"
         f"|--------|-------|-----------|--------|\n"
         f"| Demographic Parity Ratio | {analysis.demographic_parity_ratio:.4f} "
-        f"| >= 0.80 (critical) / 0.85 (caution) | {_metric_status(analysis.demographic_parity_ratio, 0.80)} |\n"
+        f"| >= {EEOC_THRESHOLD} (critical) / {CAUTION_DP_THRESHOLD} (caution) "
+        f"| {_metric_status(analysis.demographic_parity_ratio, EEOC_THRESHOLD)} |\n"
         f"| Equalized Odds TPR Diff | {analysis.equalized_odds_tpr_diff:.4f} "
-        f"| <= 0.20 (critical) / 0.10 (caution) | {_diff_status(analysis.equalized_odds_tpr_diff, 0.20)} |\n"
+        f"| <= {TPR_DIFF_CRITICAL} (critical) / {TPR_DIFF_CAUTION} (caution) "
+        f"| {_diff_status(analysis.equalized_odds_tpr_diff, TPR_DIFF_CRITICAL)} |\n"
         f"| Equalized Odds FPR Diff | {analysis.equalized_odds_fpr_diff:.4f} "
-        f"| <= 0.20 (critical) / 0.10 (caution) | {_diff_status(analysis.equalized_odds_fpr_diff, 0.20)} |\n"
+        f"| <= {FPR_DIFF_CRITICAL} (critical) / {FPR_DIFF_CAUTION} (caution) "
+        f"| {_diff_status(analysis.equalized_odds_fpr_diff, FPR_DIFF_CRITICAL)} |\n"
         f"| Predictive Parity Diff | {analysis.predictive_parity_diff:.4f} "
-        f"| <= 0.20 (critical) / 0.10 (caution) | {_diff_status(analysis.predictive_parity_diff, 0.20)} |\n"
+        f"| <= {PP_DIFF_CRITICAL} (critical) / {PP_DIFF_CAUTION} (caution) "
+        f"| {_diff_status(analysis.predictive_parity_diff, PP_DIFF_CRITICAL)} |\n"
         f"| Min Group Accuracy | {analysis.min_group_accuracy:.4f} "
-        f"| >= 0.50 (critical) / 0.60 (caution) | {_metric_status(analysis.min_group_accuracy, 0.50)} |\n"
+        f"| >= {MIN_ACC_CRITICAL} (critical) / {MIN_ACC_CAUTION} (caution) "
+        f"| {_metric_status(analysis.min_group_accuracy, MIN_ACC_CRITICAL)} |\n"
         f"| Max Calibration Gap | {analysis.max_calibration_gap:.4f} "
-        f"| <= 0.20 (critical) / 0.10 (caution) | {_diff_status(analysis.max_calibration_gap, 0.20)} |\n"
+        f"| <= {CAL_GAP_CRITICAL} (critical) / {CAL_GAP_CAUTION} (caution) "
+        f"| {_diff_status(analysis.max_calibration_gap, CAL_GAP_CRITICAL)} |\n"
         f"| Groups | {analysis.group_count} | - | - |\n"
         f"| Samples | {analysis.sample_count:,} | - | - |\n"
         f"| **Overall** | **{analysis.status}** | - | - |"
