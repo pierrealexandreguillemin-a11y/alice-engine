@@ -71,8 +71,8 @@ class TestExecuteRollback:
         decision = RollbackDecision(
             should_rollback=True,
             reason="test failure",
-            current_version="v_nonexistent",
-            target_version="v_also_nonexistent",
+            current_version="v20260101_120000",
+            target_version="v20251201_120000",
         )
         result = execute_rollback(tmp_path, decision)
         assert result.success is False

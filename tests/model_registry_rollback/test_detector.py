@@ -1,8 +1,8 @@
 """Tests Rollback Detector - ISO 29119.
 
 Document ID: ALICE-TEST-ROLLBACK-DETECTOR
-Version: 1.0.0
-Tests count: 15
+Version: 1.1.0
+Tests count: 20
 
 ISO Compliance:
 - ISO/IEC 29119:2022 - Software Testing
@@ -112,6 +112,54 @@ class TestCompareMetrics:
         degraded, _ = _compare_metrics(current, previous, thresholds)
         assert degraded is False
 
+    def test_both_metrics_degraded_simultaneously(self) -> None:
+        """AUC et accuracy degradees en meme temps reportent les deux."""
+        current = {"auc": 0.80, "accuracy": 0.73}
+        previous = {"auc": 0.85, "accuracy": 0.80}
+        thresholds = DegradationThresholds(auc_drop_pct=2.0, accuracy_drop_pct=3.0)
+        degraded, reason = _compare_metrics(current, previous, thresholds)
+        assert degraded is True
+        assert "AUC" in reason
+        assert "Accuracy" in reason
+
+    def test_previous_zero_auc_no_crash(self) -> None:
+        """Previous AUC = 0 ne cause pas de division par zero."""
+        current = {"auc": 0.85, "accuracy": 0.80}
+        previous = {"auc": 0.0, "accuracy": 0.80}
+        thresholds = DegradationThresholds()
+        degraded, _ = _compare_metrics(current, previous, thresholds)
+        assert degraded is False
+
+    def test_missing_metric_keys_use_zero_default(self) -> None:
+        """Cles metriques manquantes utilisent 0 par defaut (accuracy 0.8->0 = 100% drop)."""
+        current = {"auc": 0.85}  # Missing accuracy -> defaults to 0
+        previous = {"accuracy": 0.80}  # Missing auc -> prev_auc=0, skips check
+        thresholds = DegradationThresholds()
+        degraded, reason = _compare_metrics(current, previous, thresholds)
+        assert degraded is True
+        assert "Accuracy" in reason
+
+    def test_drift_object_without_severity_attribute(self, models_dir: Path) -> None:
+        """Drift object sans overall_severity ne crash pas."""
+
+        class FakeDrift:
+            pass
+
+        decision = detect_degradation(
+            models_dir,
+            "v20260115_120000",
+            drift_result=FakeDrift(),
+        )
+        # Should fall through to metric comparison (not crash on drift check)
+        assert isinstance(decision.should_rollback, bool)
+
+    def test_drift_none_does_not_trigger_rollback(self, tmp_path: Path) -> None:
+        """drift_result=None ne declenche pas de rollback via drift."""
+        _create_version(tmp_path, "v20260101_120000", 0.85, 0.80)
+        _create_version(tmp_path, "v20260115_120000", 0.85, 0.80)
+        decision = detect_degradation(tmp_path, "v20260115_120000", drift_result=None)
+        assert decision.should_rollback is False
+
 
 class TestDetectDegradation:
     """Tests d'integration pour la detection de degradation."""
@@ -144,7 +192,7 @@ class TestDetectDegradation:
             drift_result=drift_critical,
         )
         assert decision.should_rollback is True
-        assert "drift" in decision.reason.lower() or "AUC" in decision.reason
+        assert "drift" in decision.reason.lower()
 
     def test_custom_thresholds_respected(self, models_dir: Path) -> None:
         """Seuils custom sont respectes."""

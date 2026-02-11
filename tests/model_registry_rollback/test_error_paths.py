@@ -1,8 +1,8 @@
 """Tests Error Paths - Rollback - ISO 29119.
 
 Document ID: ALICE-TEST-ROLLBACK-ERROR-PATHS
-Version: 1.0.0
-Tests count: 9
+Version: 1.1.0
+Tests count: 17
 
 Covers:
 - Corrupted metadata.json
@@ -99,8 +99,8 @@ class TestExecuteRollbackErrors:
         decision = RollbackDecision(
             should_rollback=True,
             reason="test",
-            current_version="v2",
-            target_version="v_nonexistent",
+            current_version="v20260101_120000",
+            target_version="v20251201_120000",
         )
         result = execute_rollback(tmp_path, decision, dry_run=True)
         assert result.success is False
@@ -138,3 +138,53 @@ class TestThresholdsValidation:
         """Seuil AUC negatif est rejete."""
         with pytest.raises(ValidationError):
             DegradationThresholds(auc_drop_pct=-1.0)
+
+    def test_rejects_auc_threshold_above_100(self) -> None:
+        """Seuil AUC > 100% est rejete."""
+        with pytest.raises(ValidationError):
+            DegradationThresholds(auc_drop_pct=100.1)
+
+    def test_accepts_auc_threshold_exactly_100(self) -> None:
+        """Seuil AUC = 100% est accepte (boundary)."""
+        t = DegradationThresholds(auc_drop_pct=100.0)
+        assert t.auc_drop_pct == 100.0
+
+    def test_rejects_negative_accuracy_threshold(self) -> None:
+        """Seuil accuracy negatif est rejete."""
+        with pytest.raises(ValidationError):
+            DegradationThresholds(accuracy_drop_pct=-1.0)
+
+    def test_rejects_accuracy_threshold_above_100(self) -> None:
+        """Seuil accuracy > 100% est rejete."""
+        with pytest.raises(ValidationError):
+            DegradationThresholds(accuracy_drop_pct=100.1)
+
+
+class TestVersionFormatValidation:
+    """Tests pour la validation du format de version (ISO 27034)."""
+
+    def test_rejects_path_traversal_in_version(self, tmp_path: Path) -> None:
+        """Version avec path traversal est rejetee."""
+        with pytest.raises(ValueError, match="Invalid version format"):
+            detect_degradation(tmp_path, "../../etc/passwd")
+
+    def test_rejects_absolute_path_in_version(self, tmp_path: Path) -> None:
+        """Version avec chemin absolu est rejetee."""
+        with pytest.raises(ValueError, match="Invalid version format"):
+            detect_degradation(tmp_path, "/etc/passwd")
+
+    def test_rejects_invalid_format(self, tmp_path: Path) -> None:
+        """Version au format invalide est rejetee."""
+        with pytest.raises(ValueError, match="Invalid version format"):
+            detect_degradation(tmp_path, "v_nonexistent")
+
+    def test_rejects_invalid_target_in_executor(self, tmp_path: Path) -> None:
+        """Target version invalide dans executor est rejetee."""
+        decision = RollbackDecision(
+            should_rollback=True,
+            reason="test",
+            current_version="v20260101_120000",
+            target_version="../../etc/passwd",
+        )
+        with pytest.raises(ValueError, match="Invalid target version"):
+            execute_rollback(tmp_path, decision)
