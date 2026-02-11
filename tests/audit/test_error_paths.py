@@ -1,8 +1,8 @@
 """Tests Error Paths - Audit Logger - ISO 29119.
 
 Document ID: ALICE-TEST-AUDIT-ERROR-PATHS
-Version: 1.0.0
-Tests count: 12
+Version: 1.1.0
+Tests count: 20
 
 Covers:
 - Invalid timestamp format rejected
@@ -84,6 +84,33 @@ class TestAuditEntryValidation:
         with pytest.raises(ValidationError):
             entry.collection = "other"  # type: ignore[misc]
 
+    def test_collection_max_length_256_accepted(self) -> None:
+        """Collection de 256 caracteres est acceptee (boundary)."""
+        entry = AuditEntry(
+            timestamp="2026-02-10T12:00:00Z",
+            operation_type=OperationType.READ,
+            collection="x" * 256,
+        )
+        assert len(entry.collection) == 256
+
+    def test_collection_257_chars_rejected(self) -> None:
+        """Collection de 257 caracteres est rejetee."""
+        with pytest.raises(ValidationError):
+            AuditEntry(
+                timestamp="2026-02-10T12:00:00Z",
+                operation_type=OperationType.READ,
+                collection="x" * 257,
+            )
+
+    def test_rejects_semantically_invalid_date(self) -> None:
+        """Timestamp avec date invalide (31 fevrier) est rejetee."""
+        with pytest.raises(ValidationError, match="day is out of range"):
+            AuditEntry(
+                timestamp="2026-02-31T12:00:00Z",
+                operation_type=OperationType.READ,
+                collection="test",
+            )
+
 
 class TestAuditConfigValidation:
     """Tests pour la validation Pydantic des AuditConfig."""
@@ -102,6 +129,42 @@ class TestAuditConfigValidation:
         """batch_size > 10000 est rejete."""
         with pytest.raises(ValidationError):
             AuditConfig(batch_size=10001)
+
+    def test_accepts_batch_size_exactly_10000(self) -> None:
+        """batch_size = 10000 est accepte (boundary)."""
+        config = AuditConfig(batch_size=10000)
+        assert config.batch_size == 10000
+
+    def test_rejects_flush_interval_above_300(self) -> None:
+        """flush_interval_s > 300 est rejete."""
+        with pytest.raises(ValidationError):
+            AuditConfig(flush_interval_s=300.1)
+
+    def test_accepts_flush_interval_exactly_300(self) -> None:
+        """flush_interval_s = 300 est accepte (boundary)."""
+        config = AuditConfig(flush_interval_s=300.0)
+        assert config.flush_interval_s == 300.0
+
+
+class TestAuditLoggerEdgeCases:
+    """Tests pour les cas limites du logger."""
+
+    @pytest.mark.asyncio
+    async def test_stop_without_start_safe(self) -> None:
+        """stop() sans start() ne crash pas."""
+        audit = AuditLogger(db=MagicMock(), config=AuditConfig())
+        await audit.stop()
+        assert not audit._running  # noqa: SLF001
+
+    @pytest.mark.asyncio
+    async def test_double_start_is_idempotent(self) -> None:
+        """Appeler start() deux fois ne cree pas deux workers."""
+        audit = AuditLogger(db=MagicMock(), config=AuditConfig())
+        await audit.start()
+        first_task = audit._worker_task  # noqa: SLF001
+        await audit.start()
+        assert audit._worker_task is first_task  # noqa: SLF001
+        await audit.stop()
 
 
 class TestSanitizeDeepNesting:
