@@ -22,12 +22,14 @@ Last Updated: 2026-02-10
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 _ISO_8601_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+# Also validate with datetime.fromisoformat for semantic correctness
 
 
 class OperationType(str, Enum):
@@ -71,10 +73,15 @@ class AuditEntry(BaseModel):
     @field_validator("timestamp")
     @classmethod
     def _validate_timestamp(cls, v: str) -> str:
-        """Validate timestamp is ISO 8601 format."""
+        """Validate timestamp is ISO 8601 format with real date values."""
         if not _ISO_8601_RE.match(v):
             msg = f"timestamp must be ISO 8601, got: {v!r}"
             raise ValueError(msg)
+        try:
+            datetime.fromisoformat(v)
+        except ValueError:
+            msg = f"timestamp is not a valid date: {v!r}"
+            raise  # noqa: B904
         return v
 
     def to_dict(self) -> dict[str, Any]:

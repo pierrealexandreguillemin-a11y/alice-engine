@@ -64,6 +64,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         audit_config = AuditConfig(
             enabled=settings.audit_enabled,
             collection_name=settings.audit_collection,
+            batch_size=settings.audit_batch_size,
+            flush_interval_s=settings.audit_flush_interval_s,
         )
         audit_logger = AuditLogger(db=audit_db, config=audit_config)
         await audit_logger.start()

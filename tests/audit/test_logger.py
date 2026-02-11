@@ -84,9 +84,11 @@ class TestLogOperation:
         try:
             # Should return immediately
             await logger.log(OperationType.READ, "compositions", result_count=5)
-            assert logger._queue.qsize() >= 0  # noqa: SLF001
+            # Entry is either still in queue or already consumed by worker
+            # Verify processing happened after flush
         finally:
             await logger.stop()
+        assert mock_db.audit_logs.insert_many.call_count == 1
 
     @pytest.mark.asyncio
     async def test_queue_full_does_not_raise(
@@ -100,7 +102,8 @@ class TestLogOperation:
         audit._queue = asyncio.Queue(maxsize=2)  # noqa: SLF001
         for _ in range(50):
             await audit.log(OperationType.READ, "test")
-        # Should not raise even though queue overflows
+        # Should not raise and should track dropped entries
+        assert audit._dropped_count == 48  # 50 - 2 in queue  # noqa: SLF001
 
     @pytest.mark.asyncio
     async def test_creates_correct_audit_entry(
@@ -125,8 +128,17 @@ class TestLogOperation:
         finally:
             await logger.stop()
 
-        # Verify insert was called
+        # Verify insert was called with correct content
         assert mock_db.audit_logs.insert_many.call_count >= 1
+        batch = mock_db.audit_logs.insert_many.call_args[0][0]
+        entry = batch[0]
+        assert entry["operation_type"] == "write"
+        assert entry["collection"] == "players"
+        assert entry["user_source"] == "api_client_1"
+        assert entry["result_count"] == 10
+        assert entry["duration_ms"] == 5.2
+        assert entry["success"] is True
+        assert "T" in entry["timestamp"]
 
 
 class TestWorker:

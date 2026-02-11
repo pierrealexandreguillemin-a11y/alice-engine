@@ -140,23 +140,27 @@ class AuditLogger:
         batch: list[dict[str, Any]] = []
         collection = self._db[self.config.collection_name]
 
-        while self._running:
-            try:
-                entry = await asyncio.wait_for(
-                    self._queue.get(),
-                    timeout=self.config.flush_interval_s,
-                )
-                batch.append(entry.to_dict())
-                if len(batch) >= self.config.batch_size:
-                    await self._insert_batch(collection, batch)
-                    batch = []
-            except TimeoutError:
-                if batch:
-                    await self._insert_batch(collection, batch)
-                    batch = []
-        # Flush remaining batch on shutdown (fix race condition)
-        if batch:
-            await self._insert_batch(collection, batch)
+        try:
+            while self._running:
+                try:
+                    entry = await asyncio.wait_for(
+                        self._queue.get(),
+                        timeout=self.config.flush_interval_s,
+                    )
+                    batch.append(entry.to_dict())
+                    if len(batch) >= self.config.batch_size:
+                        await self._insert_batch(collection, batch)
+                        batch = []
+                except TimeoutError:
+                    if batch:
+                        await self._insert_batch(collection, batch)
+                        batch = []
+        except asyncio.CancelledError:
+            pass  # Expected on shutdown
+        finally:
+            # Always flush local batch on exit (prevents data loss on cancel)
+            if batch:
+                await self._insert_batch(collection, batch)
 
     async def _flush_remaining(self) -> None:
         """Flush les entrees restantes dans la queue."""
