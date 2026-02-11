@@ -15,21 +15,9 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score
 
 from scripts.comparison.mcnemar_test import mcnemar_simple_test
+from scripts.training.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
-FEATURES = [
-    "blanc_elo",
-    "noir_elo",
-    "diff_elo",
-    "echiquier",
-    "niveau",
-    "ronde",
-    "type_competition",
-    "division",
-    "ligue_code",
-    "blanc_titre",
-    "noir_titre",
-    "jour_semaine",
-]
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
 def main() -> None:

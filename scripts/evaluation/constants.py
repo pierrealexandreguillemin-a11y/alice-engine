@@ -8,29 +8,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# Features: canonical source is scripts.training.features (DRY - ISO 24027)
+from scripts.training.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+
+__all__ = ["CATEGORICAL_FEATURES", "NUMERIC_FEATURES"]
+
 # Configuration paths
 PROJECT_DIR = Path(__file__).parent.parent.parent
 DEFAULT_DATA_DIR = PROJECT_DIR / "data" / "features"
-
-# Features numeriques
-NUMERIC_FEATURES = [
-    "blanc_elo",
-    "noir_elo",
-    "diff_elo",
-    "echiquier",
-    "niveau",
-    "ronde",
-]
-
-# Features categorielles
-CATEGORICAL_FEATURES = [
-    "type_competition",
-    "division",
-    "ligue_code",
-    "blanc_titre",
-    "noir_titre",
-    "jour_semaine",
-]
 
 # Model training defaults
 DEFAULT_ITERATIONS = 500

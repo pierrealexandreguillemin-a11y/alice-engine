@@ -43,19 +43,11 @@ import mlflow.pyfunc
 import numpy as np
 import pandas as pd
 
+# Features: canonical source is scripts.training.features (DRY - ISO 24027)
+from scripts.training.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-NUMERIC_FEATURES = ["blanc_elo", "noir_elo", "diff_elo", "echiquier", "niveau", "ronde"]
-CATEGORICAL_FEATURES = [
-    "type_competition",
-    "division",
-    "ligue_code",
-    "blanc_titre",
-    "noir_titre",
-    "jour_semaine",
-]
 
 
 class AliceModelWrapper(mlflow.pyfunc.PythonModel):
@@ -64,7 +56,8 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
     Ce wrapper encapsule les modèles AutoGluon ou Baseline
     pour un déploiement unifié via MLflow serving.
 
-    Attributes:
+    Attributes
+    ----------
         model: Modèle chargé (AutoGluon ou sklearn-compatible)
         model_type: Type de modèle ("autogluon", "catboost", "xgboost", "lightgbm")
         encoders: Label encoders pour features catégorielles
@@ -82,6 +75,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
         """Charge le modèle et les artefacts.
 
         Args:
+        ----
             context: Contexte MLflow avec chemins des artefacts
         """
         artifacts = context.artifacts
@@ -167,10 +161,12 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
         """Prédit les résultats pour les entrées données.
 
         Args:
+        ----
             context: Contexte MLflow (non utilisé)
             model_input: DataFrame avec les features
 
         Returns:
+        -------
             Array de probabilités (classe positive)
         """
         # Prétraitement
@@ -192,9 +188,11 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
         """Prétraite les features d'entrée.
 
         Args:
+        ----
             df: DataFrame brut d'entrée
 
         Returns:
+        -------
             DataFrame prétraité prêt pour prédiction
         """
         df = df.copy()
@@ -243,12 +241,14 @@ def register_model_to_mlflow(
     """Enregistre un modèle ALICE dans MLflow Registry.
 
     Args:
+    ----
         model_path: Chemin vers le modèle (AutoGluon ou baseline)
         model_name: Nom dans le registry
         encoders_path: Chemin vers les label encoders
         features_path: Chemin vers la liste des features
 
     Returns:
+    -------
         URI du modèle enregistré
     """
     import mlflow
@@ -262,18 +262,8 @@ def register_model_to_mlflow(
     # Créer la signature
     input_schema = mlflow.types.Schema(
         [
-            mlflow.types.ColSpec("double", "blanc_elo"),
-            mlflow.types.ColSpec("double", "noir_elo"),
-            mlflow.types.ColSpec("double", "diff_elo"),
-            mlflow.types.ColSpec("long", "echiquier"),
-            mlflow.types.ColSpec("long", "niveau"),
-            mlflow.types.ColSpec("long", "ronde"),
-            mlflow.types.ColSpec("string", "type_competition"),
-            mlflow.types.ColSpec("string", "division"),
-            mlflow.types.ColSpec("string", "ligue_code"),
-            mlflow.types.ColSpec("string", "blanc_titre"),
-            mlflow.types.ColSpec("string", "noir_titre"),
-            mlflow.types.ColSpec("string", "jour_semaine"),
+            *[mlflow.types.ColSpec("double", f) for f in NUMERIC_FEATURES],
+            *[mlflow.types.ColSpec("string", f) for f in CATEGORICAL_FEATURES],
         ]
     )
     output_schema = mlflow.types.Schema(
@@ -306,6 +296,7 @@ def create_render_deployment_config(
     """Crée la configuration de déploiement Render.
 
     Args:
+    ----
         model_uri: URI du modèle MLflow
         output_path: Chemin du fichier de configuration
     """

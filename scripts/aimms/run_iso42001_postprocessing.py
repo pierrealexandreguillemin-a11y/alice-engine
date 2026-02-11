@@ -11,24 +11,12 @@ from autogluon.tabular import TabularPredictor
 
 from scripts.aimms.aimms_types import AIMSConfig
 from scripts.aimms.postprocessor import run_postprocessing
+from scripts.training.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-FEATURES = [
-    "blanc_elo",
-    "noir_elo",
-    "diff_elo",
-    "echiquier",
-    "niveau",
-    "ronde",
-    "type_competition",
-    "division",
-    "ligue_code",
-    "blanc_titre",
-    "noir_titre",
-    "jour_semaine",
-]
+FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
 def main() -> None:
