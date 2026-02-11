@@ -17,9 +17,17 @@ Last Updated: 2026-02-10
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+VERSION_PATTERN = re.compile(r"^v\d{8}_\d{6}$")
+
+
+def validate_version_format(version: str) -> bool:
+    """Verifie que la version matche le format vYYYYMMDD_HHMMSS (ISO 27034)."""
+    return bool(VERSION_PATTERN.match(version))
 
 
 class DegradationThresholds(BaseModel):

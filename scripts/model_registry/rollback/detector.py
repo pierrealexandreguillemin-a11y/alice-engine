@@ -11,7 +11,7 @@ ISO Compliance:
 - ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
-Last Updated: 2026-02-10
+Last Updated: 2026-02-11
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from scripts.model_registry.drift_types import DriftSeverity
 from scripts.model_registry.rollback.types import (
     DegradationThresholds,
     RollbackDecision,
+    validate_version_format,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,29 +56,21 @@ def detect_degradation(
     """
     if thresholds is None:
         thresholds = DegradationThresholds()
-
     timestamp = datetime.now(tz=UTC).isoformat()
+
+    if not validate_version_format(current_version):
+        msg = f"Invalid version format: {current_version!r}"
+        raise ValueError(msg)
 
     try:
         prev = _find_previous_version(models_dir, current_version)
     except FileNotFoundError:
-        logger.warning("Models directory not found: %s", models_dir)
-        return RollbackDecision(
-            should_rollback=False,
-            reason=f"Models directory not found: {models_dir}",
-            current_version=current_version,
-            timestamp=timestamp,
-        )
+        logger.warning("Models directory not found")
+        return _no_rollback(current_version, "Models directory not found", timestamp)
 
     if prev is None:
-        return RollbackDecision(
-            should_rollback=False,
-            reason="No previous version available",
-            current_version=current_version,
-            timestamp=timestamp,
-        )
+        return _no_rollback(current_version, "No previous version available", timestamp)
 
-    # Check drift first
     if drift_result is not None and _is_drift_critical(drift_result):
         return RollbackDecision(
             should_rollback=True,
@@ -87,7 +80,33 @@ def detect_degradation(
             timestamp=timestamp,
         )
 
-    # Compare metrics
+    return _check_metric_degradation(
+        models_dir,
+        current_version,
+        prev,
+        thresholds,
+        timestamp,
+    )
+
+
+def _no_rollback(current_version: str, reason: str, timestamp: str) -> RollbackDecision:
+    """Construit une decision sans rollback."""
+    return RollbackDecision(
+        should_rollback=False,
+        reason=reason,
+        current_version=current_version,
+        timestamp=timestamp,
+    )
+
+
+def _check_metric_degradation(
+    models_dir: Path,
+    current_version: str,
+    prev: str,
+    thresholds: DegradationThresholds,
+    timestamp: str,
+) -> RollbackDecision:
+    """Charge et compare les metriques entre versions."""
     current_metrics = _load_version_metrics(models_dir, current_version)
     previous_metrics = _load_version_metrics(models_dir, prev)
 
@@ -97,12 +116,7 @@ def detect_degradation(
             current_metrics is not None,
             previous_metrics is not None,
         )
-        return RollbackDecision(
-            should_rollback=False,
-            reason="Cannot load metrics for comparison",
-            current_version=current_version,
-            timestamp=timestamp,
-        )
+        return _no_rollback(current_version, "Cannot load metrics for comparison", timestamp)
 
     degraded, reason = _compare_metrics(current_metrics, previous_metrics, thresholds)
 
@@ -111,10 +125,7 @@ def detect_degradation(
         reason=reason,
         current_version=current_version,
         target_version=prev if degraded else None,
-        metrics_comparison={
-            "current": current_metrics,
-            "previous": previous_metrics,
-        },
+        metrics_comparison={"current": current_metrics, "previous": previous_metrics},
         timestamp=timestamp,
     )
 

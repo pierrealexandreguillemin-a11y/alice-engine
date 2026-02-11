@@ -9,7 +9,7 @@ ISO Compliance:
 - ISO/IEC 5055:2021 - Code Quality (SRP)
 
 Author: ALICE Engine Team
-Last Updated: 2026-02-10
+Last Updated: 2026-02-11
 """
 
 from __future__ import annotations
@@ -19,7 +19,11 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from scripts.model_registry.rollback.types import RollbackDecision, RollbackResult
+from scripts.model_registry.rollback.types import (
+    RollbackDecision,
+    RollbackResult,
+    validate_version_format,
+)
 from scripts.model_registry.versioning import rollback_to_version
 
 logger = logging.getLogger(__name__)
@@ -45,26 +49,12 @@ def execute_rollback(
     """
     timestamp = datetime.now(tz=UTC).isoformat()
 
+    if decision.target_version and not validate_version_format(decision.target_version):
+        msg = f"Invalid target version format: {decision.target_version!r}"
+        raise ValueError(msg)
+
     if dry_run:
-        # Verify target exists before reporting success
-        target_exists = (
-            (models_dir / decision.target_version).exists() if decision.target_version else False
-        )
-        result = RollbackResult(
-            success=target_exists,
-            rolled_back_from=decision.current_version,
-            rolled_back_to=decision.target_version or "",
-            reason=f"DRY RUN: {decision.reason}",
-            timestamp=timestamp,
-            error_message=None if target_exists else "Target version not found",
-        )
-        logger.info(
-            "DRY RUN: would rollback %s -> %s (exists=%s)",
-            decision.current_version,
-            decision.target_version,
-            target_exists,
-        )
-        return result
+        return _execute_dry_run(models_dir, decision, timestamp)
 
     if not decision.target_version:
         return RollbackResult(
@@ -76,11 +66,47 @@ def execute_rollback(
             error_message="No target version specified",
         )
 
+    return _execute_real_rollback(models_dir, decision, timestamp)
+
+
+def _execute_dry_run(
+    models_dir: Path,
+    decision: RollbackDecision,
+    timestamp: str,
+) -> RollbackResult:
+    """Execute un rollback en mode dry run (verification seule)."""
+    target_exists = (
+        (models_dir / decision.target_version).exists() if decision.target_version else False
+    )
+    logger.info(
+        "DRY RUN: would rollback %s -> %s (exists=%s)",
+        decision.current_version,
+        decision.target_version,
+        target_exists,
+    )
+    return RollbackResult(
+        success=target_exists,
+        rolled_back_from=decision.current_version,
+        rolled_back_to=decision.target_version or "",
+        reason=f"DRY RUN: {decision.reason}",
+        timestamp=timestamp,
+        error_message=None if target_exists else "Target version not found",
+    )
+
+
+def _execute_real_rollback(
+    models_dir: Path,
+    decision: RollbackDecision,
+    timestamp: str,
+) -> RollbackResult:
+    """Execute le rollback reel via versioning.py."""
     try:
         success = rollback_to_version(models_dir, decision.target_version)
     except Exception as e:
         logger.exception(
-            "Rollback raised exception: %s -> %s", decision.current_version, decision.target_version
+            "Rollback raised exception: %s -> %s",
+            decision.current_version,
+            decision.target_version,
         )
         return RollbackResult(
             success=False,
@@ -99,13 +125,11 @@ def execute_rollback(
         timestamp=timestamp,
         error_message=None if success else f"Failed to rollback to {decision.target_version}",
     )
-
     log_rollback_event(models_dir, result)
     if success:
         logger.info("Rolled back: %s -> %s", decision.current_version, decision.target_version)
     else:
         logger.error("Rollback failed: %s -> %s", decision.current_version, decision.target_version)
-
     return result
 
 
