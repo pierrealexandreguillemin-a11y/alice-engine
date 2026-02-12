@@ -20,7 +20,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,36 +27,14 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 from scripts.autogluon.config import AutoGluonConfig, load_autogluon_config
+from scripts.autogluon.trainer_types import AutoGluonTrainingResult
 
 if TYPE_CHECKING:
     from autogluon.tabular import TabularPredictor
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class AutoGluonTrainingResult:
-    """Resultat d'entrainement AutoGluon.
-
-    Attributes
-    ----------
-        predictor: TabularPredictor entraine
-        train_time: Temps d'entrainement en secondes
-        leaderboard: DataFrame du classement des modeles
-        best_model: Nom du meilleur modele
-        model_path: Chemin de sauvegarde du modele
-        data_hash: Hash des donnees d'entrainement (tracabilite)
-        config: Configuration utilisee
-    """
-
-    predictor: TabularPredictor
-    train_time: float
-    leaderboard: pd.DataFrame
-    best_model: str
-    model_path: Path
-    data_hash: str
-    config: AutoGluonConfig
-    metrics: dict[str, float] = field(default_factory=dict)
+__all__ = ["AutoGluonTrainer", "AutoGluonTrainingResult", "train_autogluon"]
 
 
 class AutoGluonTrainer:
@@ -92,7 +69,8 @@ class AutoGluonTrainer:
     def _init_training_run(self) -> Path:
         """Initialize run_id and model path for training.
 
-        Returns:
+        Returns
+        -------
             Path to the model output directory.
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -108,7 +86,8 @@ class AutoGluonTrainer:
     ) -> float:
         """Create and fit the TabularPredictor.
 
-        Returns:
+        Returns
+        -------
             Training time in seconds.
         """
         from autogluon.tabular import TabularPredictor
@@ -129,7 +108,8 @@ class AutoGluonTrainer:
     def _extract_leaderboard_metrics(self) -> tuple[pd.DataFrame, str, dict[str, float]]:
         """Extract leaderboard and metrics from trained predictor.
 
-        Returns:
+        Returns
+        -------
             Tuple of (leaderboard, best_model_name, metrics_dict).
         """
         leaderboard = self.predictor.leaderboard(silent=True)

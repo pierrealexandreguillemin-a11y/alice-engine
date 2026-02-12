@@ -13,8 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from scripts.autogluon.iso_fairness_enhanced import ISO24027EnhancedReport
-    from scripts.autogluon.iso_robustness_enhanced import ISO24029EnhancedReport
+    from scripts.autogluon.iso_types import ISO24027EnhancedReport, ISO24029EnhancedReport
 
 
 def main() -> int:
