@@ -78,55 +78,12 @@ def validate_with_report(
     """
     from schemas.training_schemas import TrainingSchemaPermissive, TrainingSchemaStrict
 
-    # Create lineage
     lineage = DataLineage.from_dataframe(df, source_path)
-
-    # Validate
     schema = TrainingSchemaStrict if strict else TrainingSchemaPermissive
-    errors: list[ValidationError] = []
-    is_valid = True
 
-    try:
-        schema.validate(df, lazy=True)
-    except pa.errors.SchemaErrors as err:
-        is_valid = False
-        # Parse errors into structured format
-        for _, row in err.failure_cases.iterrows():
-            severity = _classify_error_severity(row["check"], row["column"])
-            errors.append(
-                ValidationError(
-                    column=str(row["column"]) if pd.notna(row["column"]) else "schema",
-                    check=str(row["check"]),
-                    failure_count=1,  # Each row is one failure
-                    severity=severity,
-                    sample_values=[row.get("failure_case")],
-                    recommendation=_get_recommendation(row["check"]),
-                )
-            )
-
-    # Aggregate errors by column/check
-    aggregated_errors = _aggregate_errors(errors)
-
-    # Calculate metrics
-    null_pcts = {col: df[col].isna().mean() for col in df.columns}
-    critical_count = sum(1 for e in aggregated_errors if e.severity == ErrorSeverity.CRITICAL)
-    high_count = sum(1 for e in aggregated_errors if e.severity == ErrorSeverity.HIGH)
-    medium_count = sum(1 for e in aggregated_errors if e.severity == ErrorSeverity.MEDIUM)
-    warning_count = sum(1 for e in aggregated_errors if e.severity == ErrorSeverity.WARNING)
-
-    error_rows = sum(e.failure_count for e in aggregated_errors)
-    valid_rows = max(0, len(df) - error_rows)
-
-    metrics = QualityMetrics(
-        total_rows=len(df),
-        valid_rows=valid_rows,
-        null_percentages=null_pcts,
-        validation_rate=valid_rows / len(df) if len(df) > 0 else 1.0,
-        critical_errors=critical_count,
-        high_errors=high_count,
-        medium_errors=medium_count,
-        warnings=warning_count,
-    )
+    is_valid, raw_errors = _run_schema_validation(schema, df)
+    aggregated_errors = _aggregate_errors(raw_errors)
+    metrics = _compute_quality_metrics(df, aggregated_errors)
 
     return ValidationReport(
         lineage=lineage,
@@ -135,6 +92,58 @@ def validate_with_report(
         is_valid=is_valid,
         schema_mode="strict" if strict else "permissive",
     )
+
+
+def _run_schema_validation(
+    schema: pa.DataFrameSchema, df: pd.DataFrame
+) -> tuple[bool, list[ValidationError]]:
+    """Run schema validation and parse errors into structured format."""
+    try:
+        schema.validate(df, lazy=True)
+        return True, []
+    except pa.errors.SchemaErrors as err:
+        errors = []
+        for _, row in err.failure_cases.iterrows():
+            severity = _classify_error_severity(row["check"], row["column"])
+            errors.append(
+                ValidationError(
+                    column=str(row["column"]) if pd.notna(row["column"]) else "schema",
+                    check=str(row["check"]),
+                    failure_count=1,
+                    severity=severity,
+                    sample_values=[row.get("failure_case")],
+                    recommendation=_get_recommendation(row["check"]),
+                )
+            )
+        return False, errors
+
+
+def _compute_quality_metrics(df: pd.DataFrame, errors: list[ValidationError]) -> QualityMetrics:
+    """Compute quality metrics from validation errors."""
+    error_rows = sum(e.failure_count for e in errors)
+    valid_rows = max(0, len(df) - error_rows)
+    severity_counts = _count_by_severity(errors)
+
+    return QualityMetrics(
+        total_rows=len(df),
+        valid_rows=valid_rows,
+        null_percentages={col: df[col].isna().mean() for col in df.columns},
+        validation_rate=valid_rows / len(df) if len(df) > 0 else 1.0,
+        **severity_counts,
+    )
+
+
+def _count_by_severity(errors: list[ValidationError]) -> dict[str, int]:
+    """Count errors by severity level."""
+    counts = dict.fromkeys(ErrorSeverity, 0)
+    for e in errors:
+        counts[e.severity] += 1
+    return {
+        "critical_errors": counts[ErrorSeverity.CRITICAL],
+        "high_errors": counts[ErrorSeverity.HIGH],
+        "medium_errors": counts[ErrorSeverity.MEDIUM],
+        "warnings": counts[ErrorSeverity.WARNING],
+    }
 
 
 def _classify_error_severity(check: str, column: str) -> ErrorSeverity:

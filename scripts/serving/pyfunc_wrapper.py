@@ -197,36 +197,44 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
         """
         df = df.copy()
 
-        # Créer diff_elo si manquant
         if "diff_elo" not in df.columns and "blanc_elo" in df.columns:
             df["diff_elo"] = df["blanc_elo"] - df.get("noir_elo", 0)
 
-        # Features numériques
-        X_parts = []
-        num_cols = [c for c in NUMERIC_FEATURES if c in df.columns]
-        if num_cols:
-            X_num = df[num_cols].copy()
-            for col in num_cols:
-                if X_num[col].isna().any():
-                    X_num[col] = X_num[col].fillna(X_num[col].median())
-            X_parts.append(X_num)
-
-        # Features catégorielles
-        cat_cols = [c for c in CATEGORICAL_FEATURES if c in df.columns]
-        if cat_cols and self.encoders:
-            cat_data = df[cat_cols].fillna("UNKNOWN").astype(str)
-            for col in cat_cols:
-                if col in self.encoders:
-                    le = self.encoders[col]
-                    known = set(le.classes_)
-                    cat_data[col] = cat_data[col].apply(
-                        lambda x, k=known: x if x in k else "UNKNOWN"
-                    )
-                    if "UNKNOWN" not in known:
-                        le.classes_ = np.append(le.classes_, "UNKNOWN")
-                    cat_data[col] = le.transform(cat_data[col])
-            X_parts.append(cat_data.reset_index(drop=True))
+        X_parts: list[pd.DataFrame] = []
+        self._collect_numeric_features(df, X_parts)
+        self._collect_categorical_features(df, X_parts)
 
         if X_parts:
             return pd.concat([p.reset_index(drop=True) for p in X_parts], axis=1)
         return df
+
+    def _collect_numeric_features(self, df: pd.DataFrame, parts: list[pd.DataFrame]) -> None:
+        """Extract and impute numeric features."""
+        num_cols = [c for c in NUMERIC_FEATURES if c in df.columns]
+        if not num_cols:
+            return
+        X_num = df[num_cols].copy()
+        for col in num_cols:
+            if X_num[col].isna().any():
+                X_num[col] = X_num[col].fillna(X_num[col].median())
+        parts.append(X_num)
+
+    def _collect_categorical_features(self, df: pd.DataFrame, parts: list[pd.DataFrame]) -> None:
+        """Encode categorical features using stored label encoders."""
+        cat_cols = [c for c in CATEGORICAL_FEATURES if c in df.columns]
+        if not cat_cols or not self.encoders:
+            return
+        cat_data = df[cat_cols].fillna("UNKNOWN").astype(str)
+        for col in cat_cols:
+            if col in self.encoders:
+                self._encode_column(cat_data, col)
+        parts.append(cat_data.reset_index(drop=True))
+
+    def _encode_column(self, cat_data: pd.DataFrame, col: str) -> None:
+        """Encode a single categorical column, handling unknown values."""
+        le = self.encoders[col]
+        known = set(le.classes_)
+        cat_data[col] = cat_data[col].apply(lambda x, k=known: x if x in k else "UNKNOWN")
+        if "UNKNOWN" not in known:
+            le.classes_ = np.append(le.classes_, "UNKNOWN")
+        cat_data[col] = le.transform(cat_data[col])

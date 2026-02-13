@@ -151,32 +151,31 @@ class ISOSemanticMemory:
         """
         report: dict[str, Any] = {"standards": {}, "overall_status": "COMPLIANT"}
 
-        # Évaluer fairness
-        if "demographic_parity_ratio" in metrics:
-            dp = metrics["demographic_parity_ratio"]
-            status = self.evaluate_fairness(dp)
-            report["standards"]["fairness"] = {
-                "value": dp,
-                "status": status.value,
-                "mitigations": [m.name for m in self.get_mitigations("fairness", status)],
-            }
-            if status == ComplianceStatus.CRITICAL:
-                report["overall_status"] = "CRITICAL"
-            elif status == ComplianceStatus.CAUTION and report["overall_status"] != "CRITICAL":
-                report["overall_status"] = "CAUTION"
-
-        # Évaluer robustness
-        if "noise_tolerance" in metrics:
-            nt = metrics["noise_tolerance"]
-            status = self.evaluate_robustness(nt)
-            report["standards"]["robustness"] = {
-                "value": nt,
-                "status": status.value,
-                "mitigations": [m.name for m in self.get_mitigations("robustness", status)],
-            }
-            if status == ComplianceStatus.CRITICAL:
-                report["overall_status"] = "CRITICAL"
-            elif status == ComplianceStatus.CAUTION and report["overall_status"] != "CRITICAL":
-                report["overall_status"] = "CAUTION"
+        evaluations = [
+            ("fairness", "demographic_parity_ratio", self.evaluate_fairness),
+            ("robustness", "noise_tolerance", self.evaluate_robustness),
+        ]
+        for domain, metric_key, evaluate_fn in evaluations:
+            if metric_key in metrics:
+                self._add_domain_evaluation(report, domain, metrics[metric_key], evaluate_fn)
 
         return report
+
+    def _add_domain_evaluation(
+        self,
+        report: dict[str, Any],
+        domain: str,
+        value: float,
+        evaluate_fn: Any,
+    ) -> None:
+        """Evaluate a single domain and update report."""
+        status = evaluate_fn(value)
+        report["standards"][domain] = {
+            "value": value,
+            "status": status.value,
+            "mitigations": [m.name for m in self.get_mitigations(domain, status)],
+        }
+        if status == ComplianceStatus.CRITICAL:
+            report["overall_status"] = "CRITICAL"
+        elif status == ComplianceStatus.CAUTION and report["overall_status"] != "CRITICAL":
+            report["overall_status"] = "CAUTION"

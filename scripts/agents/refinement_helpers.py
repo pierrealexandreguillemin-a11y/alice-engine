@@ -79,7 +79,7 @@ def run_refinement_loop(
     """
     from scripts.agents.iterative_refinement import RefinementAction
 
-    iterations = max_iterations or refinement._max_iterations
+    iterations = max_iterations or refinement.max_iterations
     results: list[RefinementResult] = []
 
     for i in range(iterations):

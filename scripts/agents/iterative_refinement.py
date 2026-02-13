@@ -79,6 +79,11 @@ class IterativeRefinement:
         self._iteration_count = 0
         self._max_iterations = 5
 
+    @property
+    def max_iterations(self) -> int:
+        """Return maximum refinement iterations."""
+        return self._max_iterations
+
     def refine_fairness(
         self,
         report: dict[str, Any],

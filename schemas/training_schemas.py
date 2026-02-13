@@ -11,22 +11,47 @@ import pandas as pd
 from pandera import Check, Column, DataFrameSchema
 
 from schemas.training_constants import (
+    AGE_CATEGORIES,  # noqa: F401 - re-export for backward compat
     COMPETITION_TYPES,
+    ECHIQUIER_JEUNES_HIGH_BOARDS,  # noqa: F401
     ECHIQUIER_MAX_ABSOLUTE,
     ECHIQUIER_MIN,
+    ELO_FLOOR_FIDE,  # noqa: F401
+    ELO_MAX_INITIAL,  # noqa: F401
     ELO_MAX_N4_PLUS,
     ELO_MAX_REASONABLE,
     ELO_MIN_ESTIME,
     FIDE_TITLES,
-    NIVEAU_ELO_CUPS,
+    MAX_SAMPLE_VALUES,  # noqa: F401
+    NIVEAU_ELO_CUPS,  # noqa: F401 - re-export for backward compat
+    NIVEAU_HIERARCHY,  # noqa: F401
     NIVEAU_HIERARCHY_MAX,
     NIVEAU_N4,
+    QUALITY_VALIDATION_RATE_THRESHOLD,  # noqa: F401
     RONDE_MAX_ABSOLUTE,
     RONDE_MIN,
     VALID_GAME_SCORES_ADULTES,
     VALID_GAME_SCORES_ALL,
+    VALID_GAME_SCORES_JEUNES_HIGH,  # noqa: F401
+    VALID_GAME_SCORES_JEUNES_LOW,  # noqa: F401
+    VALID_MATCH_POINTS,  # noqa: F401
     VALID_RESULT_SUMS,
     VALID_RESULT_TYPES,
+    VALID_ZONES_ENJEU,  # noqa: F401
+)
+from schemas.training_types import (  # noqa: F401 - re-export for backward compat
+    DataLineage,
+    ErrorSeverity,
+    QualityMetrics,
+    ValidationError,
+    ValidationReport,
+)
+from schemas.training_validation import (  # noqa: F401 - re-export for backward compat
+    compute_quality_summary,
+    get_expected_score_range,
+    is_valid_niveau_for_elo,
+    validate_training_data,
+    validate_with_report,
 )
 
 # =============================================================================
@@ -73,13 +98,6 @@ def _check_type_resultat_coherence(df: pd.DataFrame) -> pd.Series:
 def _check_diff_elo_calculation(df: pd.DataFrame) -> pd.Series:
     """Check diff_elo equals blanc_elo - noir_elo."""
     return df["diff_elo"] == df["blanc_elo"] - df["noir_elo"]
-
-
-def _check_niveau_valid(df: pd.DataFrame) -> pd.Series:
-    """Check niveau is hierarchy (0-13) or Elo-based cup value."""
-    is_hierarchy = df["niveau"] <= NIVEAU_HIERARCHY_MAX
-    is_elo_cup = df["niveau"].isin(NIVEAU_ELO_CUPS)
-    return is_hierarchy | is_elo_cup | (df["niveau"] >= 0)
 
 
 def _check_elo_niveau_restriction(df: pd.DataFrame) -> pd.Series:
