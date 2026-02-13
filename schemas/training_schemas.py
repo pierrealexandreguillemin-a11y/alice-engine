@@ -11,47 +11,21 @@ import pandas as pd
 from pandera import Check, Column, DataFrameSchema
 
 from schemas.training_constants import (
-    AGE_CATEGORIES,  # noqa: F401 - re-export for backward compat
     COMPETITION_TYPES,
-    ECHIQUIER_JEUNES_HIGH_BOARDS,  # noqa: F401
     ECHIQUIER_MAX_ABSOLUTE,
     ECHIQUIER_MIN,
-    ELO_FLOOR_FIDE,  # noqa: F401
-    ELO_MAX_INITIAL,  # noqa: F401
     ELO_MAX_N4_PLUS,
     ELO_MAX_REASONABLE,
     ELO_MIN_ESTIME,
     FIDE_TITLES,
-    MAX_SAMPLE_VALUES,  # noqa: F401
-    NIVEAU_ELO_CUPS,  # noqa: F401 - re-export for backward compat
-    NIVEAU_HIERARCHY,  # noqa: F401
     NIVEAU_HIERARCHY_MAX,
     NIVEAU_N4,
-    QUALITY_VALIDATION_RATE_THRESHOLD,  # noqa: F401
     RONDE_MAX_ABSOLUTE,
     RONDE_MIN,
     VALID_GAME_SCORES_ADULTES,
     VALID_GAME_SCORES_ALL,
-    VALID_GAME_SCORES_JEUNES_HIGH,  # noqa: F401
-    VALID_GAME_SCORES_JEUNES_LOW,  # noqa: F401
-    VALID_MATCH_POINTS,  # noqa: F401
     VALID_RESULT_SUMS,
     VALID_RESULT_TYPES,
-    VALID_ZONES_ENJEU,  # noqa: F401
-)
-from schemas.training_types import (  # noqa: F401 - re-export for backward compat
-    DataLineage,
-    ErrorSeverity,
-    QualityMetrics,
-    ValidationError,
-    ValidationReport,
-)
-from schemas.training_validation import (  # noqa: F401 - re-export for backward compat
-    compute_quality_summary,
-    get_expected_score_range,
-    is_valid_niveau_for_elo,
-    validate_training_data,
-    validate_with_report,
 )
 
 # =============================================================================
@@ -166,47 +140,11 @@ def _build_schema(
     """Build the DataFrameSchema with all column definitions."""
     return DataFrameSchema(
         columns={
-            # === COMPETITION METADATA ===
-            "saison": Column(int, checks=[Check.ge(2000), Check.le(2100)], nullable=False),
-            "competition": Column(str, nullable=False),
-            "division": Column(str, nullable=False),
-            "groupe": Column(str, nullable=True),
-            "ligue": Column(str, nullable=True),
-            "ligue_code": Column(str, nullable=True),
-            "niveau": Column(int, checks=[Check.ge(0)], nullable=False),
-            "type_competition": Column(
-                str, checks=Check.isin(COMPETITION_TYPES) if strict else None, nullable=False
-            ),
-            "ronde": Column(
-                int, checks=[Check.ge(RONDE_MIN), Check.le(RONDE_MAX_ABSOLUTE)], nullable=False
-            ),
-            # === MATCH METADATA ===
-            "equipe_dom": Column(str, nullable=False),
-            "equipe_ext": Column(str, nullable=False),
-            "score_dom": Column(int, checks=Check.ge(0), nullable=False),
-            "score_ext": Column(int, checks=Check.ge(0), nullable=False),
-            "date": Column("datetime64[us]", nullable=True),
-            "date_str": Column(str, nullable=True),
-            "heure": Column(str, nullable=True),
-            "jour_semaine": Column(str, nullable=True),
-            "lieu": Column(str, nullable=True),
-            # === GAME DATA ===
-            "echiquier": Column(
-                int,
-                checks=[Check.ge(ECHIQUIER_MIN), Check.le(ECHIQUIER_MAX_ABSOLUTE)],
-                nullable=False,
-            ),
-            # === PLAYER DATA ===
+            **_competition_columns(strict),
+            **_match_columns(),
+            **_game_columns(valid_scores),
             **_player_columns(strict, "blanc"),
             **_player_columns(strict, "noir"),
-            # === GAME RESULT ===
-            "resultat_blanc": Column(float, checks=Check.isin(valid_scores), nullable=False),
-            "resultat_noir": Column(float, checks=Check.isin(valid_scores), nullable=False),
-            "resultat_text": Column(str, nullable=False),
-            "type_resultat": Column(str, checks=Check.isin(VALID_RESULT_TYPES), nullable=False),
-            # === DERIVED FEATURES ===
-            "diff_elo": Column(int, nullable=False),
-            # === RELIABILITY + FORM + POSITION + MULTI-TEAM + STRATEGIC ===
             **_reliability_columns(),
             **_form_position_columns(),
             **_multi_team_columns(),
@@ -216,6 +154,56 @@ def _build_schema(
         coerce=True,
         strict=False,
     )
+
+
+def _competition_columns(strict: bool) -> dict[str, Column]:
+    """Build competition metadata columns."""
+    return {
+        "saison": Column(int, checks=[Check.ge(2000), Check.le(2100)], nullable=False),
+        "competition": Column(str, nullable=False),
+        "division": Column(str, nullable=False),
+        "groupe": Column(str, nullable=True),
+        "ligue": Column(str, nullable=True),
+        "ligue_code": Column(str, nullable=True),
+        "niveau": Column(int, checks=[Check.ge(0)], nullable=False),
+        "type_competition": Column(
+            str, checks=Check.isin(COMPETITION_TYPES) if strict else None, nullable=False
+        ),
+        "ronde": Column(
+            int, checks=[Check.ge(RONDE_MIN), Check.le(RONDE_MAX_ABSOLUTE)], nullable=False
+        ),
+    }
+
+
+def _match_columns() -> dict[str, Column]:
+    """Build match metadata columns."""
+    return {
+        "equipe_dom": Column(str, nullable=False),
+        "equipe_ext": Column(str, nullable=False),
+        "score_dom": Column(int, checks=Check.ge(0), nullable=False),
+        "score_ext": Column(int, checks=Check.ge(0), nullable=False),
+        "date": Column("datetime64[us]", nullable=True),
+        "date_str": Column(str, nullable=True),
+        "heure": Column(str, nullable=True),
+        "jour_semaine": Column(str, nullable=True),
+        "lieu": Column(str, nullable=True),
+    }
+
+
+def _game_columns(valid_scores: list[float]) -> dict[str, Column]:
+    """Build game data and result columns."""
+    return {
+        "echiquier": Column(
+            int,
+            checks=[Check.ge(ECHIQUIER_MIN), Check.le(ECHIQUIER_MAX_ABSOLUTE)],
+            nullable=False,
+        ),
+        "resultat_blanc": Column(float, checks=Check.isin(valid_scores), nullable=False),
+        "resultat_noir": Column(float, checks=Check.isin(valid_scores), nullable=False),
+        "resultat_text": Column(str, nullable=False),
+        "type_resultat": Column(str, checks=Check.isin(VALID_RESULT_TYPES), nullable=False),
+        "diff_elo": Column(int, nullable=False),
+    }
 
 
 def _player_columns(strict: bool, color: str) -> dict[str, Column]:

@@ -25,7 +25,6 @@ from typing import Any
 
 from scripts.agents.semantic_memory import ComplianceStatus, ISOSemanticMemory
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 

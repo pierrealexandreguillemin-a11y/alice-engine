@@ -5,13 +5,14 @@ ISO Compliance:
 - ISO/IEC 42001:2023 - AI Management System
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import field
+from datetime import UTC, datetime
 from enum import Enum
 from hashlib import sha256
 from typing import Any, Self
 
 import pandas as pd
+from pydantic.dataclasses import dataclass
 
 from schemas.training_constants import QUALITY_VALIDATION_RATE_THRESHOLD
 
@@ -23,7 +24,6 @@ class ErrorSeverity(Enum):
     HIGH = "high"  # Significant quality issue
     MEDIUM = "medium"  # Minor quality issue
     WARNING = "warning"  # Informational
-    INFO = "info"  # Metadata
 
 
 @dataclass
@@ -49,7 +49,7 @@ class DataLineage:
             source_hash=data_hash,
             row_count=len(df),
             column_count=len(df.columns),
-            validation_timestamp=datetime.now().isoformat(),
+            validation_timestamp=datetime.now(tz=UTC).isoformat(),
         )
 
 

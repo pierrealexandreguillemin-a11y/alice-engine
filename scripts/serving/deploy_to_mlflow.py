@@ -44,7 +44,13 @@ PROJECT_DIR = Path(__file__).parent.parent.parent
 
 
 def main() -> None:
-    """Point d'entrée principal."""
+    """Point d'entree principal."""
+    args = _build_arg_parser().parse_args()
+    _run_deployment(args)
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build CLI argument parser."""
     parser = argparse.ArgumentParser(description="Deploy ALICE model to MLflow")
     parser.add_argument(
         "--model",
@@ -53,65 +59,47 @@ def main() -> None:
         required=True,
         help="Model type to deploy",
     )
-    parser.add_argument(
-        "--model-path",
-        type=Path,
-        default=None,
-        help="Custom model path (auto-detected if not specified)",
-    )
-    parser.add_argument(
-        "--render",
-        action="store_true",
-        help="Generate Render deployment config",
-    )
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        default="ALICE",
-        help="Model name in MLflow Registry",
-    )
-    args = parser.parse_args()
+    parser.add_argument("--model-path", type=Path, default=None, help="Custom model path")
+    parser.add_argument("--render", action="store_true", help="Generate Render deployment config")
+    parser.add_argument("--model-name", type=str, default="ALICE", help="Model name in Registry")
+    return parser
 
+
+def _run_deployment(args: argparse.Namespace) -> None:
+    """Execute the deployment workflow."""
     logger.info("=" * 60)
     logger.info("ALICE ENGINE - MODEL DEPLOYMENT")
-    logger.info("MLflow Registry + Render Configuration")
     logger.info("=" * 60)
 
-    # Déterminer le chemin du modèle
     model_path, encoders_path = _get_model_paths(args.model, args.model_path)
 
     if not Path(model_path).exists():
-        logger.error(f"Model not found: {model_path}")
-        logger.info("Train the model first:")
-        if args.model == "autogluon":
-            logger.info("  python -m scripts.autogluon.trainer")
-        else:
-            logger.info(f"  python -m scripts.baseline.{args.model}_baseline")
+        logger.error("Model not found: %s", model_path)
+        logger.info("Train the model first: python -m scripts.autogluon.trainer")
         return
 
-    # Enregistrer dans MLflow
-    logger.info(f"\n[1/2] Registering {args.model} model to MLflow...")
+    logger.info("[1/2] Registering %s model to MLflow...", args.model)
     model_uri = register_model_to_mlflow(
         model_path=model_path,
         model_name=args.model_name,
         encoders_path=encoders_path,
     )
-    logger.info(f"Model registered: {model_uri}")
+    logger.info("Model registered: %s", model_uri)
 
-    # Générer config Render si demandé
     if args.render:
-        logger.info("\n[2/2] Generating Render deployment config...")
-        render_path = PROJECT_DIR / "render.yaml"
-        create_render_deployment_config(model_uri, str(render_path))
-        logger.info(f"Config created: {render_path}")
-        logger.info("\nTo deploy to Render:")
-        logger.info("  1. Push render.yaml to your repository")
-        logger.info("  2. Connect repository to Render")
-        logger.info("  3. Deploy from Render dashboard")
+        _generate_render_config(model_uri)
 
-    logger.info("\n" + "=" * 60)
+    logger.info("=" * 60)
     logger.info("DEPLOYMENT COMPLETE")
     logger.info("=" * 60)
+
+
+def _generate_render_config(model_uri: str) -> None:
+    """Generate Render deployment configuration."""
+    logger.info("[2/2] Generating Render deployment config...")
+    render_path = PROJECT_DIR / "render.yaml"
+    create_render_deployment_config(model_uri, str(render_path))
+    logger.info("Config created: %s", render_path)
 
 
 def _get_model_paths(model_type: str, custom_path: Path | None) -> tuple[str, str | None]:

@@ -146,26 +146,22 @@ def _count_by_severity(errors: list[ValidationError]) -> dict[str, int]:
     }
 
 
+_CRITICAL_COLUMNS = frozenset({"resultat_blanc", "resultat_noir", "blanc_elo", "noir_elo"})
+_SEVERITY_KEYWORDS: list[tuple[frozenset[str], ErrorSeverity]] = [
+    (frozenset({"dtype", "coerce"}), ErrorSeverity.CRITICAL),
+    (frozenset({"diff_elo", "equipe", "resultat"}), ErrorSeverity.HIGH),
+    (frozenset({"niveau", "competition"}), ErrorSeverity.MEDIUM),
+]
+
+
 def _classify_error_severity(check: str, column: str) -> ErrorSeverity:
     """Classify error severity based on check type."""
+    if column in _CRITICAL_COLUMNS:
+        return ErrorSeverity.CRITICAL
     check_str = str(check).lower()
-
-    # Critical: data integrity
-    if "dtype" in check_str or "coerce" in check_str:
-        return ErrorSeverity.CRITICAL
-    if column in ["resultat_blanc", "resultat_noir", "blanc_elo", "noir_elo"]:
-        return ErrorSeverity.CRITICAL
-
-    # High: business logic
-    if "diff_elo" in check_str or "equipe" in check_str:
-        return ErrorSeverity.HIGH
-    if "resultat" in check_str or "type_resultat" in check_str:
-        return ErrorSeverity.HIGH
-
-    # Medium: regulatory
-    if "niveau" in check_str or "competition" in check_str:
-        return ErrorSeverity.MEDIUM
-
+    for keywords, severity in _SEVERITY_KEYWORDS:
+        if any(k in check_str for k in keywords):
+            return severity
     return ErrorSeverity.WARNING
 
 

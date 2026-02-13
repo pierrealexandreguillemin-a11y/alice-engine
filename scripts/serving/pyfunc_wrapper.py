@@ -46,7 +46,6 @@ import pandas as pd
 # Features: canonical source is scripts.training.features (DRY - ISO 24027)
 from scripts.training.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -105,7 +104,7 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
         # Charger les feature names si disponibles
         features_path = artifacts.get("features_path")
         if features_path and Path(features_path).exists():
-            with open(features_path) as f:
+            with open(features_path, encoding="utf-8") as f:
                 self.feature_names = json.load(f)
             logger.info(f"Loaded {len(self.feature_names)} feature names")
 

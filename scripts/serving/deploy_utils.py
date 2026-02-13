@@ -43,28 +43,8 @@ def register_model_to_mlflow(
 
     from scripts.serving.pyfunc_wrapper import AliceModelWrapper
 
-    artifacts = {"model_path": model_path}
-    if encoders_path:
-        artifacts["encoders_path"] = encoders_path
-    if features_path:
-        artifacts["features_path"] = features_path
-
-    # Creer la signature
-    input_schema = mlflow.types.Schema(
-        [
-            *[mlflow.types.ColSpec("double", f) for f in NUMERIC_FEATURES],
-            *[mlflow.types.ColSpec("string", f) for f in CATEGORICAL_FEATURES],
-        ]
-    )
-    output_schema = mlflow.types.Schema(
-        [
-            mlflow.types.ColSpec("double", "probability"),
-        ]
-    )
-    signature = mlflow.models.signature.ModelSignature(
-        inputs=input_schema,
-        outputs=output_schema,
-    )
+    artifacts = _build_artifacts(model_path, encoders_path, features_path)
+    signature = _build_mlflow_signature(mlflow)
 
     with mlflow.start_run():
         model_info = mlflow.pyfunc.log_model(
@@ -75,8 +55,34 @@ def register_model_to_mlflow(
             registered_model_name=model_name,
         )
 
-    logger.info(f"Model registered: {model_info.model_uri}")
+    logger.info("Model registered: %s", model_info.model_uri)
     return model_info.model_uri
+
+
+def _build_artifacts(
+    model_path: str, encoders_path: str | None, features_path: str | None
+) -> dict[str, str]:
+    """Build MLflow artifacts dict."""
+    artifacts = {"model_path": model_path}
+    if encoders_path:
+        artifacts["encoders_path"] = encoders_path
+    if features_path:
+        artifacts["features_path"] = features_path
+    return artifacts
+
+
+def _build_mlflow_signature(mlflow: object) -> object:
+    """Build MLflow model signature for ALICE features."""
+    import mlflow as _mlflow
+
+    input_schema = _mlflow.types.Schema(
+        [
+            *[_mlflow.types.ColSpec("double", f) for f in NUMERIC_FEATURES],
+            *[_mlflow.types.ColSpec("string", f) for f in CATEGORICAL_FEATURES],
+        ]
+    )
+    output_schema = _mlflow.types.Schema([_mlflow.types.ColSpec("double", "probability")])
+    return _mlflow.models.signature.ModelSignature(inputs=input_schema, outputs=output_schema)
 
 
 def create_render_deployment_config(
@@ -111,7 +117,7 @@ services:
     autoDeploy: false
 """
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(config)
 
-    logger.info(f"Render config created: {output_path}")
+    logger.info("Render config created: %s", output_path)
