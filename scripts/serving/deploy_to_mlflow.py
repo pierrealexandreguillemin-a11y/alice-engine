@@ -28,7 +28,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from scripts.serving.pyfunc_wrapper import (
+from scripts.serving.deploy_utils import (
     create_render_deployment_config,
     register_model_to_mlflow,
 )

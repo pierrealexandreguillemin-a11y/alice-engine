@@ -58,6 +58,7 @@ class IterativeRefinement:
     des corrections automatiques ou planifie des actions manuelles.
 
     Example:
+    -------
         refinement = IterativeRefinement()
 
         # Correction fairness automatique
@@ -87,10 +88,12 @@ class IterativeRefinement:
         """Raffine le modèle en cas d'échec fairness.
 
         Args:
+        ----
             report: Rapport de fairness avec metrics et analyses
             auto_apply: Appliquer automatiquement la correction
 
         Returns:
+        -------
             RefinementResult avec action et détails
         """
         dp_ratio = report.get("demographic_parity_ratio", 1.0)
@@ -174,36 +177,16 @@ class IterativeRefinement:
         )
 
     def _should_reweight(self, group_analyses: list[dict[str, Any]]) -> bool:
-        """Détermine si le reweighting est approprié."""
-        if not group_analyses:
-            return False
+        """Delegate to refinement_helpers.should_reweight."""
+        from scripts.agents.refinement_helpers import should_reweight
 
-        # Reweighting si déséquilibre > 2x entre groupes
-        counts = [g.get("sample_count", 0) for g in group_analyses]
-        if not counts:
-            return False
-
-        max_count = max(counts)
-        min_count = min(c for c in counts if c > 0)
-        return max_count / min_count > 2
+        return should_reweight(group_analyses)
 
     def _calculate_reweighting(self, group_analyses: list[dict[str, Any]]) -> dict[str, float]:
-        """Calcule les poids de reweighting par groupe."""
-        if not group_analyses:
-            return {}
+        """Delegate to refinement_helpers.calculate_reweighting."""
+        from scripts.agents.refinement_helpers import calculate_reweighting
 
-        # Calculer le poids inversement proportionnel à la taille
-        total = sum(g.get("sample_count", 1) for g in group_analyses)
-        n_groups = len(group_analyses)
-
-        weights = {}
-        for g in group_analyses:
-            name = g.get("group_name", "unknown")
-            count = g.get("sample_count", 1)
-            # Poids = (total / n_groups) / count
-            weights[name] = (total / n_groups) / count if count > 0 else 1.0
-
-        return weights
+        return calculate_reweighting(group_analyses)
 
     def refine_robustness(
         self,
@@ -212,9 +195,11 @@ class IterativeRefinement:
         """Raffine le modèle en cas d'échec robustness.
 
         Args:
+        ----
             report: Rapport de robustness
 
         Returns:
+        -------
             RefinementResult avec action et détails
         """
         noise_tolerance = report.get("noise_tolerance", 1.0)
@@ -258,45 +243,7 @@ class IterativeRefinement:
         train_fn: Any,
         max_iterations: int | None = None,
     ) -> list[RefinementResult]:
-        """Exécute une boucle de raffinement itératif.
+        """Delegate to refinement_helpers.run_refinement_loop."""
+        from scripts.agents.refinement_helpers import run_refinement_loop
 
-        Args:
-            validation_fn: Fonction de validation ISO
-            train_fn: Fonction d'entraînement
-            max_iterations: Nombre max d'itérations
-
-        Returns:
-            Liste des résultats de raffinement
-        """
-        iterations = max_iterations or self._max_iterations
-        results = []
-
-        for i in range(iterations):
-            logger.info(f"Refinement iteration {i + 1}/{iterations}")
-
-            # Valider
-            report = validation_fn()
-
-            # Raffiner fairness
-            fairness_result = self.refine_fairness(report.get("fairness", {}))
-            results.append(fairness_result)
-
-            if fairness_result.action == RefinementAction.NONE:
-                logger.info("Fairness compliant, checking robustness...")
-
-                robustness_result = self.refine_robustness(report.get("robustness", {}))
-                results.append(robustness_result)
-
-                if robustness_result.action == RefinementAction.NONE:
-                    logger.info("All validations passed!")
-                    break
-
-            if fairness_result.action == RefinementAction.BLOCK_DEPLOYMENT:
-                logger.error("Critical failure, stopping refinement")
-                break
-
-            if fairness_result.action in (RefinementAction.REWEIGHT, RefinementAction.RETRAIN):
-                logger.info(f"Applying {fairness_result.action.value}...")
-                # train_fn serait appelé ici avec les paramètres ajustés
-
-        return results
+        return run_refinement_loop(self, validation_fn, train_fn, max_iterations)

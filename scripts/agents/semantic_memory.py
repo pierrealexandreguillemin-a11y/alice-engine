@@ -89,6 +89,7 @@ class ISOSemanticMemory:
     au système ALICE, permettant une évaluation automatique de conformité.
 
     Example:
+    -------
         memory = ISOSemanticMemory()
         status = memory.evaluate_fairness(0.72)
         # Returns: ComplianceStatus.CAUTION
@@ -98,143 +99,10 @@ class ISOSemanticMemory:
     """
 
     def __init__(self) -> None:
-        """Initialise la mémoire sémantique avec les normes ISO."""
-        self._standards: dict[str, ISOStandard] = self._load_iso_knowledge()
+        """Initialise la memoire semantique avec les normes ISO."""
+        from scripts.agents.iso_knowledge import load_iso_knowledge
 
-    def _load_iso_knowledge(self) -> dict[str, ISOStandard]:
-        """Charge la base de connaissance ISO."""
-        return {
-            "fairness": ISOStandard(
-                code="ISO/IEC TR 24027:2021",
-                name="Bias in AI",
-                version="2021",
-                thresholds=[
-                    ISOThreshold(
-                        metric="demographic_parity_ratio",
-                        compliant=0.80,  # EEOC 80% rule
-                        caution=0.60,
-                        critical=0.50,
-                    ),
-                    ISOThreshold(
-                        metric="equalized_odds_ratio",
-                        compliant=0.80,
-                        caution=0.60,
-                        critical=0.50,
-                    ),
-                ],
-                mitigations=[
-                    MitigationStrategy(
-                        name="Reweighting",
-                        phase="pre-processing",
-                        description="Pondérer les échantillons pour équilibrer les groupes",
-                        effectiveness="high",
-                        implementation="from fairlearn.preprocessing import Reweighing",
-                    ),
-                    MitigationStrategy(
-                        name="Resampling",
-                        phase="pre-processing",
-                        description="Sur/sous-échantillonner les groupes désavantagés",
-                        effectiveness="medium",
-                        implementation="from imblearn.over_sampling import SMOTE",
-                    ),
-                    MitigationStrategy(
-                        name="Fairness Constraint",
-                        phase="in-processing",
-                        description="Ajouter contrainte d'équité à la fonction de perte",
-                        effectiveness="high",
-                        implementation="ThresholdOptimizer from fairlearn",
-                    ),
-                    MitigationStrategy(
-                        name="Threshold Adjustment",
-                        phase="post-processing",
-                        description="Ajuster les seuils de décision par groupe",
-                        effectiveness="medium",
-                        implementation="CalibratedEqualizedOdds from fairlearn",
-                    ),
-                ],
-                reference_url="https://www.iso.org/standard/77607.html",
-            ),
-            "robustness": ISOStandard(
-                code="ISO/IEC 24029:2021",
-                name="Neural Network Robustness",
-                version="2021/2023",
-                thresholds=[
-                    ISOThreshold(
-                        metric="noise_tolerance",
-                        compliant=0.95,
-                        caution=0.90,
-                        critical=0.85,
-                    ),
-                    ISOThreshold(
-                        metric="consistency_rate",
-                        compliant=0.95,
-                        caution=0.90,
-                        critical=0.85,
-                    ),
-                    ISOThreshold(
-                        metric="feature_dropout_resilience",
-                        compliant=0.90,
-                        caution=0.80,
-                        critical=0.70,
-                    ),
-                ],
-                mitigations=[
-                    MitigationStrategy(
-                        name="Data Augmentation",
-                        phase="pre-processing",
-                        description="Augmenter les données avec bruit contrôlé",
-                        effectiveness="high",
-                        implementation="Add Gaussian noise to numeric features",
-                    ),
-                    MitigationStrategy(
-                        name="Ensemble Methods",
-                        phase="in-processing",
-                        description="Utiliser des ensembles pour robustesse",
-                        effectiveness="high",
-                        implementation="AutoGluon WeightedEnsemble",
-                    ),
-                    MitigationStrategy(
-                        name="Adversarial Training",
-                        phase="in-processing",
-                        description="Entraîner sur exemples adversariaux",
-                        effectiveness="medium",
-                        implementation="adversarial_training module",
-                    ),
-                ],
-                reference_url="https://www.iso.org/standard/77609.html",
-            ),
-            "impact": ISOStandard(
-                code="ISO/IEC 42005:2025",
-                name="AI Impact Assessment",
-                version="2025",
-                thresholds=[
-                    ISOThreshold(
-                        metric="risk_level",
-                        compliant=1.0,  # LOW
-                        caution=2.0,  # MEDIUM
-                        critical=3.0,  # HIGH
-                        direction="lower_is_better",
-                    ),
-                ],
-                mitigations=[
-                    MitigationStrategy(
-                        name="Human-in-the-loop",
-                        phase="post-processing",
-                        description="Maintenir supervision humaine sur décisions",
-                        effectiveness="high",
-                        implementation="Advisory-only predictions, human final decision",
-                    ),
-                    MitigationStrategy(
-                        name="Drift Monitoring",
-                        phase="post-processing",
-                        description="Surveiller la dérive des données et performances",
-                        effectiveness="medium",
-                        implementation="PSI monitoring with alerting",
-                    ),
-                ],
-                reference_url="https://www.iso.org/standard/81283.html",
-            ),
-        }
+        self._standards: dict[str, ISOStandard] = load_iso_knowledge()
 
     def evaluate_fairness(self, demographic_parity: float) -> ComplianceStatus:
         """Évalue la conformité fairness."""
@@ -271,12 +139,14 @@ class ISOSemanticMemory:
         """Génère un rapport de conformité complet.
 
         Args:
+        ----
             metrics: Dict avec les métriques ISO
                 - demographic_parity_ratio
                 - noise_tolerance
                 - consistency_rate
 
         Returns:
+        -------
             Rapport de conformité avec statuts et recommandations
         """
         report: dict[str, Any] = {"standards": {}, "overall_status": "COMPLIANT"}

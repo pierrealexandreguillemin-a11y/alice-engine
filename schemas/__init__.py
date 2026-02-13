@@ -5,8 +5,7 @@ ISO Compliance:
 - ISO/IEC 42001:2023 - AI Management System
 """
 
-from schemas.training_schemas import (
-    # FFE Regulatory Constants
+from schemas.training_constants import (
     AGE_CATEGORIES,
     COMPETITION_TYPES,
     ECHIQUIER_JEUNES_HIGH_BOARDS,
@@ -34,17 +33,21 @@ from schemas.training_schemas import (
     VALID_RESULT_SUMS,
     VALID_RESULT_TYPES,
     VALID_ZONES_ENJEU,
-    # ISO 5259 Data Quality Structures
+)
+from schemas.training_schemas import (
+    TrainingSchemaPermissive,
+    TrainingSchemaStrict,
+    create_training_schema,
+)
+from schemas.training_types import (
     DataLineage,
     ErrorSeverity,
     QualityMetrics,
-    TrainingSchemaPermissive,
-    TrainingSchemaStrict,
     ValidationError,
     ValidationReport,
-    # Validation Functions
+)
+from schemas.training_validation import (
     compute_quality_summary,
-    create_training_schema,
     get_expected_score_range,
     is_valid_niveau_for_elo,
     validate_training_data,
