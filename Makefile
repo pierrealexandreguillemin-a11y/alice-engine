@@ -6,6 +6,7 @@
 .PHONY: complexity quality graphs iso-docs architecture all dev clean
 .PHONY: iso-audit train evaluate ensemble features parse-data
 .PHONY: model-card drift-report data-lineage ml-pipeline all-iso validate-iso
+.PHONY: sync refresh-data
 
 # Variables
 PYTHON := python
@@ -197,6 +198,18 @@ validate-iso:
 # ============================================
 # ML LIFECYCLE (ISO 42001, 5259, 25059)
 # ============================================
+sync:                              ## Sync data from ffe_scrapper
+	@echo "Syncing data (ISO 5259)..."
+	$(PYTHON) -m scripts.sync_data
+	@echo ""
+	@echo "Sync complete"
+
+refresh-data: sync parse-data features  ## Full data refresh: sync + parse + features
+	@echo ""
+	@echo "============================================"
+	@echo "  DATA REFRESH COMPLETE (ISO 5259)"
+	@echo "============================================"
+
 parse-data:
 	@echo "Parsing dataset FFE (ISO 5259)..."
 	$(PYTHON) -m scripts.parse_dataset
