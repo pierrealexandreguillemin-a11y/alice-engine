@@ -11,14 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, DirectoryPath, Field
 
 
 class SyncConfig(BaseModel):
     """Validated CLI configuration for sync operations."""
 
     source: Literal["local", "hf"] = "local"
-    source_dir: Path | None = None
+    source_dir: DirectoryPath | None = None
     push: bool = False
     dry_run: bool = False
     hf_repo_id: str = Field(

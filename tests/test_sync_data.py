@@ -2,7 +2,7 @@
 
 Document ID: ALICE-TEST-SYNC-DATA
 Version: 1.0.0
-Tests: 12
+Tests: 15
 
 Classes:
 - TestSourceCheck: Tests check_source (3 tests)
@@ -117,6 +117,23 @@ class TestSymlink:
         assert len(calls) == 1
         assert calls[0] == new_target.resolve()
 
+    def test_target_not_directory_raises(self, tmp_path):
+        """Test ValueError when target is a file, not a directory."""
+        target = tmp_path / "file.txt"
+        target.write_text("not a dir")
+        link = tmp_path / "link"
+        with pytest.raises(ValueError, match="not a directory"):
+            update_symlink(target, link)
+
+    def test_link_exists_not_symlink_raises(self, tmp_path):
+        """Test ValueError when link path is a regular file."""
+        target = tmp_path / "target"
+        target.mkdir()
+        link = tmp_path / "link"
+        link.write_text("regular file")
+        with pytest.raises(ValueError, match="not a symlink"):
+            update_symlink(target, link)
+
     def test_fallback_config_file(self, tmp_path, monkeypatch):
         target = tmp_path / "target"
         target.mkdir()
@@ -149,6 +166,13 @@ class TestHuggingFace:
         mock_api_class.return_value = mock_api
         push_to_hf(tmp_path, "Pierrax/ffe-history")
         assert mock_api.upload_file.call_count == 2
+
+    @patch("scripts.sync_data.huggingface.hf_hub_download")
+    def test_pull_network_error_propagates(self, mock_download, tmp_path):
+        """Test network failure propagates from pull."""
+        mock_download.side_effect = ConnectionError("Network unreachable")
+        with pytest.raises(ConnectionError, match="Network unreachable"):
+            pull_from_hf("Pierrax/ffe-history", tmp_path)
 
     @patch("scripts.sync_data.huggingface.HfApi")
     def test_push_missing_token_raises(self, mock_api_class, tmp_path):
