@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -32,16 +34,33 @@ def update_symlink(target: Path, link: Path) -> None:
         _write_data_source_fallback(target, link)
 
 
+def _is_link_or_junction(path: Path) -> bool:
+    """Check if path is a symlink or NTFS junction."""
+    return path.is_symlink() or path.is_junction()
+
+
 def _create_symlink(target: Path, link: Path) -> None:
-    """Create or replace a directory symlink."""
-    if link.is_symlink() or link.exists():
-        if link.is_symlink():
+    """Create or replace a directory symlink or junction."""
+    if _is_link_or_junction(link) or link.exists():
+        if _is_link_or_junction(link):
             link.unlink()
         else:
             msg = f"Path exists and is not a symlink: {link}"
             raise ValueError(msg)
 
-    os.symlink(target, link, target_is_directory=True)
+    if sys.platform == "win32":
+        _create_junction(target, link)
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def _create_junction(target: Path, link: Path) -> None:
+    """Create NTFS junction (no admin rights needed on Windows)."""
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        check=True,
+        capture_output=True,
+    )
 
 
 def _write_data_source_fallback(target: Path, link: Path) -> None:

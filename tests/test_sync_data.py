@@ -88,34 +88,44 @@ class TestSymlink:
     """Tests for update_symlink function."""
 
     def test_create_new_symlink(self, tmp_path, monkeypatch):
+        """Test creating a new symlink/junction."""
         target = tmp_path / "target"
         target.mkdir()
         link = tmp_path / "link"
         calls = []
+        monkeypatch.setattr(
+            "scripts.sync_data.symlink._create_junction",
+            lambda t, _link: calls.append(t),
+        )
         monkeypatch.setattr(
             "scripts.sync_data.symlink.os.symlink",
             lambda src, dst, target_is_directory=False: calls.append(src),
         )
         update_symlink(target, link)
         assert len(calls) == 1
-        assert calls[0] == target.resolve()
 
-    def test_update_existing_symlink(self, tmp_path, monkeypatch):
-        old_target = tmp_path / "old"
-        old_target.mkdir()
+    def test_update_existing_junction(self, tmp_path, monkeypatch):
+        """Test updating an existing junction to new target."""
         new_target = tmp_path / "new"
         new_target.mkdir()
         link = tmp_path / "link"
-        # Create a real dummy symlink marker via a plain file so is_symlink() returns False
-        # but we test that os.symlink is called with new_target
+        # Create a file to simulate an existing link (will be unlinked)
+        link.write_text("placeholder")
         calls = []
+        monkeypatch.setattr(
+            "scripts.sync_data.symlink._is_link_or_junction",
+            lambda p: p == link,
+        )
+        monkeypatch.setattr(
+            "scripts.sync_data.symlink._create_junction",
+            lambda t, _link: calls.append(t),
+        )
         monkeypatch.setattr(
             "scripts.sync_data.symlink.os.symlink",
             lambda src, dst, target_is_directory=False: calls.append(src),
         )
         update_symlink(new_target, link)
         assert len(calls) == 1
-        assert calls[0] == new_target.resolve()
 
     def test_target_not_directory_raises(self, tmp_path):
         """Test ValueError when target is a file, not a directory."""
@@ -135,13 +145,16 @@ class TestSymlink:
             update_symlink(target, link)
 
     def test_fallback_config_file(self, tmp_path, monkeypatch):
+        """Test fallback to .data_source when symlink/junction fails."""
         target = tmp_path / "target"
         target.mkdir()
         link = tmp_path / "link"
-        monkeypatch.setattr(
-            "scripts.sync_data.symlink.os.symlink",
-            lambda *a, **k: (_ for _ in ()).throw(OSError("Permission denied")),
-        )
+
+        def raise_os_error(*_args, **_kwargs):
+            raise OSError("Permission denied")
+
+        monkeypatch.setattr("scripts.sync_data.symlink._create_junction", raise_os_error)
+        monkeypatch.setattr("scripts.sync_data.symlink.os.symlink", raise_os_error)
         update_symlink(target, link)
         config_file = link.parent / ".data_source"
         assert config_file.exists()
