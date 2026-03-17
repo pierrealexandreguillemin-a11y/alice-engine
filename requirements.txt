@@ -51,6 +51,12 @@ pandera>=0.20.0            # DataFrame schema validation (ISO 5259)
 motor>=3.3.0
 
 # ============================================
+# HuggingFace (dataset sync - ISO 5259)
+# ============================================
+datasets>=2.16.0
+huggingface_hub>=0.20.0
+
+# ============================================
 # Parsing HTML (dataset FFE)
 # ============================================
 beautifulsoup4>=4.12.0

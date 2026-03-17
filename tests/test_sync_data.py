@@ -19,8 +19,12 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from scripts.sync_data.freshness import check_freshness, check_source
+from scripts.sync_data.huggingface import pull_from_hf, push_to_hf
 from scripts.sync_data.symlink import update_symlink
 
 
@@ -125,3 +129,33 @@ class TestSymlink:
         config_file = link.parent / ".data_source"
         assert config_file.exists()
         assert config_file.read_text().strip() == str(target.resolve())
+
+
+class TestHuggingFace:
+    """Tests for pull_from_hf and push_to_hf functions."""
+
+    @patch("scripts.sync_data.huggingface.shutil.copy2")
+    @patch("scripts.sync_data.huggingface.hf_hub_download")
+    def test_pull_downloads_parquets(self, mock_download, mock_copy, tmp_path):
+        mock_download.return_value = str(tmp_path / "file.parquet")
+        pull_from_hf("Pierrax/ffe-history", tmp_path)
+        assert mock_download.call_count == 2
+
+    @patch("scripts.sync_data.huggingface.HfApi")
+    def test_push_uploads_parquets(self, mock_api_class, tmp_path):
+        (tmp_path / "echiquiers.parquet").write_text("data")
+        (tmp_path / "joueurs.parquet").write_text("data")
+        mock_api = MagicMock()
+        mock_api_class.return_value = mock_api
+        push_to_hf(tmp_path, "Pierrax/ffe-history")
+        assert mock_api.upload_file.call_count == 2
+
+    @patch("scripts.sync_data.huggingface.HfApi")
+    def test_push_missing_token_raises(self, mock_api_class, tmp_path):
+        (tmp_path / "echiquiers.parquet").write_text("data")
+        (tmp_path / "joueurs.parquet").write_text("data")
+        mock_api = MagicMock()
+        mock_api.upload_file.side_effect = Exception("Invalid token")
+        mock_api_class.return_value = mock_api
+        with pytest.raises(Exception, match="Invalid token"):
+            push_to_hf(tmp_path, "Pierrax/ffe-history")
