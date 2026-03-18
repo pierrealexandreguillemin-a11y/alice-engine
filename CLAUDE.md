@@ -115,6 +115,18 @@ scripts/
 ├── comparison/             # Tests statistiques (ISO 24029)
 │   ├── mcnemar_test.py     # Test McNemar 5x2cv
 │   └── run_mcnemar.py      # Runner Phase 4.4 (<50 lignes)
+├── cloud/                  # Training cloud Kaggle (Phase B2)
+│   ├── train_kaggle.py     # Script auto-contenu Kaggle (single-file)
+│   ├── promote_model.py    # Promotion locale ISO 24029/24027/McNemar
+│   ├── upload_features.py  # Upload features → Kaggle Dataset
+│   └── kernel-metadata.json # Config Kaggle API headless
+├── sync_data/              # Sync données FFE (Phase B1)
+│   ├── freshness.py        # Vérification fraîcheur données
+│   ├── symlink.py          # Gestion symlink/junction Windows
+│   ├── huggingface.py      # Pull/push HuggingFace Hub
+│   └── types.py            # Pydantic models (SyncConfig, etc.)
+├── parse_dataset/          # Parsing HTML → Parquet
+│   └── __main__.py         # Entry point + validation ISO 5259
 └── reports/                # Rapports ISO
     └── generate_iso25059.py # Rapport final ISO 25059 (<50 lignes)
 ```
@@ -159,19 +171,33 @@ docs/iso/IMPLEMENTATION_STATUS.md
 ## Commandes
 
 ```bash
-make install    # Installer dépendances
-make hooks      # Installer git hooks
-make quality    # Lint + Format + Typecheck + Security
-make test-cov   # Tests + coverage
-make all        # Validation complète
-make graphs     # Générer graphs SVG
-make iso-docs   # MAJ documentation ISO
+make install       # Installer dépendances
+make hooks         # Installer git hooks
+make quality       # Lint + Format + Typecheck + Security
+make test-cov      # Tests + coverage
+make all           # Validation complète
+make graphs        # Générer graphs SVG
+make iso-docs      # MAJ documentation ISO
+make sync          # Sync données depuis ffe_scrapper
+make refresh-data  # Sync + parse + validate ISO 5259 + features (pipeline complet)
+```
+
+### Training cloud (Kaggle)
+```bash
+python -m scripts.cloud.upload_features    # Upload features → Kaggle Dataset (one-time)
+kaggle kernels push -p scripts/cloud/      # Lancer training sur Kaggle (headless)
+kaggle kernels status pierrax/alice-training  # Vérifier statut
+python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion ISO locale
 ```
 
 ## Documentation
 
 - `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
 - `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
+- `docs/superpowers/specs/2026-03-17-data-refresh-pipeline-design.md` - Spec data refresh
+- `docs/superpowers/specs/2026-03-18-kaggle-cloud-training-design.md` - Spec Kaggle training
+- `docs/superpowers/plans/2026-03-17-data-refresh-pipeline.md` - Plan data refresh
+- `docs/superpowers/plans/2026-03-18-kaggle-cloud-training.md` - Plan Kaggle training
 
 ## Contraintes Training
 
