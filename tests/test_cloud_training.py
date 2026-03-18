@@ -67,16 +67,14 @@ def mock_results() -> dict:
 @pytest.fixture()
 def mock_lineage() -> dict:
     """Fake lineage dict."""
-    # fmt: off
     return {
-        "train_path": "/data/train.parquet", "valid_path": "/data/valid.parquet",
-        "test_path": "/data/test.parquet", "train_samples": 800, "valid_samples": 100,
-        "test_samples": 100, "train_hash": "abc123", "valid_hash": "def456",
-        "test_hash": "ghi789", "feature_count": 10,
+        "train": {"path": "/data/train.parquet", "samples": 800, "hash": "abc123"},
+        "valid": {"path": "/data/valid.parquet", "samples": 100, "hash": "def456"},
+        "test": {"path": "/data/test.parquet", "samples": 100, "hash": "ghi789"},
+        "feature_count": 10,
         "target_distribution": {"positive_ratio": 0.5, "total_samples": 800},
         "created_at": "2026-03-18T12:00:00+00:00",
     }
-    # fmt: on
 
 
 class TestComputeHash:
@@ -102,25 +100,19 @@ class TestBuildLineage:
     """Tests ISO 5259 lineage -- 2 tests."""
 
     def test_lineage_has_all_fields(self, small_df: pd.DataFrame, tmp_path: Path) -> None:
-        """Lineage dict must contain all required ISO 5259 fields."""
+        """Lineage dict must match production nested format."""
         lineage = build_lineage(small_df, small_df, small_df, tmp_path)
-        required = [
-            "train_path",
-            "valid_path",
-            "test_path",
-            "train_hash",
-            "valid_hash",
-            "test_hash",
-            "train_samples",
-            "valid_samples",
-            "test_samples",
-            "feature_count",
-            "target_distribution",
-            "created_at",
-        ]
-        for field in required:
-            assert field in lineage, f"Missing field: {field}"
-        assert lineage["train_samples"] == len(small_df)
+        # Nested split entries (matching production metadata.json)
+        for split in ("train", "valid", "test"):
+            assert split in lineage, f"Missing split: {split}"
+            assert "path" in lineage[split]
+            assert "samples" in lineage[split]
+            assert "hash" in lineage[split]
+        assert lineage["train"]["samples"] == len(small_df)
+        # Top-level fields
+        assert "feature_count" in lineage
+        assert "target_distribution" in lineage
+        assert "created_at" in lineage
         assert "positive_ratio" in lineage["target_distribution"]
 
     def test_lineage_feature_count_excludes_target(

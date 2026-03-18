@@ -45,27 +45,41 @@ def compute_dataframe_hash(df: pd.DataFrame) -> str:
 def build_lineage(
     train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFrame, data_dir: Path
 ) -> dict:
-    """ISO 5259 data lineage tracking."""
-    # fmt: off
+    """ISO 5259 data lineage. Nested format matching production metadata.json."""
     return {
-        "train_path": str(data_dir / "train.parquet"), "valid_path": str(data_dir / "valid.parquet"),
-        "test_path": str(data_dir / "test.parquet"),
-        "train_samples": len(train), "valid_samples": len(valid), "test_samples": len(test),
-        "train_hash": compute_dataframe_hash(train), "valid_hash": compute_dataframe_hash(valid),
-        "test_hash": compute_dataframe_hash(test), "feature_count": len(train.columns) - 1,
-        "target_distribution": {"positive_ratio": float((train[LABEL_COLUMN] == 1.0).mean()), "total_samples": len(train)},
+        "train": {
+            "path": str(data_dir / "train.parquet"),
+            "samples": len(train),
+            "hash": compute_dataframe_hash(train),
+        },
+        "valid": {
+            "path": str(data_dir / "valid.parquet"),
+            "samples": len(valid),
+            "hash": compute_dataframe_hash(valid),
+        },
+        "test": {
+            "path": str(data_dir / "test.parquet"),
+            "samples": len(test),
+            "hash": compute_dataframe_hash(test),
+        },
+        "feature_count": len(train.columns) - 1,
+        "target_distribution": {
+            "positive_ratio": float((train[LABEL_COLUMN] == 1.0).mean()),
+            "total_samples": len(train),
+        },
         "created_at": datetime.now(tz=UTC).isoformat(),
     }
-    # fmt: on
 
 
-def prepare_features(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFrame) -> tuple:
-    """Label-encode ALL categoricals, select only numeric columns for X/y split."""
+def _encode_categoricals(
+    splits: list[pd.DataFrame],
+) -> dict:
+    """Label-encode all categorical columns across splits. Fit on first split."""
     from sklearn.preprocessing import LabelEncoder
 
     all_cat_cols = sorted(set(CATEGORICAL_FEATURES) | set(CATBOOST_CAT_FEATURES))
     encoders: dict = {}
-    for split in [train, valid, test]:
+    for split in splits:
         for col in all_cat_cols:
             if col not in split.columns:
                 continue
@@ -75,17 +89,25 @@ def prepare_features(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFram
                 encoders[col] = enc
             else:
                 split[col] = encoders[col].transform(split[col].astype(str))
-    y_train = (train[LABEL_COLUMN] >= 1.0).astype(int)
-    y_valid = (valid[LABEL_COLUMN] >= 1.0).astype(int)
-    y_test = (test[LABEL_COLUMN] >= 1.0).astype(int)
+    return encoders
+
+
+def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Extract X and y, dropping target + string columns."""
+    y = (df[LABEL_COLUMN] == 1.0).astype(int)
     drop_cols = [LABEL_COLUMN, "resultat_noir", "resultat_text"]
-    X_train = train.drop(columns=[c for c in drop_cols if c in train.columns])
-    X_valid = valid.drop(columns=[c for c in drop_cols if c in valid.columns])
-    X_test = test.drop(columns=[c for c in drop_cols if c in test.columns])
-    # C1: Drop all remaining string/object columns — XGBoost/LightGBM require numeric
-    for X in [X_train, X_valid, X_test]:
-        obj_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
-        X.drop(columns=obj_cols, inplace=True)  # noqa: PD002
+    X = df.drop(columns=[c for c in drop_cols if c in df.columns])
+    obj_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+    X = X.drop(columns=obj_cols)
+    return X, y
+
+
+def prepare_features(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFrame) -> tuple:
+    """Label-encode categoricals, split X/y, drop remaining strings."""
+    encoders = _encode_categoricals([train, valid, test])
+    X_train, y_train = _split_xy(train)
+    X_valid, y_valid = _split_xy(valid)
+    X_test, y_test = _split_xy(test)
     return X_train, y_train, X_valid, y_valid, X_test, y_test, encoders
 
 
