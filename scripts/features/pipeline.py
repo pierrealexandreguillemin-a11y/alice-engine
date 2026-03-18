@@ -21,6 +21,7 @@ from scripts.features.advanced import (
     calculate_head_to_head,
     calculate_pressure_performance,
 )
+from scripts.features.composition import extract_composition_strategy
 from scripts.features.ffe_features import extract_ffe_regulatory_features
 from scripts.features.merge_helpers import (
     merge_club_reliability,
@@ -71,15 +72,37 @@ def extract_all_features(
     }
 
     if include_advanced:
+        # Composition strategy (A02 Art. 3.6.e)
+        compo_raw = extract_composition_strategy(df_history_played)
+        compo_agg = _aggregate_composition(compo_raw)
+
         features.update(
             {
                 "h2h": calculate_head_to_head(df_history_played),
                 "pressure": calculate_pressure_performance(df_history_played),
                 "trajectory": calculate_elo_trajectory(df_history_played),
+                "composition": compo_agg,
             }
         )
 
     return features
+
+
+def _aggregate_composition(compo_raw: pd.DataFrame) -> pd.DataFrame:
+    """Agrège les features composition par joueur (moyenne historique)."""
+    if compo_raw.empty:
+        return pd.DataFrame(
+            columns=["nom", "decalage_position", "joueur_decale_haut", "joueur_decale_bas"]
+        )
+    return (
+        compo_raw.groupby("nom")
+        .agg(
+            decalage_position=("decalage_position", "mean"),
+            joueur_decale_haut=("joueur_decale_haut", "mean"),
+            joueur_decale_bas=("joueur_decale_bas", "mean"),
+        )
+        .reset_index()
+    )
 
 
 def merge_all_features(
@@ -142,5 +165,10 @@ def merge_all_features(
             ["clutch_factor", "pressure_type"],
         )
         result = merge_h2h_features(result, features.get("h2h", pd.DataFrame()))
+        result = merge_player_features(
+            result,
+            features.get("composition", pd.DataFrame()),
+            ["decalage_position", "joueur_decale_haut", "joueur_decale_bas"],
+        )
 
     return result

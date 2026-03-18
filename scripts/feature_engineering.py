@@ -110,8 +110,26 @@ def compute_features_for_split(
     # Merge features onto split
     result = merge_all_features(df_split.copy(), features, include_advanced)
 
+    # Direct features (no history needed, computed per-row)
+    _add_direct_features(result)
+
     logger.info(f"  {split_name}: {len(result):,} samples, {len(result.columns)} features")
     return result
+
+
+def _add_direct_features(result: pd.DataFrame) -> None:
+    """Add features computed directly from the row (no history needed)."""
+    from scripts.features.composition import extract_home_feature, extract_title_features
+
+    # Titre FIDE numérique + diff_titre
+    title_feats = extract_title_features(result)
+    for col in title_feats.columns:
+        result[col] = title_feats[col]
+
+    # Domicile blanc
+    home_feat = extract_home_feature(result)
+    for col in home_feat.columns:
+        result[col] = home_feat[col]
 
 
 def run_feature_engineering_v2(
