@@ -390,11 +390,31 @@ def save_models(results: dict, encoders: dict, out_dir: Path) -> None:
     joblib.dump(encoders, out_dir / "encoders.joblib")
 
 
+def _get_hf_token() -> str | None:
+    """Get HF token from Kaggle Secrets, env var, or HF cache."""
+    # 1. Kaggle Secrets (preferred on Kaggle)
+    try:
+        from kaggle_secrets import UserSecretsClient  # noqa: PLC0415
+
+        return UserSecretsClient().get_secret("HF_TOKEN")
+    except Exception:  # noqa: BLE001, S110
+        logger.debug("Kaggle Secrets not available")
+    # 2. Environment variable
+    token = os.environ.get("HF_TOKEN")
+    if token:
+        return token
+    # 3. HuggingFace cache (local dev)
+    cache = Path.home() / ".cache" / "huggingface" / "token"
+    if cache.exists():
+        return cache.read_text().strip()
+    return None
+
+
 def save_metadata_and_push(metadata: dict, out_dir: Path) -> None:
     """Save metadata.json and optionally push to HF Hub."""
     import json  # noqa: PLC0415
 
-    token = os.environ.get("HF_TOKEN")
+    token = _get_hf_token()
     with open(out_dir / "metadata.json", "w") as fh:
         json.dump(metadata, fh, indent=2, default=str)
     if token:
@@ -410,12 +430,31 @@ def save_metadata_and_push(metadata: dict, out_dir: Path) -> None:
         logger.warning("HF_TOKEN not set — skipping HF Hub push.")
 
 
+def _find_parquet(data_dir: Path, name: str) -> Path:
+    """Find parquet file in data_dir or its subdirectories."""
+    direct = data_dir / name
+    if direct.exists():
+        return direct
+    # Kaggle zip datasets may nest files in a subdirectory
+    found = list(data_dir.rglob(name))
+    if found:
+        return found[0]
+    msg = f"{name} not found in {data_dir}. Contents: {list(data_dir.rglob('*'))[:10]}"
+    raise FileNotFoundError(msg)
+
+
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
     logger.info("ALICE Engine — Kaggle Cloud Training")
-    train = pd.read_parquet(DATA_DIR / "train.parquet")
-    valid = pd.read_parquet(DATA_DIR / "valid.parquet")
-    test = pd.read_parquet(DATA_DIR / "test.parquet")
+    logger.info(
+        "DATA_DIR=%s exists=%s contents=%s",
+        DATA_DIR,
+        DATA_DIR.exists(),
+        list(DATA_DIR.iterdir()) if DATA_DIR.exists() else [],
+    )
+    train = pd.read_parquet(_find_parquet(DATA_DIR, "train.parquet"))
+    valid = pd.read_parquet(_find_parquet(DATA_DIR, "valid.parquet"))
+    test = pd.read_parquet(_find_parquet(DATA_DIR, "test.parquet"))
     lineage = build_lineage(train, valid, test, DATA_DIR)
     logger.info("Lineage: train=%d valid=%d test=%d", len(train), len(valid), len(test))
     X_train, y_train, X_valid, y_valid, X_test, y_test, encoders = prepare_features(
