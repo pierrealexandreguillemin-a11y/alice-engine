@@ -74,31 +74,33 @@ def build_lineage(
 def _encode_categoricals(
     splits: list[pd.DataFrame],
 ) -> dict:
-    """Label-encode all categorical columns across splits. Fit on first split."""
+    """Label-encode all categorical columns. Fit on ALL splits combined to handle unseen labels."""
     from sklearn.preprocessing import LabelEncoder
 
     all_cat_cols = sorted(set(CATEGORICAL_FEATURES) | set(CATBOOST_CAT_FEATURES))
     encoders: dict = {}
-    for split in splits:
-        for col in all_cat_cols:
-            if col not in split.columns:
-                continue
-            if col not in encoders:
-                enc = LabelEncoder()
-                split[col] = enc.fit_transform(split[col].astype(str))
-                encoders[col] = enc
-            else:
-                split[col] = encoders[col].transform(split[col].astype(str))
+    for col in all_cat_cols:
+        if col not in splits[0].columns:
+            continue
+        enc = LabelEncoder()
+        # Fit on union of all splits to avoid unseen label errors
+        all_values = pd.concat([s[col].astype(str) for s in splits], ignore_index=True)
+        enc.fit(all_values)
+        for split in splits:
+            split[col] = enc.transform(split[col].astype(str))
+        encoders[col] = enc
     return encoders
 
 
 def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Extract X and y, dropping target + string columns."""
+    """Extract X and y, keeping only numeric columns (int, float)."""
     y = (df[LABEL_COLUMN] == 1.0).astype(int)
-    drop_cols = [LABEL_COLUMN, "resultat_noir", "resultat_text"]
-    X = df.drop(columns=[c for c in drop_cols if c in df.columns])
-    obj_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
-    X = X.drop(columns=obj_cols)
+    # Keep ONLY int/float columns — drops strings, datetime, bool
+    X = df.select_dtypes(include=["int64", "int32", "float64", "float32"])
+    # Drop target if still present
+    for col in (LABEL_COLUMN, "resultat_noir"):
+        if col in X.columns:
+            X = X.drop(columns=[col])
     return X, y
 
 
