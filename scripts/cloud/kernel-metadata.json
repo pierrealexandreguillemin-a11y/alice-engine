@@ -1,0 +1,13 @@
+{
+  "id": "pierrax/alice-training",
+  "title": "ALICE Engine Training (ISO 42001)",
+  "code_file": "train_kaggle.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["pierrax/alice-features"],
+  "competition_sources": [],
+  "kernel_sources": []
+}
