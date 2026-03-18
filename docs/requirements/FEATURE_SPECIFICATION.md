@@ -22,9 +22,18 @@
 | **Classement reel** | feature_engineering.py | ✅ Implementé | ✅ 14 tests |
 | **Zone enjeu reelle** | feature_engineering.py | ✅ Implementé | ✅ 14 tests |
 | **Regles FFE (brulage/noyau)** | ffe_rules_features.py | ✅ Implementé | ✅ 66 tests |
-| **Presence joueur (ALI)** | - | ❌ Planifie | - |
-| **Comportement club (ALI)** | - | ❌ Planifie | - |
-| **Scenario fin saison (CE)** | - | ❌ Planifie | - |
+| **Presence joueur (ALI)** | features/ali/presence.py | ✅ Code | ❌ Pas branche |
+| **Patterns selection (ALI)** | features/ali/patterns.py | ✅ Code | ❌ Pas branche |
+| **Scenario fin saison (CE)** | features/ce/scenarios.py | ✅ Code | ❌ Pas branche |
+| **Transferabilite (CE)** | features/ce/transferability.py | ✅ Code | ❌ Pas branche |
+| **Titre FIDE numerique** | features/composition.py | ✅ Implemente | ⚠️ A brancher |
+| **Avantage domicile** | features/composition.py | ✅ Implemente | ⚠️ A brancher |
+| **Strategie 100 pts** | features/composition.py | ✅ Implemente | ⚠️ A brancher |
+| **Categorie age / K-coeff** | - | ❌ A implementer | - |
+| **Noyau equipe (A02 3.7.f)** | - | ❌ A implementer | - |
+| **Stabilite effectif club** | - | ❌ A implementer | - |
+| **Phase saison / temporel** | - | ❌ A implementer | - |
+| **Classement adverse actuel** | - | ❌ A implementer | - |
 
 **Legende**: ✅ = OK | ⚠️ = Tests a ajouter | ❌ = Non implemente
 
@@ -504,7 +513,71 @@ Sortie:
 
 ---
 
-## 14. Impact Inconnu (A Investiguer)
+## 14. Features Strategie de Composition (NOUVELLES - Mars 2026)
+
+> Decouvertes lors de l'analyse des reglements FFE (A02 Art. 3.6.e)
+> et de l'audit des features pour prediction par echiquier.
+
+### 14.1 Regle des 100 Points (A02 Art. 3.6.e)
+
+**Contexte reglementaire** : "Si deux membres d'une equipe ont une difference
+de classement Elo de plus de 100 points, le mieux classe doit etre place
+devant le moins bien classe."
+
+Les capitaines exploitent la marge < 100 pts pour decaler des joueurs
+et modifier les confrontations (strategie offensive/defensive).
+
+| Feature | Type | Plage | Description |
+|---------|------|-------|-------------|
+| `decalage_position` | float | [-7, 7] | Diff position reelle vs position naturelle Elo |
+| `joueur_decale_haut` | float | [0, 1] | Ratio historique: joueur place plus haut que son Elo |
+| `joueur_decale_bas` | float | [0, 1] | Ratio historique: joueur place plus bas (protege) |
+| `club_utilise_marge_100` | float | [0, 1] | Ratio compositions ou le club exploite la marge |
+
+**Module**: `scripts/features/composition.py` (IMPLEMENTE)
+
+**Signal attendu**: Fort — decision strategique du capitaine, influence
+directe sur les confrontations.
+
+### 14.2 Titre FIDE Numerique
+
+**Contexte** : Un GM a 2400 et un sans-titre a 2400 ne jouent pas pareil.
+Pression psychologique quand on affronte un titre.
+
+| Feature | Type | Plage | Description |
+|---------|------|-------|-------------|
+| `blanc_titre_num` | int | [0, 5] | GM=5, IM=4, FM=3, CM=2, WGM=4, WIM=3, WFM=2, ""=0 |
+| `noir_titre_num` | int | [0, 5] | Idem pour noir |
+| `diff_titre` | int | [-5, 5] | Avantage de titre blanc - noir |
+
+**Module**: `scripts/features/composition.py` (IMPLEMENTE)
+
+### 14.3 Avantage Domicile
+
+**Contexte** : L'equipe domicile choisit la salle, connait le lieu,
+pas de fatigue de voyage. Convention couleurs: echiquiers impairs = blancs dom.
+
+| Feature | Type | Plage | Description |
+|---------|------|-------|-------------|
+| `est_domicile_blanc` | int | {0, 1} | Le joueur blanc est-il de l'equipe domicile |
+| `avantage_dom_club` | float | [0, 1] | Taux victoire historique du club a domicile |
+
+**Module**: `scripts/features/composition.py` (IMPLEMENTE PARTIELLEMENT)
+
+### 14.4 Classement Adverse Actuel
+
+| Feature | Type | Plage | Description |
+|---------|------|-------|-------------|
+| `adversaire_niveau_actuel` | int | [1, 20] | Position actuelle de l'adversaire au classement |
+
+**Signal**: Fort — un match contre le 1er du classement n'a pas le
+meme enjeu qu'un match contre le dernier.
+
+**Module**: A implementer (enrichissement depuis standings)
+
+---
+
+## 15. Impact Inconnu (A Investiguer)
 
 ### 14.1 Age sur prediction
 
@@ -542,9 +615,10 @@ Sortie:
 | Version | Date | Changement |
 |---------|------|------------|
 | 1.0.0 | 2026-01-08 | Creation initiale |
+| 1.2.0 | 2026-03-19 | Ajout features composition: strategie 100pts, titre FIDE, domicile, classement adverse. MAJ statut implementation (9 modules codes non branches). Total cible: ~97 features. |
 
 ---
 
-*Document genere le 8 Janvier 2026*
+*Mis a jour le 19 Mars 2026*
 *Conforme ISO/IEC 5259 (Data Quality for ML)*
-*Source: FIDE Chapitre 6.1 (Oct 2025) + FFE 2025-2026*
+*Source: FIDE Chapitre 6.1 (Oct 2025) + FFE 2025-2026 (A02, R01, J02)*
