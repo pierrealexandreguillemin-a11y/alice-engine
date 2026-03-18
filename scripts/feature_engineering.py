@@ -113,6 +113,9 @@ def compute_features_for_split(
     # Direct features (no history needed, computed per-row)
     _add_direct_features(result)
 
+    # Temporal + adversaire features
+    _add_contextual_features(result, df_history_played)
+
     logger.info(f"  {split_name}: {len(result):,} samples, {len(result.columns)} features")
     return result
 
@@ -130,6 +133,19 @@ def _add_direct_features(result: pd.DataFrame) -> None:
     home_feat = extract_home_feature(result)
     for col in home_feat.columns:
         result[col] = home_feat[col]
+
+
+def _add_contextual_features(result: pd.DataFrame, df_history_played: pd.DataFrame) -> None:
+    """Add temporal and adversaire features."""
+    from scripts.features.pipeline_extended import (
+        extract_adversaire_niveau,
+        extract_temporal_features,
+    )
+    from scripts.features.standings import calculate_standings
+
+    extract_temporal_features(result)
+    standings = calculate_standings(df_history_played)
+    extract_adversaire_niveau(result, standings)
 
 
 def run_feature_engineering_v2(

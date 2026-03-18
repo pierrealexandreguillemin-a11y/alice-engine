@@ -21,6 +21,7 @@ from scripts.features.advanced import (
     calculate_head_to_head,
     calculate_pressure_performance,
 )
+from scripts.features.club_behavior import extract_club_behavior
 from scripts.features.composition import extract_composition_strategy
 from scripts.features.ffe_features import extract_ffe_regulatory_features
 from scripts.features.merge_helpers import (
@@ -33,6 +34,10 @@ from scripts.features.performance import (
     calculate_board_position,
     calculate_color_performance,
     calculate_recent_form,
+)
+from scripts.features.pipeline_extended import (
+    extract_ali_features,
+    merge_ali_features,
 )
 from scripts.features.reliability import (
     extract_club_reliability,
@@ -69,7 +74,12 @@ def extract_all_features(
         "color_perf": calculate_color_performance(df_history_played),
         "ffe_regulatory": extract_ffe_regulatory_features(df_history_played),
         "team_enjeu": extract_team_enjeu_features(df_history_played, standings),
+        "club_behavior": extract_club_behavior(df_history),
     }
+
+    # ALI features (presence + patterns)
+    ali_features = extract_ali_features(df_history_played)
+    features.update(ali_features)
 
     if include_advanced:
         # Composition strategy (A02 Art. 3.6.e)
@@ -92,7 +102,7 @@ def _aggregate_composition(compo_raw: pd.DataFrame) -> pd.DataFrame:
     """Agrège les features composition par joueur (moyenne historique)."""
     if compo_raw.empty:
         return pd.DataFrame(
-            columns=["nom", "decalage_position", "joueur_decale_haut", "joueur_decale_bas"]
+            columns=["joueur_nom", "decalage_position", "joueur_decale_haut", "joueur_decale_bas"]
         )
     return (
         compo_raw.groupby("nom")
@@ -102,6 +112,7 @@ def _aggregate_composition(compo_raw: pd.DataFrame) -> pd.DataFrame:
             joueur_decale_bas=("joueur_decale_bas", "mean"),
         )
         .reset_index()
+        .rename(columns={"nom": "joueur_nom"})
     )
 
 
@@ -151,6 +162,18 @@ def merge_all_features(
 
     # Team enjeu
     result = merge_team_enjeu(result, features["team_enjeu"])
+
+    # Club behavior (merge by equipe_dom)
+    club_beh = features.get("club_behavior", pd.DataFrame())
+    if not club_beh.empty and "equipe" in club_beh.columns:
+        result = result.merge(
+            club_beh.rename(columns={"equipe": "equipe_dom"}),
+            on=["equipe_dom", "saison"],
+            how="left",
+        )
+
+    # ALI features (presence + patterns per player)
+    result = merge_ali_features(result, features)
 
     # Advanced features
     if include_advanced:
