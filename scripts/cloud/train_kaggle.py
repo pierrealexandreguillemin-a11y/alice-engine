@@ -22,13 +22,39 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# fmt: off
+# Base categoricals (label-encoded for all models)
 CATEGORICAL_FEATURES = ["type_competition", "division", "ligue_code", "jour_semaine"]
+# CatBoost native categoricals (also label-encoded for XGBoost/LightGBM)
 CATBOOST_CAT_FEATURES = [
-    "type_competition", "division", "ligue_code",
-    "blanc_titre", "noir_titre", "jour_semaine", "zone_enjeu_dom",
+    "type_competition",
+    "division",
+    "ligue_code",
+    "blanc_titre",
+    "noir_titre",
+    "jour_semaine",
+    "zone_enjeu_dom",
 ]
-# fmt: on
+# Additional categoricals from advanced features (encode for all models)
+ADVANCED_CAT_FEATURES = [
+    "forme_tendance_blanc",
+    "forme_tendance_noir",
+    "couleur_preferee_blanc",
+    "couleur_preferee_noir",
+    "data_quality_blanc",
+    "data_quality_noir",
+    "zone_enjeu_ext",
+    "elo_trajectory_blanc",
+    "elo_trajectory_noir",
+    "pressure_type_blanc",
+    "pressure_type_noir",
+]
+# Bool features to cast to int
+BOOL_FEATURES = [
+    "joueur_fantome_blanc",
+    "joueur_fantome_noir",
+    "ffe_multi_equipe_blanc",
+    "ffe_multi_equipe_noir",
+]
 LABEL_COLUMN = "resultat_blanc"
 AUC_FLOOR = 0.70
 HF_REPO_ID = "Pierrax/alice-engine"
@@ -77,7 +103,9 @@ def _encode_categoricals(
     """Label-encode all categorical columns. Fit on ALL splits combined to handle unseen labels."""
     from sklearn.preprocessing import LabelEncoder
 
-    all_cat_cols = sorted(set(CATEGORICAL_FEATURES) | set(CATBOOST_CAT_FEATURES))
+    all_cat_cols = sorted(
+        set(CATEGORICAL_FEATURES) | set(CATBOOST_CAT_FEATURES) | set(ADVANCED_CAT_FEATURES)
+    )
     encoders: dict = {}
     for col in all_cat_cols:
         if col not in splits[0].columns:
@@ -93,9 +121,13 @@ def _encode_categoricals(
 
 
 def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Extract X and y, keeping only numeric columns (int, float)."""
+    """Extract X and y, keeping numeric + casting bools to int."""
     y = (df[LABEL_COLUMN] == 1.0).astype(int)
-    # Keep ONLY int/float columns — drops strings, datetime, bool
+    # Cast bools to int before selecting dtypes
+    for col in BOOL_FEATURES:
+        if col in df.columns:
+            df[col] = df[col].astype(int)
+    # Keep ONLY int/float columns — drops strings, datetime
     X = df.select_dtypes(include=["int64", "int32", "float64", "float32"])
     # Drop target if still present
     for col in (LABEL_COLUMN, "resultat_noir"):
