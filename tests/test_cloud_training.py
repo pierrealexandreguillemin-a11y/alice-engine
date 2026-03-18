@@ -1,23 +1,18 @@
 """Tests Cloud Training - ISO 29119.
 
 Document ID: ALICE-TEST-CLOUD-TRAINING
-Version: 1.0.0
-Tests: 15
+Version: 2.0.0
+Tests: 16
 
 Classes:
 - TestComputeHash: Tests dataframe hashing (2 tests)
 - TestBuildLineage: Tests ISO 5259 lineage (2 tests)
 - TestQualityGates: Tests AUC gates (4 tests)
-- TestModelCard: Tests model card structure (3 tests)
+- TestModelCard: Tests model card structure (4 tests)
 - TestHyperparamsSync: Tests config matches YAML (1 test)
 - TestPromoteModel: Tests promotion logic (3 tests)
 
-ISO Compliance:
-- ISO/IEC 29119:2022 - Software Testing
-- ISO/IEC 42001:2023 - AI Management System
-
-Author: ALICE Engine Team
-Last Updated: 2026-03-18
+ISO: 29119, 42001. Author: ALICE Engine Team. Updated: 2026-03-18
 """
 
 from __future__ import annotations
@@ -39,10 +34,6 @@ from scripts.cloud.train_kaggle import (
     default_hyperparameters,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture()
 def small_df() -> pd.DataFrame:
@@ -63,49 +54,33 @@ def mock_results() -> dict:
     """Fake training results dict."""
     m = MagicMock()
     m.predict_proba.return_value = np.array([[0.3, 0.7]] * 100)
-    return {
-        "CatBoost": {
-            "model": m,
-            "metrics": {
-                "auc_roc": 0.75,
-                "accuracy": 0.70,
-                "f1_score": 0.68,
-                "test_auc": 0.74,
-                "test_accuracy": 0.70,
-                "test_f1": 0.68,
-                "train_time_s": 1.0,
-            },
-            "importance": {"blanc_elo": 0.5, "noir_elo": 0.3},
-        },
-    }
+    # fmt: off
+    return {"CatBoost": {
+        "model": m,
+        "metrics": {"auc_roc": 0.75, "accuracy": 0.70, "f1_score": 0.68,
+                     "test_auc": 0.74, "test_accuracy": 0.70, "test_f1": 0.68, "train_time_s": 1.0},
+        "importance": {"blanc_elo": 0.5, "noir_elo": 0.3},
+    }}
+    # fmt: on
 
 
 @pytest.fixture()
 def mock_lineage() -> dict:
     """Fake lineage dict."""
+    # fmt: off
     return {
-        "train_path": "/data/train.parquet",
-        "valid_path": "/data/valid.parquet",
-        "test_path": "/data/test.parquet",
-        "train_samples": 800,
-        "valid_samples": 100,
-        "test_samples": 100,
-        "train_hash": "abc123",
-        "valid_hash": "def456",
-        "test_hash": "ghi789",
-        "feature_count": 10,
+        "train_path": "/data/train.parquet", "valid_path": "/data/valid.parquet",
+        "test_path": "/data/test.parquet", "train_samples": 800, "valid_samples": 100,
+        "test_samples": 100, "train_hash": "abc123", "valid_hash": "def456",
+        "test_hash": "ghi789", "feature_count": 10,
         "target_distribution": {"positive_ratio": 0.5, "total_samples": 800},
         "created_at": "2026-03-18T12:00:00+00:00",
     }
-
-
-# ---------------------------------------------------------------------------
-# TestComputeHash
-# ---------------------------------------------------------------------------
+    # fmt: on
 
 
 class TestComputeHash:
-    """Tests dataframe hashing — 2 tests."""
+    """Tests dataframe hashing -- 2 tests."""
 
     def test_hash_deterministic(self, small_df: pd.DataFrame) -> None:
         """Same DataFrame must produce the same 16-char hex hash."""
@@ -120,17 +95,11 @@ class TestComputeHash:
         h1 = compute_dataframe_hash(small_df)
         modified = small_df.copy()
         modified.iloc[0, 0] = modified.iloc[0, 0] + 9999
-        h2 = compute_dataframe_hash(modified)
-        assert h1 != h2
-
-
-# ---------------------------------------------------------------------------
-# TestBuildLineage
-# ---------------------------------------------------------------------------
+        assert h1 != compute_dataframe_hash(modified)
 
 
 class TestBuildLineage:
-    """Tests ISO 5259 lineage — 2 tests."""
+    """Tests ISO 5259 lineage -- 2 tests."""
 
     def test_lineage_has_all_fields(self, small_df: pd.DataFrame, tmp_path: Path) -> None:
         """Lineage dict must contain all required ISO 5259 fields."""
@@ -159,17 +128,11 @@ class TestBuildLineage:
     ) -> None:
         """feature_count must equal len(columns) - 1 (target excluded)."""
         lineage = build_lineage(small_df, small_df, small_df, tmp_path)
-        expected = len(small_df.columns) - 1
-        assert lineage["feature_count"] == expected
-
-
-# ---------------------------------------------------------------------------
-# TestQualityGates
-# ---------------------------------------------------------------------------
+        assert lineage["feature_count"] == len(small_df.columns) - 1
 
 
 class TestQualityGates:
-    """Tests AUC quality gates — 4 tests."""
+    """Tests AUC quality gates -- 4 tests."""
 
     def _make_results(self, auc: float) -> dict:
         m = MagicMock()
@@ -194,7 +157,7 @@ class TestQualityGates:
         assert gate["best_auc"] == pytest.approx(0.75)
 
     def test_degradation_relative_fails(self) -> None:
-        """Champion 0.75, new 0.72 → 4% drop > 2% threshold → fail."""
+        """Champion 0.75, new 0.72 -> 4% drop > 2% threshold -> fail."""
         gate = check_quality_gates(self._make_results(0.72), champion_auc=0.75)
         assert gate["passed"] is False
         assert "Degradation" in gate["reason"]
@@ -205,13 +168,8 @@ class TestQualityGates:
         assert gate["passed"] is True
 
 
-# ---------------------------------------------------------------------------
-# TestModelCard
-# ---------------------------------------------------------------------------
-
-
 class TestModelCard:
-    """Tests model card structure — 3 tests."""
+    """Tests model card structure -- 4 tests."""
 
     @pytest.fixture()
     def gate(self) -> dict:
@@ -220,9 +178,8 @@ class TestModelCard:
     def test_card_has_all_required_fields(
         self, mock_results: dict, mock_lineage: dict, gate: dict
     ) -> None:
-        """Model card dict must contain all ProductionModelCard fields."""
-        config = default_hyperparameters()
-        card = build_model_card(mock_results, mock_lineage, gate, config)
+        """Model card dict must contain all fields including quality_gate_result."""
+        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
         required_fields = [
             "version",
             "created_at",
@@ -234,6 +191,7 @@ class TestModelCard:
             "feature_importance",
             "hyperparameters",
             "best_model",
+            "quality_gate_result",
             "limitations",
             "use_cases",
             "conformance",
@@ -245,8 +203,7 @@ class TestModelCard:
         self, mock_results: dict, mock_lineage: dict, gate: dict
     ) -> None:
         """Each artifact entry must have sha256 and size_bytes fields."""
-        config = default_hyperparameters()
-        card = build_model_card(mock_results, mock_lineage, gate, config)
+        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
         for artifact in card["artifacts"]:
             assert "sha256" in artifact, f"Missing sha256 in {artifact}"
             assert "size_bytes" in artifact, f"Missing size_bytes in {artifact}"
@@ -255,50 +212,37 @@ class TestModelCard:
         self, mock_results: dict, mock_lineage: dict, gate: dict
     ) -> None:
         """Environment must include python_version, catboost, xgboost, lightgbm."""
-        config = default_hyperparameters()
-        card = build_model_card(mock_results, mock_lineage, gate, config)
+        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
         env = card["environment"]
         assert "python_version" in env
-        packages = env.get("packages", {})
         for pkg in ("catboost", "xgboost", "lightgbm"):
-            assert pkg in packages, f"Missing package version: {pkg}"
+            assert pkg in env.get("packages", {}), f"Missing package: {pkg}"
 
-
-# ---------------------------------------------------------------------------
-# TestHyperparamsSync
-# ---------------------------------------------------------------------------
+    def test_card_has_quality_gate_result(
+        self, mock_results: dict, mock_lineage: dict, gate: dict
+    ) -> None:
+        """Model card must contain quality_gate_result matching the gate dict."""
+        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
+        assert card["quality_gate_result"] == gate
 
 
 class TestHyperparamsSync:
-    """Tests config matches YAML — 1 test."""
+    """Tests config matches YAML -- 1 test."""
 
     def test_kaggle_params_match_yaml(self) -> None:
-        """Keys in default_hyperparameters() must match config/hyperparameters.yaml.
-
-        Excluding thread_count/n_jobs Kaggle overrides.
-        """
-        yaml_path = Path("config/hyperparameters.yaml")
-        with yaml_path.open() as fh:
+        """Keys in default_hyperparameters() must match config/hyperparameters.yaml."""
+        with Path("config/hyperparameters.yaml").open() as fh:
             yaml_cfg = yaml.safe_load(fh)
-
         kaggle_cfg = default_hyperparameters()
         skip_keys = {"thread_count", "n_jobs", "cat_features", "categorical_feature"}
-
         for section in ("catboost", "xgboost", "lightgbm"):
             yaml_keys = {k for k in yaml_cfg[section] if k not in skip_keys}
             kaggle_keys = {k for k in kaggle_cfg[section] if k not in skip_keys}
-            assert (
-                yaml_keys == kaggle_keys
-            ), f"[{section}] YAML keys {yaml_keys} != Kaggle keys {kaggle_keys}"
-
-
-# ---------------------------------------------------------------------------
-# TestPromoteModel
-# ---------------------------------------------------------------------------
+            assert yaml_keys == kaggle_keys, f"[{section}] mismatch"
 
 
 class TestPromoteModel:
-    """Tests promotion logic — 3 tests."""
+    """Tests promotion logic -- 3 tests."""
 
     def _fake_robustness(self, compliant: bool) -> dict:
         return {
@@ -311,14 +255,15 @@ class TestPromoteModel:
     def _fake_fairness(self, status: str) -> dict:
         return {"status": status, "demographic_parity": 0.9, "group_rates": {}}
 
+    def _mcnemar(self) -> dict:
+        return {"p_value": 0.5, "significant": False, "new_auc": 0.74}
+
     def test_robustness_fail_rejects(self) -> None:
         """Non-compliant robustness must result in REJECTED status."""
         from scripts.cloud.promote_model import decide_promotion
 
         result = decide_promotion(
-            robustness=self._fake_robustness(False),
-            fairness=self._fake_fairness("FAIR"),
-            mcnemar={"p_value": 0.5, "significant": False, "new_auc": 0.74},
+            self._fake_robustness(False), self._fake_fairness("FAIR"), self._mcnemar()
         )
         assert result["decision"] == "REJECTED"
         assert "robustness" in result["reason"].lower()
@@ -328,9 +273,7 @@ class TestPromoteModel:
         from scripts.cloud.promote_model import decide_promotion
 
         result = decide_promotion(
-            robustness=self._fake_robustness(True),
-            fairness=self._fake_fairness("CRITICAL"),
-            mcnemar={"p_value": 0.5, "significant": False, "new_auc": 0.74},
+            self._fake_robustness(True), self._fake_fairness("CRITICAL"), self._mcnemar()
         )
         assert result["decision"] == "REJECTED"
         assert "fairness" in result["reason"].lower()
@@ -340,8 +283,6 @@ class TestPromoteModel:
         from scripts.cloud.promote_model import decide_promotion
 
         result = decide_promotion(
-            robustness=self._fake_robustness(True),
-            fairness=self._fake_fairness("FAIR"),
-            mcnemar={"p_value": 0.5, "significant": False, "new_auc": 0.74},
+            self._fake_robustness(True), self._fake_fairness("FAIR"), self._mcnemar()
         )
         assert result["decision"] == "PRODUCTION"

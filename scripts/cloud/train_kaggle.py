@@ -60,12 +60,13 @@ def build_lineage(
 
 
 def prepare_features(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFrame) -> tuple:
-    """Label-encode base categoricals, split X/y. Missing flags already in parquets."""
+    """Label-encode ALL categoricals, select only numeric columns for X/y split."""
     from sklearn.preprocessing import LabelEncoder
 
+    all_cat_cols = sorted(set(CATEGORICAL_FEATURES) | set(CATBOOST_CAT_FEATURES))
     encoders: dict = {}
     for split in [train, valid, test]:
-        for col in CATEGORICAL_FEATURES:
+        for col in all_cat_cols:
             if col not in split.columns:
                 continue
             if col not in encoders:
@@ -81,6 +82,10 @@ def prepare_features(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFram
     X_train = train.drop(columns=[c for c in drop_cols if c in train.columns])
     X_valid = valid.drop(columns=[c for c in drop_cols if c in valid.columns])
     X_test = test.drop(columns=[c for c in drop_cols if c in test.columns])
+    # C1: Drop all remaining string/object columns — XGBoost/LightGBM require numeric
+    for X in [X_train, X_valid, X_test]:
+        obj_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+        X.drop(columns=obj_cols, inplace=True)  # noqa: PD002
     return X_train, y_train, X_valid, y_valid, X_test, y_test, encoders
 
 
@@ -225,7 +230,7 @@ def check_quality_gates(results: dict, champion_auc: float | None = None) -> dic
 
 
 def fetch_champion_auc() -> float | None:
-    """Fetch best_auc from latest metadata.json on HF Hub."""
+    """Fetch best_model.auc from latest metadata.json on HF Hub."""
     try:
         import json  # noqa: PLC0415
 
@@ -233,7 +238,10 @@ def fetch_champion_auc() -> float | None:
 
         path = hf_hub_download(HF_REPO_ID, "metadata.json", repo_type="model")
         with open(path) as fh:
-            return float((json.load(fh)).get("best_auc", 0.0)) or None
+            data = json.load(fh)
+        best_model = data.get("best_model", {})
+        auc = float(best_model.get("auc", 0.0)) if best_model else 0.0
+        return auc if auc > 0 else None
     except Exception:
         logger.warning("Could not fetch champion AUC — first run assumed.")
         return None
@@ -263,19 +271,23 @@ def _artifact_entry(name: str, path: Path) -> dict:
     return {"name": name, "path": str(path), "sha256": sha, "size_bytes": path.stat().st_size}
 
 
-def build_model_card(results: dict, lineage: dict, gate: dict, config: dict) -> dict:
+def build_model_card(
+    results: dict, lineage: dict, gate: dict, config: dict, *, out_dir: Path | None = None
+) -> dict:
     """ISO 42001 Model Card with status=CANDIDATE."""
     env = collect_environment()
     version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
     metrics = {n: r["metrics"] for n, r in results.items() if r["model"] is not None}
     importance = {n: r["importance"] for n, r in results.items() if r["model"] is not None}
-    artifacts = [_artifact_entry(n, OUTPUT_DIR / f"{n}.pkl") for n in metrics]
+    artifact_dir = out_dir if out_dir else OUTPUT_DIR
+    artifacts = [_artifact_entry(n, artifact_dir / f"{n}.pkl") for n in metrics]
     # fmt: off
     return {
         "version": version, "created_at": datetime.now(tz=UTC).isoformat(),
         "status": "CANDIDATE", "environment": env, "data_lineage": lineage,
         "artifacts": artifacts, "metrics": metrics, "feature_importance": importance,
         "hyperparameters": config, "best_model": {"name": gate.get("best_model"), "auc": gate.get("best_auc")},
+        "quality_gate_result": gate,
         "limitations": ["Trained on FFE interclub data only", "Not suitable for tournament games"],
         "use_cases": ["Team composition outcome prediction"],
         "conformance": {"ISO_42001": "CANDIDATE", "ISO_5259": "COMPLIANT", "ISO_5055": "COMPLIANT"},
@@ -283,14 +295,10 @@ def build_model_card(results: dict, lineage: dict, gate: dict, config: dict) -> 
     # fmt: on
 
 
-def save_and_push(results: dict, metadata: dict, encoders: dict) -> None:
-    """Save artifacts to /kaggle/working/v{ts}/, then upload_folder to HF Hub."""
-    import json  # noqa: PLC0415
+def save_models(results: dict, encoders: dict, out_dir: Path) -> None:
+    """Save model artifacts + encoders to out_dir (before model card)."""
     import pickle  # noqa: PLC0415
 
-    token = os.environ.get("HF_TOKEN")
-    version = metadata["version"]
-    out_dir = OUTPUT_DIR / version
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, r in results.items():
         if r["model"] is not None:
@@ -298,11 +306,19 @@ def save_and_push(results: dict, metadata: dict, encoders: dict) -> None:
                 pickle.dump(r["model"], fh)
     with open(out_dir / "encoders.pkl", "wb") as fh:
         pickle.dump(encoders, fh)
+
+
+def save_metadata_and_push(metadata: dict, out_dir: Path) -> None:
+    """Save metadata.json and optionally push to HF Hub."""
+    import json  # noqa: PLC0415
+
+    token = os.environ.get("HF_TOKEN")
     with open(out_dir / "metadata.json", "w") as fh:
         json.dump(metadata, fh, indent=2, default=str)
     if token:
         from huggingface_hub import HfApi  # noqa: PLC0415
 
+        version = metadata["version"]
         # fmt: off
         HfApi().upload_folder(folder_path=str(out_dir), repo_id=HF_REPO_ID,
                               repo_type="model", path_in_repo=version, token=token)
@@ -329,8 +345,13 @@ def main() -> None:
     champion_auc = fetch_champion_auc()
     gate = check_quality_gates(results, champion_auc=champion_auc)
     logger.info("Quality gate: %s", gate)
-    metadata = build_model_card(results, lineage, gate, config)
-    save_and_push(results, metadata, encoders)
+    # C4: save models FIRST so checksums are real in model card
+    version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
+    out_dir = OUTPUT_DIR / version
+    save_models(results, encoders, out_dir)
+    metadata = build_model_card(results, lineage, gate, config, out_dir=out_dir)
+    metadata["version"] = version  # ensure consistent version
+    save_metadata_and_push(metadata, out_dir)
     logger.info(
         "Done. Status=%s Best=%s AUC=%.4f",
         metadata["status"],
