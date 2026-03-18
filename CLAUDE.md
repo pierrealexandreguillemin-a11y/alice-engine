@@ -1,5 +1,33 @@
 # Alice-Engine - Guide Claude
 
+## BUT DU PROJET
+
+Alice Engine est un **système de recommandation de composition d'équipe** pour les interclubs FFE.
+Satellite de chess-app (SaaS clubs d'échecs). Déployé sur Render (FastAPI).
+
+**Pipeline complet :**
+1. **ALI** (Adversarial Lineup Inference) : prédire la composition probable de l'adversaire
+2. **Modèle ML** : prédire P(victoire blanc) pour chaque affectation joueur→échiquier
+3. **CE** (Composition Engine) : optimiser la composition sous contraintes FFE (100pts, noyau, mutés)
+4. **API** : POST /api/v1/predict retourne composition recommandée + alternatives + score attendu
+
+**Contraintes métier** : les compositions sont soumises simultanément sur place (A02 Art. 3.6.a) — le capitaine ne connaît PAS la composition adverse.
+
+## État actuel (mars 2026)
+
+| Couche | Statut | Fichiers |
+|--------|--------|----------|
+| API FastAPI + schemas | COMPLET | `app/api/routes.py` (STUBS), `schemas.py` |
+| ComposerService (CE) | FONCTIONNEL | `services/composer.py` |
+| InferenceService (ALI) | PARTIEL (fallback Elo) | `services/inference.py` |
+| DataLoader (MongoDB) | FONCTIONNEL | `services/data_loader.py` |
+| ML Training | FONCTIONNEL | `scripts/training/`, `scripts/cloud/` |
+| Data Refresh | FONCTIONNEL | `make refresh-data` |
+| **Câblage routes→services** | **MANQUANT** | routes.py retourne des zéros |
+| **Chargement modèle ML** | **MANQUANT** | modèle entraîné mais pas chargé |
+| **ALI prédiction adverse** | **MANQUANT** | generate_scenarios() vide |
+| **Optimisation OR-Tools** | **MANQUANT** | get_alternatives() vide |
+
 ## Données Source (FFE)
 
 **Dataset HuggingFace** : https://huggingface.co/datasets/Pierrax/ffe-history (public)
