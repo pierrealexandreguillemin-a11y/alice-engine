@@ -1,5 +1,39 @@
 # Alice-Engine - Guide Claude
 
+## Données Source (FFE)
+
+**Dataset HuggingFace** : https://huggingface.co/datasets/Pierrax/ffe-history (public)
+
+| Fichier | Contenu | Taille |
+|---------|---------|--------|
+| `parsed/echiquiers.parquet` | Echiquiers parsés (saison, ronde, elo, resultat) | ~35 MB |
+| `parsed/joueurs.parquet` | Joueurs FFE (NrFFE, nom, elo, categorie, club) | ~3 MB |
+| `compositions/` | HTML brut interclubs 2002-2026 (85,492 fichiers) | ~2.2 GB |
+| `players_v2/` | HTML joueurs par club (83,930 joueurs) | ~150 MB |
+| `clubs/clubs_index.json` | Index des 992 clubs FFE | ~200 KB |
+
+**Scraping** : repo `C:\Dev\ffe_scrapper` (GitHub: `ffe-history`)
+- `scrape.py --refresh-season 2026` : refresh compositions saison en cours
+- `scrape_all_players.py --refresh` : refresh joueurs (Elos, nouveaux licencies)
+- `discover.py --season 2026` : decouvrir nouveaux groupes
+
+**Données locales** : `dataset_alice/` (symlink) et `data/echiquiers.parquet`, `data/joueurs.parquet`
+
+```python
+# Charger depuis HuggingFace
+from datasets import load_dataset
+ds = load_dataset("Pierrax/ffe-history", data_files="parsed/echiquiers.parquet")
+
+# Ou push un modèle entraîné
+from huggingface_hub import HfApi
+api = HfApi()
+api.upload_file("models/model.pkl", repo_id="Pierrax/alice-engine", repo_type="model")
+```
+
+**Compte HF** : Pierrax (token dans `~/.cache/huggingface/token`)
+
+---
+
 ## RÈGLES ABSOLUES (ISO Compliance)
 
 **TOUJOURS APPLIQUER - AUCUNE EXCEPTION:**
@@ -138,3 +172,37 @@ make iso-docs   # MAJ documentation ISO
 
 - `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
 - `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
+
+## Contraintes Training
+
+- **Séquentiel obligatoire** : 15.4 GB RAM, train set ~7 GB → un modèle à la fois avec `gc.collect()` entre chaque
+- `scripts/training/parallel.py` est déjà séquentiel malgré son nom (refactoré en jan 2026)
+- **Split temporel** (pas k-fold random) : les règles FFE évoluent au fil des saisons (scoring 2pts jeunes U12+, catégories d'âge, seuils Elo E/N/F), k-fold mélangerait des ères réglementaires différentes
+- **@TODO Rolling Window** : comparer training 2012-2026 vs 2002-2026
+  - 2012+ : features réglementaires plus cohérentes (scoring, catégories modernes)
+  - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
+  - Test : entraîner sur 2012+ d'abord, comparer AUC vs modèle actuel (2002+)
+- **@TODO Externaliser training** : machine locale limitée (15 GB RAM, train set 7 GB)
+  - **Kaggle (GRATUIT, recommandé)** : 29 GB RAM, 4 CPU + GPU T4, 30h GPU/sem, sessions 9h max
+    - Token HF dans `Add-ons > Secrets > HF_TOKEN`
+    - Push modèle direct via `model.push_to_hub()` / `api.upload_file()`
+    - Intégration officielle : https://huggingface.co/blog/kaggle-integration
+  - **HF Jobs `cpu-upgrade`** : 32 GB RAM, 8 vCPU, **$0.03/h** (~3¢/training complet)
+    - Crédits prépayés requis (promos dispo : Unsloth Jobs Explorers = crédits gratuits)
+    - Script UV inline, push modèle natif, facturation à la minute
+    - Pricing : https://huggingface.co/docs/hub/jobs-pricing
+  - **HF Jobs `cpu-xl`** : 124 GB RAM, 16 vCPU, $1.00/h (pour gros datasets futurs)
+  - **Google Colab** : 12-25 GB RAM gratuit, timeouts aléatoires, moins fiable
+  - **Modal** : $30 crédits gratuits/mois, pay-per-second, setup plus complexe
+  - Script d'export : adapter `train_models_parallel.py` pour env cloud (paths, artifacts)
+
+## @TODO - Phase C : Pipeline CI automatisé
+
+> Prérequis : Phase B (sync + validation ISO 5259) complétée
+
+- [ ] GitHub Action : détection nouvelles données → re-training automatique
+- [ ] Push automatique des modèles entraînés sur HuggingFace (`Pierrax/alice-engine`)
+- [ ] Drift monitoring intégré (PSI thresholds, feature drift detection)
+- [ ] Alertes sur dégradation AUC / fairness (seuils ISO 24027/24029)
+- [ ] Rapport ISO 25059 auto-généré à chaque re-training
+- [ ] Scheduled refresh : `scrape.py --refresh-season` + `sync_data.py` + `make train` en cron
