@@ -86,11 +86,12 @@ def _validate_with_schema(
 ) -> ValidationReport:
     """Run schema validation, build report, persist to disk."""
     lineage = DataLineage.from_dataframe(df, source_path)
-    is_valid, errors = _run_validation(schema, df)
+    is_valid, raw_errors = _run_validation(schema, df)
+    errors = _aggregate_errors(raw_errors)
     error_counts = _count_by_severity(errors)
     metrics = QualityMetrics(
         total_rows=len(df),
-        valid_rows=len(df) - sum(e.failure_count for e in errors),
+        valid_rows=max(0, len(df) - sum(e.failure_count for e in errors)),
         null_percentages={col: float(df[col].isna().mean() * 100) for col in df.columns},
         validation_rate=1.0 if is_valid else 0.0,
         critical_errors=error_counts.get("critical", 0),
@@ -129,6 +130,24 @@ def _run_validation(
             for _, row in exc.failure_cases.iterrows()
         ]
         return False, errors
+
+
+def _aggregate_errors(errors: list[ValidationError]) -> list[ValidationError]:
+    """Aggregate errors by (column, check), summing failure counts."""
+    grouped: dict[tuple[str, str], ValidationError] = {}
+    for error in errors:
+        key = (error.column, error.check)
+        if key in grouped:
+            grouped[key] = ValidationError(
+                column=error.column,
+                check=error.check,
+                failure_count=grouped[key].failure_count + error.failure_count,
+                severity=error.severity,
+                recommendation=error.recommendation,
+            )
+        else:
+            grouped[key] = error
+    return list(grouped.values())
 
 
 def _count_by_severity(errors: list[ValidationError]) -> dict[str, int]:

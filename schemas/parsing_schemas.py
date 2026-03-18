@@ -40,13 +40,8 @@ def _check_diff_elo_coherence(df: pd.DataFrame) -> pd.Series:
     return df["diff_elo"] == (df["blanc_elo"] - df["noir_elo"])
 
 
-def _echiquiers_columns() -> dict[str, Column]:
-    """Build column definitions for raw echiquiers.
-
-    Elo bounds: [0, ELO_MAX_REASONABLE]. 0 = no Elo (unrated player).
-    Played games have Elo >= ELO_MIN_ESTIME (799), but raw data includes
-    forfaits/non-joues where Elo may be 0.
-    """
+def _competition_metadata_columns() -> dict[str, Column]:
+    """Build competition metadata columns for raw echiquiers."""
     return {
         "saison": Column(int, checks=[Check.ge(2002), Check.le(2030)], nullable=False),
         "competition": Column(str, nullable=False),
@@ -62,6 +57,15 @@ def _echiquiers_columns() -> dict[str, Column]:
             checks=[Check.ge(ECHIQUIER_MIN), Check.le(ECHIQUIER_MAX_ABSOLUTE)],
             nullable=False,
         ),
+    }
+
+
+def _game_result_columns() -> dict[str, Column]:
+    """Build player and result columns for raw echiquiers.
+
+    Elo bounds: [0, ELO_MAX_REASONABLE]. 0 = no Elo (unrated player).
+    """
+    return {
         "blanc_nom": Column(str, nullable=False),
         "noir_nom": Column(str, nullable=False),
         "blanc_elo": Column(
@@ -113,7 +117,7 @@ def _joueurs_columns() -> dict[str, Column]:
 
 
 EchiquiersRawSchema = DataFrameSchema(
-    columns=_echiquiers_columns(),
+    columns={**_competition_metadata_columns(), **_game_result_columns()},
     checks=[Check(_check_diff_elo_coherence, error="diff_elo != blanc_elo - noir_elo")],
     coerce=False,
 )
