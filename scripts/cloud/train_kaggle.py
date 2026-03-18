@@ -157,6 +157,76 @@ def _eval_model(model: Any, X_valid: Any, y_valid: Any, train_time: float) -> di
     return {"model": model, "metrics": metrics, "importance": importance}
 
 
+def _fail_result() -> dict:
+    """Sentinel result for a model that failed to train (I1)."""
+    return {"model": None, "metrics": {}, "importance": {}}
+
+
+def _train_catboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
+    """Train CatBoost with partial-failure handling (I1)."""
+    try:
+        from catboost import CatBoostClassifier  # noqa: PLC0415
+
+        cat_idx = [
+            X_train.columns.get_loc(c) for c in CATBOOST_CAT_FEATURES if c in X_train.columns
+        ]
+        cb = CatBoostClassifier(**params, cat_features=cat_idx, eval_metric="AUC")
+        t0 = time.time()
+        cb.fit(X_train, y_train, eval_set=(X_valid, y_valid))
+        result = _eval_model(cb, X_valid, y_valid, time.time() - t0)
+        del cb
+        gc.collect()
+        return result
+    except Exception:
+        logger.exception("CatBoost training failed")
+        return _fail_result()
+
+
+def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
+    """Train XGBoost with partial-failure handling (I1)."""
+    try:
+        from xgboost import XGBClassifier  # noqa: PLC0415
+
+        xgb = XGBClassifier(**params, eval_metric="auc")
+        t0 = time.time()
+        xgb.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=100)
+        result = _eval_model(xgb, X_valid, y_valid, time.time() - t0)
+        del xgb
+        gc.collect()
+        return result
+    except Exception:
+        logger.exception("XGBoost training failed")
+        return _fail_result()
+
+
+def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
+    """Train LightGBM with partial-failure handling (I1)."""
+    try:
+        import lightgbm as lgb_lib  # noqa: PLC0415
+        from lightgbm import LGBMClassifier  # noqa: PLC0415
+
+        lgb_p = {k: v for k, v in params.items() if k != "early_stopping_rounds"}
+        lgbm = LGBMClassifier(**lgb_p)
+        t0 = time.time()
+        lgbm.fit(
+            X_train,
+            y_train,
+            eval_set=[(X_valid, y_valid)],
+            eval_metric="auc",
+            callbacks=[
+                lgb_lib.early_stopping(params.get("early_stopping_rounds", 50)),
+                lgb_lib.log_evaluation(100),
+            ],
+        )
+        result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
+        del lgbm
+        gc.collect()
+        return result
+    except Exception:
+        logger.exception("LightGBM training failed")
+        return _fail_result()
+
+
 def train_all_sequential(  # noqa: PLR0914
     X_train: Any,
     y_train: Any,
@@ -164,37 +234,13 @@ def train_all_sequential(  # noqa: PLR0914
     y_valid: Any,
     config: dict,
 ) -> dict:
-    """CatBoost → gc → XGBoost → gc → LightGBM. Returns {name: {model, metrics, importance}}."""
-    from catboost import CatBoostClassifier  # noqa: PLC0415
-    from lightgbm import LGBMClassifier  # noqa: PLC0415
-    from xgboost import XGBClassifier  # noqa: PLC0415
-
+    """CatBoost -> gc -> XGBoost -> gc -> LightGBM. Partial-failure safe (I1)."""
     # fmt: off
-    results: dict = {}
-    cat_params, xgb_params, lgb_params = config["catboost"], config["xgboost"], config["lightgbm"]
-    cat_idx = [X_train.columns.get_loc(c) for c in CATBOOST_CAT_FEATURES if c in X_train.columns]
-    cb = CatBoostClassifier(**cat_params, cat_features=cat_idx, eval_metric="AUC")
-    t0 = time.time()
-    cb.fit(X_train, y_train, eval_set=(X_valid, y_valid))
-    results["CatBoost"] = _eval_model(cb, X_valid, y_valid, time.time() - t0)
-    del cb
-    gc.collect()
-    xgb = XGBClassifier(**xgb_params, eval_metric="auc")
-    t0 = time.time()
-    xgb.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=100)
-    results["XGBoost"] = _eval_model(xgb, X_valid, y_valid, time.time() - t0)
-    del xgb
-    gc.collect()
-    import lightgbm as lgb_lib  # noqa: PLC0415
-    lgbm = LGBMClassifier(**{k: v for k, v in lgb_params.items() if k != "early_stopping_rounds"})
-    t0 = time.time()
-    lgbm.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], eval_metric="auc",
-             callbacks=[lgb_lib.early_stopping(lgb_params.get("early_stopping_rounds", 50)),
-                        lgb_lib.log_evaluation(100)])
-    results["LightGBM"] = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
-    del lgbm
-    gc.collect()
-    return results
+    return {
+        "CatBoost": _train_catboost(X_train, y_train, X_valid, y_valid, config["catboost"]),
+        "XGBoost": _train_xgboost(X_train, y_train, X_valid, y_valid, config["xgboost"]),
+        "LightGBM": _train_lightgbm(X_train, y_train, X_valid, y_valid, config["lightgbm"]),
+    }
     # fmt: on
 
 
@@ -259,7 +305,7 @@ def collect_environment() -> dict:
             pkgs[pkg] = "unknown"
     # fmt: off
     return {"python_version": sys.version, "platform": platform.platform(),
-            "kaggle_kernel_id": os.environ.get("KAGGLE_KERNEL_RUN_TYPE", "local"), "packages": pkgs}
+            "kaggle_kernel_id": os.environ.get("KAGGLE_KERNEL_RUN_SLUG", "local"), "packages": pkgs}
     # fmt: on
 
 
@@ -280,7 +326,9 @@ def build_model_card(
     metrics = {n: r["metrics"] for n, r in results.items() if r["model"] is not None}
     importance = {n: r["importance"] for n, r in results.items() if r["model"] is not None}
     artifact_dir = out_dir if out_dir else OUTPUT_DIR
-    artifacts = [_artifact_entry(n, artifact_dir / f"{n}.pkl") for n in metrics]
+    artifacts = [
+        _artifact_entry(n, artifact_dir / f"{n}{MODEL_EXTENSIONS.get(n, '.pkl')}") for n in metrics
+    ]
     # fmt: off
     return {
         "version": version, "created_at": datetime.now(tz=UTC).isoformat(),
@@ -295,17 +343,29 @@ def build_model_card(
     # fmt: on
 
 
+MODEL_EXTENSIONS = {"CatBoost": ".cbm", "XGBoost": ".ubj", "LightGBM": ".txt"}
+
+
 def save_models(results: dict, encoders: dict, out_dir: Path) -> None:
-    """Save model artifacts + encoders to out_dir (before model card)."""
-    import pickle  # noqa: PLC0415
+    """Save model artifacts in native formats + encoders via joblib (I3)."""
+    import joblib  # noqa: PLC0415
 
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, r in results.items():
-        if r["model"] is not None:
-            with open(out_dir / f"{name}.pkl", "wb") as fh:
-                pickle.dump(r["model"], fh)
-    with open(out_dir / "encoders.pkl", "wb") as fh:
-        pickle.dump(encoders, fh)
+        model = r["model"]
+        if model is None:
+            continue
+        ext = MODEL_EXTENSIONS.get(name, ".pkl")
+        path = out_dir / f"{name}{ext}"
+        if name == "CatBoost":
+            model.save_model(str(path))
+        elif name == "XGBoost":
+            model.save_model(str(path))
+        elif name == "LightGBM":
+            model.booster_.save_model(str(path))
+        else:
+            joblib.dump(model, path)
+    joblib.dump(encoders, out_dir / "encoders.joblib")
 
 
 def save_metadata_and_push(metadata: dict, out_dir: Path) -> None:
