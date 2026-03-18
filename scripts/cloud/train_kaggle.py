@@ -443,18 +443,47 @@ def _find_parquet(data_dir: Path, name: str) -> Path:
     raise FileNotFoundError(msg)
 
 
+def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load features from Kaggle input, local path, or HuggingFace Hub."""
+    # 1. Kaggle mounted dataset
+    if DATA_DIR.exists() and list(DATA_DIR.rglob("*.parquet")):
+        logger.info("Loading from Kaggle input: %s", DATA_DIR)
+        return (
+            pd.read_parquet(_find_parquet(DATA_DIR, "train.parquet")),
+            pd.read_parquet(_find_parquet(DATA_DIR, "valid.parquet")),
+            pd.read_parquet(_find_parquet(DATA_DIR, "test.parquet")),
+        )
+    # 2. Local path fallback
+    local = Path("data/features")
+    if local.exists() and (local / "train.parquet").exists():
+        logger.info("Loading from local: %s", local)
+        return (
+            pd.read_parquet(local / "train.parquet"),
+            pd.read_parquet(local / "valid.parquet"),
+            pd.read_parquet(local / "test.parquet"),
+        )
+    # 3. HuggingFace Hub (always works with internet)
+    logger.info("Loading from HuggingFace Hub: Pierrax/ffe-history")
+    from huggingface_hub import hf_hub_download  # noqa: PLC0415
+
+    out = Path("/kaggle/working") if Path("/kaggle/working").exists() else Path(".")
+    files = {}
+    for name in ("train", "valid", "test"):
+        path = hf_hub_download(
+            repo_id="Pierrax/ffe-history",
+            filename=f"features/{name}.parquet",
+            repo_type="dataset",
+            local_dir=str(out / "hf_cache"),
+        )
+        files[name] = pd.read_parquet(path)
+        logger.info("Downloaded %s.parquet (%d rows)", name, len(files[name]))
+    return files["train"], files["valid"], files["test"]
+
+
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
     logger.info("ALICE Engine — Kaggle Cloud Training")
-    logger.info(
-        "DATA_DIR=%s exists=%s contents=%s",
-        DATA_DIR,
-        DATA_DIR.exists(),
-        list(DATA_DIR.iterdir()) if DATA_DIR.exists() else [],
-    )
-    train = pd.read_parquet(_find_parquet(DATA_DIR, "train.parquet"))
-    valid = pd.read_parquet(_find_parquet(DATA_DIR, "valid.parquet"))
-    test = pd.read_parquet(_find_parquet(DATA_DIR, "test.parquet"))
+    train, valid, test = _load_features()
     lineage = build_lineage(train, valid, test, DATA_DIR)
     logger.info("Lineage: train=%d valid=%d test=%d", len(train), len(valid), len(test))
     X_train, y_train, X_valid, y_valid, X_test, y_test, encoders = prepare_features(
