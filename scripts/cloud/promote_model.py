@@ -54,6 +54,11 @@ def decide_promotion(
             "decision": "REJECTED",
             "reason": f"fairness check CRITICAL: demographic_parity={dp:.3f} < 0.6",
         }
+    if mcnemar.get("significant") and mcnemar.get("new_auc", 1) < mcnemar.get("champion_auc", 0):
+        return {
+            "decision": "REJECTED",
+            "reason": f"McNemar: significantly worse (p={mcnemar['p_value']:.4f})",
+        }
     new_auc = mcnemar.get("new_auc", 0.0)
     return {
         "decision": "PRODUCTION",
@@ -159,10 +164,26 @@ def _load_model_file(name: str, path: str) -> Any:
     if name == "LightGBM":
         import lightgbm as lgb  # noqa: PLC0415
 
-        return lgb.Booster(model_file=path)
+        booster = lgb.Booster(model_file=path)
+        # Wrap Booster to provide predict_proba interface
+        return _LGBMBoosterWrapper(booster)
     import joblib  # noqa: PLC0415
 
     return joblib.load(path)
+
+
+class _LGBMBoosterWrapper:
+    """Adapter: gives lgb.Booster a predict_proba interface."""
+
+    def __init__(self, booster: Any) -> None:
+        self.booster = booster
+
+    def predict_proba(self, X: Any) -> Any:
+        """Return (n, 2) array matching sklearn convention."""
+        import numpy as np  # noqa: PLC0415
+
+        proba_1 = self.booster.predict(X)
+        return np.column_stack([1 - proba_1, proba_1])
 
 
 def _load_champion() -> tuple[Any, dict] | None:
@@ -185,7 +206,7 @@ def _load_test_data() -> tuple:
     """Load test data from HF dataset or local path."""
     import pandas as pd  # noqa: PLC0415
 
-    data_dir = Path(os.environ.get("KAGGLE_DATA_DIR", "/kaggle/input/alice-features"))
+    data_dir = Path(os.environ.get("ALICE_FEATURES_DIR", "data/features"))
     test = pd.read_parquet(data_dir / "test.parquet")
     from scripts.cloud.train_kaggle import prepare_features  # noqa: PLC0415
 

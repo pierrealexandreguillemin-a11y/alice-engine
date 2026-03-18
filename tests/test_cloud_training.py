@@ -278,6 +278,24 @@ class TestPromoteModel:
         assert result["decision"] == "REJECTED"
         assert "fairness" in result["reason"].lower()
 
+    def test_mcnemar_significantly_worse_rejects(self) -> None:
+        """Significantly worse on McNemar must result in REJECTED."""
+        from scripts.cloud.promote_model import decide_promotion
+
+        mcnemar_worse = {
+            "p_value": 0.001,
+            "significant": True,
+            "new_auc": 0.70,
+            "champion_auc": 0.75,
+        }
+        result = decide_promotion(
+            self._fake_robustness(True),
+            self._fake_fairness("FAIR"),
+            mcnemar_worse,
+        )
+        assert result["decision"] == "REJECTED"
+        assert "mcnemar" in result["reason"].lower()
+
     def test_all_pass_promotes(self) -> None:
         """All checks passing must result in PRODUCTION status."""
         from scripts.cloud.promote_model import decide_promotion
