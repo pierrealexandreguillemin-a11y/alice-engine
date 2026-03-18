@@ -82,6 +82,17 @@ class TestEchiquiersRawSchema:
         with pytest.raises(SchemaErrors):
             EchiquiersRawSchema.validate(df, lazy=True)
 
+    def test_resultat_forfait_2_passes(self, valid_echiquiers_df):
+        """FFE forfait score 2.0 is valid."""
+        valid_echiquiers_df["resultat_blanc"] = [2.0]
+        valid_echiquiers_df["resultat_noir"] = [0.0]
+        EchiquiersRawSchema.validate(valid_echiquiers_df, lazy=True)
+
+    def test_echiquier_16_passes(self, valid_echiquiers_df):
+        """Top 16 has 16 boards."""
+        valid_echiquiers_df["echiquier"] = [16]
+        EchiquiersRawSchema.validate(valid_echiquiers_df, lazy=True)
+
     def test_diff_elo_coherence(self, valid_echiquiers_df):
         valid_echiquiers_df["diff_elo"] = [999]
         with pytest.raises(SchemaErrors):
