@@ -5,6 +5,17 @@
 **Approach**: Kaggle training + local ISO validation (2-phase pipeline)
 **ISO Compliance**: 5055, 5259, 24027, 24029, 23894, 27034, 29119, 42001
 
+## Implementation Divergences (2026-03-19)
+
+| Spec | Actual | Reason |
+|------|--------|--------|
+| Single-file `train_kaggle.py` (~280 lines) | 4 SRP modules: `train_kaggle.py` + `kaggle_trainers.py` + `kaggle_artifacts.py` + `kaggle_diagnostics.py` | ISO 5055 < 300 lines/file; `upload_all_data.py` bundles them for Kaggle |
+| `upload_features.py` (features only) | `upload_all_data.py` (data + code) | Kaggle needs all SRP modules alongside train_kaggle.py |
+| 82 features, 3.5M rows | 147 features, 1.14M rows | Feature bugs fixed (merge dedup 3.6M->1.14M), 10 restored + new categoricals encoded |
+| CPU training, GPU optional | GPU auto-detection: CatBoost GPU, XGBoost cuda, LightGBM CPU | P100 available on Kaggle, significant speedup |
+| AUC floor 0.70 | CatBoost AUC=0.8276, XGBoost=0.7600, LightGBM=0.7292 | Quality gate PASSED |
+| `dataset_sources: ["pierrax/alice-features"]` | No dataset_sources — loads everything from HF Hub directly | Simpler data flow, no Kaggle Dataset dependency |
+
 ## Problem
 
 Training requires ~7 GB RAM for feature parquets (3.5M rows, 82 columns). Local machine has 15 GB total, ~6 GB available — insufficient. Cloud training needed.

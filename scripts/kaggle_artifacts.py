@@ -96,7 +96,8 @@ def build_model_card(
         "hyperparameters": config,
         "best_model": {"name": gate.get("best_model"), "auc": gate.get("best_auc")},
         "quality_gate_result": gate,
-        "limitations": ["Trained on FFE interclub data only", "Not suitable for tournament games"],
+        "limitations": ["Trained on FFE interclub data only", "Not suitable for tournament games",
+                        "LightGBM: CPU only (pip package lacks GPU/OpenCL support on Kaggle)"],
         "use_cases": ["Team composition outcome prediction"],
         "conformance": {"ISO_42001": "CANDIDATE", "ISO_5259": "COMPLIANT", "ISO_5055": "COMPLIANT"},
     }

@@ -21,7 +21,7 @@ Satellite de chess-app (SaaS clubs d'échecs). Déployé sur Render (FastAPI).
 | ComposerService (CE) | FONCTIONNEL | `services/composer.py` |
 | InferenceService (ALI) | PARTIEL (fallback Elo) | `services/inference.py` |
 | DataLoader (MongoDB) | FONCTIONNEL | `services/data_loader.py` |
-| ML Training | FONCTIONNEL | `scripts/training/`, `scripts/cloud/` |
+| ML Training | FONCTIONNEL | `scripts/cloud/`, `scripts/kaggle_*.py` |
 | Data Refresh | FONCTIONNEL | `make refresh-data` |
 | **Câblage routes→services** | **MANQUANT** | routes.py retourne des zéros |
 | **Chargement modèle ML** | **MANQUANT** | modèle entraîné mais pas chargé |
@@ -144,10 +144,13 @@ scripts/
 │   ├── mcnemar_test.py     # Test McNemar 5x2cv
 │   └── run_mcnemar.py      # Runner Phase 4.4 (<50 lignes)
 ├── cloud/                  # Training cloud Kaggle (Phase B2)
-│   ├── train_kaggle.py     # Script auto-contenu Kaggle (single-file)
+│   ├── train_kaggle.py     # Orchestration Kaggle (loads SRP modules)
 │   ├── promote_model.py    # Promotion locale ISO 24029/24027/McNemar
 │   ├── upload_all_data.py  # Upload data+code → Kaggle Dataset
 │   └── kernel-metadata.json # Config Kaggle API headless
+├── kaggle_trainers.py      # ML training logic (CatBoost/XGBoost/LightGBM)
+├── kaggle_artifacts.py     # Model persistence + HF Hub push
+├── kaggle_diagnostics.py   # ISO diagnostics (ROC, calibration, learning curves)
 ├── sync_data/              # Sync données FFE (Phase B1)
 │   ├── freshness.py        # Vérification fraîcheur données
 │   ├── symlink.py          # Gestion symlink/junction Windows
@@ -236,19 +239,10 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
   - 2012+ : features réglementaires plus cohérentes (scoring, catégories modernes)
   - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
   - Test : entraîner sur 2012+ d'abord, comparer AUC vs modèle actuel (2002+)
-- **@TODO Externaliser training** : machine locale limitée (15 GB RAM, train set 7 GB)
-  - **Kaggle (GRATUIT, recommandé)** : 29 GB RAM, 4 CPU + GPU T4, 30h GPU/sem, sessions 9h max
-    - Token HF dans `Add-ons > Secrets > HF_TOKEN`
-    - Push modèle direct via `model.push_to_hub()` / `api.upload_file()`
-    - Intégration officielle : https://huggingface.co/blog/kaggle-integration
-  - **HF Jobs `cpu-upgrade`** : 32 GB RAM, 8 vCPU, **$0.03/h** (~3¢/training complet)
-    - Crédits prépayés requis (promos dispo : Unsloth Jobs Explorers = crédits gratuits)
-    - Script UV inline, push modèle natif, facturation à la minute
-    - Pricing : https://huggingface.co/docs/hub/jobs-pricing
-  - **HF Jobs `cpu-xl`** : 124 GB RAM, 16 vCPU, $1.00/h (pour gros datasets futurs)
-  - **Google Colab** : 12-25 GB RAM gratuit, timeouts aléatoires, moins fiable
-  - **Modal** : $30 crédits gratuits/mois, pay-per-second, setup plus complexe
-  - Script d'export : adapter `train_models_parallel.py` pour env cloud (paths, artifacts)
+- **Training cloud Kaggle** (FAIT, 2026-03-19) : GPU P100, 29 GB RAM, pipeline SRP 4 modules
+  - CatBoost AUC=0.8276 (GPU P100), XGBoost AUC=0.7600 (GPU cuda), LightGBM AUC=0.7292 (CPU)
+  - 147 features, 1.14M rows, quality gate PASSED, models on HF Hub `Pierrax/alice-engine`
+  - GPU auto-detection : CatBoost GPU natif, XGBoost cuda, LightGBM CPU only (pas d'OpenCL sur Kaggle)
 
 ## @TODO - Phase C : Pipeline CI automatisé
 

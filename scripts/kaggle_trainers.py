@@ -200,7 +200,7 @@ def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, param
 
 
 def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
-    """Train LightGBM with GPU attempt + CPU fallback (I1)."""
+    """Train LightGBM CPU only (GPU requires special OpenCL build, not on Kaggle)."""
     try:
         import lightgbm as lgb_lib  # noqa: PLC0415
         from lightgbm import LGBMClassifier  # noqa: PLC0415
@@ -208,8 +208,8 @@ def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
         lgb_p = {k: v for k, v in params.items() if k != "early_stopping_rounds"}
         es = params.get("early_stopping_rounds", 50)
         cbs = [lgb_lib.early_stopping(es), lgb_lib.log_evaluation(100)]
-        # Try GPU, auto-fallback to CPU if LightGBM not compiled with GPU
-        for device in ["gpu", "cpu"] if _has_gpu() else ["cpu"]:
+        # LightGBM pip package has no GPU support (needs OpenCL build) — CPU only
+        for device in ["cpu"]:
             lgb_p["device"] = device
             try:
                 lgbm = LGBMClassifier(**lgb_p)

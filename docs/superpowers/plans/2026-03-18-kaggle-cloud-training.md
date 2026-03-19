@@ -1,10 +1,16 @@
 # Kaggle Cloud Training Implementation Plan
 
+> **Status: COMPLETED (2026-03-19)**
+> - CatBoost AUC=0.8276 (GPU P100), XGBoost AUC=0.7600, LightGBM AUC=0.7292
+> - 147 features, 1.14M rows, quality gate PASSED
+> - Models on HF Hub: `Pierrax/alice-engine/v20260319_181112`
+> - Architecture diverged from plan: single-file split into 4 SRP modules (see spec for details)
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Train CatBoost/XGBoost/LightGBM on Kaggle (free, 30 GB RAM), push CANDIDATE to HF Hub, then validate ISO locally before promoting to PRODUCTION.
 
-**Architecture:** Single self-contained `train_kaggle.py` (~280 lines) runs on Kaggle. Separate `promote_model.py` runs locally, reusing existing ISO validation infrastructure (robustness, fairness, McNemar). `upload_features.py` is a one-time local helper.
+**Architecture:** ~~Single self-contained `train_kaggle.py` (~280 lines) runs on Kaggle.~~ Split into 4 SRP modules: `train_kaggle.py` (orchestration), `kaggle_trainers.py` (ML), `kaggle_artifacts.py` (persistence), `kaggle_diagnostics.py` (ISO diagnostics). `upload_all_data.py` replaces `upload_features.py` (uploads data+code). Separate `promote_model.py` runs locally.
 
 **Tech Stack:** CatBoost, XGBoost, LightGBM, pandas, scikit-learn, huggingface_hub, Kaggle API
 
