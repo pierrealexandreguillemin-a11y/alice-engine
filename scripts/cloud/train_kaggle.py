@@ -445,17 +445,26 @@ def _get_hf_token() -> str | None:
     try:
         from kaggle_secrets import UserSecretsClient  # noqa: PLC0415
 
-        return UserSecretsClient().get_secret("HF_TOKEN")
-    except Exception:  # noqa: BLE001, S110
-        logger.debug("Kaggle Secrets not available")
+        token = UserSecretsClient().get_secret("HF_TOKEN")
+        if token and token.strip():
+            logger.info("HF token found via Kaggle Secrets (len=%d)", len(token.strip()))
+            return token.strip()
+        logger.warning("Kaggle Secret HF_TOKEN is empty")
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Kaggle Secrets not available: %s", exc)
     # 2. Environment variable
-    token = os.environ.get("HF_TOKEN")
+    token = os.environ.get("HF_TOKEN", "").strip()
     if token:
+        logger.info("HF token found via env var (len=%d)", len(token))
         return token
     # 3. HuggingFace cache (local dev)
     cache = Path.home() / ".cache" / "huggingface" / "token"
     if cache.exists():
-        return cache.read_text().strip()
+        token = cache.read_text().strip()
+        if token:
+            logger.info("HF token found via HF cache (len=%d)", len(token))
+            return token
+    logger.warning("No HF token found (tried: Kaggle Secrets, env var, HF cache)")
     return None
 
 
@@ -529,9 +538,23 @@ def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return files["train"], files["valid"], files["test"]
 
 
+def _setup_hf_auth() -> None:
+    """Authenticate with HuggingFace Hub early (before any HF operation)."""
+    token = _get_hf_token()
+    if token:
+        try:
+            from huggingface_hub import login  # noqa: PLC0415
+
+            login(token=token, add_to_git_credential=False)
+            logger.info("HuggingFace Hub authenticated")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("HF login failed: %s", exc)
+
+
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
     logger.info("ALICE Engine — Kaggle Cloud Training")
+    _setup_hf_auth()
     train, valid, test = _load_features()
     lineage = build_lineage(train, valid, test, DATA_DIR)
     logger.info("Lineage: train=%d valid=%d test=%d", len(train), len(valid), len(test))
