@@ -501,27 +501,39 @@ def _find_parquet(data_dir: Path, name: str) -> Path:
     raise FileNotFoundError(msg)
 
 
+def _setup_kaggle_imports() -> None:
+    """Add Kaggle dataset paths to sys.path for importing alice-code modules."""
+    import sys  # noqa: PLC0415
+
+    kaggle_code = Path("/kaggle/input/alice-code")
+    if kaggle_code.exists():
+        sys.path.insert(0, str(kaggle_code))
+        logger.info("Added %s to sys.path", kaggle_code)
+
+
 def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load features from Kaggle input, local path, or HuggingFace Hub."""
-    # 1. Kaggle mounted dataset
-    if DATA_DIR.exists() and list(DATA_DIR.rglob("*.parquet")):
-        logger.info("Loading from Kaggle input: %s", DATA_DIR)
-        return (
-            pd.read_parquet(_find_parquet(DATA_DIR, "train.parquet")),
-            pd.read_parquet(_find_parquet(DATA_DIR, "valid.parquet")),
-            pd.read_parquet(_find_parquet(DATA_DIR, "test.parquet")),
-        )
-    # 2. Local path fallback
+    """Load or compute features. Tries pre-computed first, falls back to full pipeline."""
+    # 1. Pre-computed features (local)
     local = Path("data/features")
     if local.exists() and (local / "train.parquet").exists():
-        logger.info("Loading from local: %s", local)
+        logger.info("Loading pre-computed features from: %s", local)
         return (
             pd.read_parquet(local / "train.parquet"),
             pd.read_parquet(local / "valid.parquet"),
             pd.read_parquet(local / "test.parquet"),
         )
-    # 3. HuggingFace Hub (always works with internet)
-    logger.info("Loading from HuggingFace Hub: Pierrax/ffe-history")
+    # 2. Pre-computed features (HF Hub)
+    try:
+        return _load_features_from_hf()
+    except Exception as exc:  # noqa: BLE001
+        logger.info("No pre-computed features on HF: %s", exc)
+    # 3. Full feature engineering from raw parquets
+    logger.info("Computing features from raw data (full pipeline on Kaggle)")
+    return _compute_features_from_raw()
+
+
+def _load_features_from_hf() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Download pre-computed features from HF Hub."""
     from huggingface_hub import hf_hub_download  # noqa: PLC0415
 
     out = Path("/kaggle/working") if Path("/kaggle/working").exists() else Path(".")
@@ -536,6 +548,46 @@ def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         files[name] = pd.read_parquet(path)
         logger.info("Downloaded %s.parquet (%d rows)", name, len(files[name]))
     return files["train"], files["valid"], files["test"]
+
+
+def _compute_features_from_raw() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Download raw echiquiers.parquet from HF and run full feature engineering."""
+    from huggingface_hub import hf_hub_download  # noqa: PLC0415
+
+    out = Path("/kaggle/working") if Path("/kaggle/working").exists() else Path(".")
+
+    # Download raw data
+    ech_path = hf_hub_download(
+        repo_id="Pierrax/ffe-history",
+        filename="parsed/echiquiers.parquet",
+        repo_type="dataset",
+        local_dir=str(out / "hf_cache"),
+    )
+    logger.info("Downloaded echiquiers.parquet")
+
+    # Setup data dir for feature engineering
+    data_dir = out / "data"
+    data_dir.mkdir(exist_ok=True)
+    import shutil  # noqa: PLC0415
+
+    shutil.copy2(ech_path, data_dir / "echiquiers.parquet")
+
+    # Copy joueurs.parquet if available from Kaggle dataset
+    joueurs_kaggle = Path("/kaggle/input/alice-code/data/joueurs.parquet")
+    if joueurs_kaggle.exists():
+        shutil.copy2(joueurs_kaggle, data_dir / "joueurs.parquet")
+
+    # Run feature engineering
+    from scripts.feature_engineering import run_feature_engineering_v2  # noqa: PLC0415
+
+    features_dir = out / "data" / "features"
+    run_feature_engineering_v2(data_dir=data_dir, output_dir=features_dir, include_advanced=True)
+
+    return (
+        pd.read_parquet(features_dir / "train.parquet"),
+        pd.read_parquet(features_dir / "valid.parquet"),
+        pd.read_parquet(features_dir / "test.parquet"),
+    )
 
 
 def _setup_hf_auth() -> None:
@@ -554,6 +606,7 @@ def _setup_hf_auth() -> None:
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
     logger.info("ALICE Engine — Kaggle Cloud Training")
+    _setup_kaggle_imports()
     _setup_hf_auth()
     train, valid, test = _load_features()
     lineage = build_lineage(train, valid, test, DATA_DIR)
