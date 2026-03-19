@@ -62,13 +62,19 @@ class TestExtractAllFeatures:
     def test_feature_count_without_advanced(
         self, sample_history: pd.DataFrame, sample_history_played: pd.DataFrame
     ) -> None:
-        """Test nombre de features sans avancees = 7."""
+        """Test nombre de features sans avancees = 12.
+
+        8 base features + 3 ALI (presence, patterns, absence) + noyau.
+        """
         result = extract_all_features(sample_history, sample_history_played, include_advanced=False)
-        assert len(result) == 7
+        assert len(result) == 12
 
     def test_feature_count_with_advanced(
         self, sample_history: pd.DataFrame, sample_history_played: pd.DataFrame
     ) -> None:
-        """Test nombre de features avec avancees = 10."""
+        """Test nombre de features avec avancees = 16.
+
+        12 base + 4 advanced (h2h, pressure, trajectory, composition).
+        """
         result = extract_all_features(sample_history, sample_history_played, include_advanced=True)
-        assert len(result) == 10
+        assert len(result) == 16

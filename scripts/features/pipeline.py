@@ -1,8 +1,8 @@
 """Pipeline helpers pour feature engineering - ISO 5055.
 
 Ce module contient les fonctions d'orchestration du pipeline de features:
-- _extract_all_features: Extraction de toutes les features depuis l'historique
-- _merge_all_features: Merge de toutes les features sur le DataFrame cible
+- extract_all_features: Extraction de toutes les features depuis l'historique
+- merge_all_features: Merge de toutes les features sur le DataFrame cible
 
 Ces fonctions sont extraites de feature_engineering.py pour respecter
 la limite de 300 lignes (ISO 5055).
@@ -27,9 +27,11 @@ from scripts.features.ffe_features import extract_ffe_regulatory_features
 from scripts.features.merge_helpers import (
     merge_club_reliability,
     merge_h2h_features,
+    merge_noyau_features,
     merge_player_features,
     merge_team_enjeu,
 )
+from scripts.features.noyau import extract_noyau_features
 from scripts.features.performance import (
     calculate_board_position,
     calculate_color_performance,
@@ -75,9 +77,10 @@ def extract_all_features(
         "ffe_regulatory": extract_ffe_regulatory_features(df_history_played),
         "team_enjeu": extract_team_enjeu_features(df_history_played, standings),
         "club_behavior": extract_club_behavior(df_history),
+        "noyau": extract_noyau_features(df_history_played),
     }
 
-    # ALI features (presence + patterns)
+    # ALI features (presence + patterns + absence)
     ali_features = extract_ali_features(df_history_played)
     features.update(ali_features)
 
@@ -163,35 +166,69 @@ def merge_all_features(
     # Team enjeu
     result = merge_team_enjeu(result, features["team_enjeu"])
 
-    # Club behavior (merge by equipe_dom)
-    club_beh = features.get("club_behavior", pd.DataFrame())
-    if not club_beh.empty and "equipe" in club_beh.columns:
-        result = result.merge(
-            club_beh.rename(columns={"equipe": "equipe_dom"}),
-            on=["equipe_dom", "saison"],
-            how="left",
-        )
+    # Club behavior (merge by equipe_dom AND equipe_ext)
+    result = _merge_club_behavior(result, features.get("club_behavior", pd.DataFrame()))
 
-    # ALI features (presence + patterns per player)
+    # Noyau features (joueur x equipe x ronde)
+    result = merge_noyau_features(result, features.get("noyau", pd.DataFrame()))
+
+    # ALI features (presence + patterns + absence per player)
     result = merge_ali_features(result, features)
 
     # Advanced features
     if include_advanced:
-        result = merge_player_features(
-            result,
-            features.get("trajectory", pd.DataFrame()),
-            ["elo_trajectory", "momentum"],
-        )
-        result = merge_player_features(
-            result,
-            features.get("pressure", pd.DataFrame()),
-            ["clutch_factor", "pressure_type"],
-        )
-        result = merge_h2h_features(result, features.get("h2h", pd.DataFrame()))
-        result = merge_player_features(
-            result,
-            features.get("composition", pd.DataFrame()),
-            ["decalage_position", "joueur_decale_haut", "joueur_decale_bas"],
+        result = _merge_advanced_features(result, features)
+
+    return result
+
+
+def _merge_club_behavior(
+    result: pd.DataFrame,
+    club_beh: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge club behavior pour equipe_dom ET equipe_ext.
+
+    Colonnes dom: nb_joueurs_utilises_dom, rotation_effectif_dom, etc.
+    Colonnes ext: nb_joueurs_utilises_ext, rotation_effectif_ext, etc.
+    """
+    if club_beh.empty or "equipe" not in club_beh.columns:
+        return result
+
+    beh_cols = [c for c in club_beh.columns if c not in ("equipe", "saison")]
+
+    for suffix, equipe_col in [("dom", "equipe_dom"), ("ext", "equipe_ext")]:
+        if equipe_col not in result.columns:
+            continue
+        rename_map = {c: f"{c}_{suffix}" for c in beh_cols}
+        merge_df = club_beh.rename(columns={"equipe": equipe_col} | rename_map)
+        result = result.merge(
+            merge_df[[equipe_col, "saison"] + list(rename_map.values())],
+            on=[equipe_col, "saison"],
+            how="left",
         )
 
+    return result
+
+
+def _merge_advanced_features(
+    result: pd.DataFrame,
+    features: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Merge les features avancees (H2H, pressure, trajectory, composition)."""
+    result = merge_player_features(
+        result,
+        features.get("trajectory", pd.DataFrame()),
+        ["elo_trajectory", "momentum"],
+    )
+    result = merge_player_features(
+        result,
+        features.get("pressure", pd.DataFrame()),
+        ["clutch_factor", "pressure_type"],
+    )
+    result = merge_h2h_features(result, features.get("h2h", pd.DataFrame()))
+    result = merge_player_features(
+        result,
+        features.get("composition", pd.DataFrame()),
+        ["decalage_position", "joueur_decale_haut", "joueur_decale_bas"],
+    )
     return result

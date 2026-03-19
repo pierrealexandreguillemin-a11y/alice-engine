@@ -168,6 +168,57 @@ def _get_merge_keys(result: pd.DataFrame, merge_df: pd.DataFrame) -> list[str]:
     return merge_keys
 
 
+def merge_noyau_features(
+    result: pd.DataFrame,
+    noyau_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge les features noyau par (joueur, equipe, saison, ronde).
+
+    Produit les colonnes:
+    - est_dans_noyau_blanc / est_dans_noyau_noir
+    - pct_noyau_equipe_dom / pct_noyau_equipe_ext
+
+    Args:
+    ----
+        result: DataFrame cible avec blanc_nom, noir_nom, equipe_dom,
+                equipe_ext, saison, ronde
+        noyau_df: DataFrame depuis extract_noyau_features()
+
+    Returns:
+    -------
+        DataFrame avec features noyau mergees
+    """
+    if noyau_df.empty:
+        return result
+
+    required = {"joueur_nom", "equipe", "saison", "ronde", "est_dans_noyau", "pct_noyau_match"}
+    if not required.issubset(noyau_df.columns):
+        return result
+
+    for color, equipe_col in [("blanc", "equipe_dom"), ("noir", "equipe_ext")]:
+        nom_col = f"{color}_nom"
+        if nom_col not in result.columns or equipe_col not in result.columns:
+            continue
+
+        rename_map = {
+            "est_dans_noyau": f"est_dans_noyau_{color}",
+            "pct_noyau_match": f"pct_noyau_equipe_{'dom' if color == 'blanc' else 'ext'}",
+        }
+        sub = noyau_df.rename(columns=rename_map)[
+            ["joueur_nom", "equipe", "saison", "ronde"] + list(rename_map.values())
+        ].drop_duplicates()
+
+        result = result.merge(
+            sub,
+            left_on=[nom_col, equipe_col, "saison", "ronde"],
+            right_on=["joueur_nom", "equipe", "saison", "ronde"],
+            how="left",
+        )
+        result = result.drop(columns=["joueur_nom", "equipe"], errors="ignore")
+
+    return result
+
+
 def merge_h2h_features(
     result: pd.DataFrame,
     h2h: pd.DataFrame,

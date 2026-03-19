@@ -123,6 +123,7 @@ def compute_features_for_split(
 def _add_direct_features(result: pd.DataFrame) -> None:
     """Add features computed directly from the row (no history needed)."""
     from scripts.features.composition import extract_home_feature, extract_title_features
+    from scripts.features.player_enrichment import enrich_from_joueurs
 
     # Titre FIDE numérique + diff_titre
     title_feats = extract_title_features(result)
@@ -134,11 +135,16 @@ def _add_direct_features(result: pd.DataFrame) -> None:
     for col in home_feat.columns:
         result[col] = home_feat[col]
 
+    # Enrichissement joueur depuis joueurs.parquet (elo_type, categorie, k_coefficient)
+    joueurs_path = DEFAULT_DATA_DIR / "joueurs.parquet"
+    enrich_from_joueurs(result, joueurs_path)
+
 
 def _add_contextual_features(result: pd.DataFrame, df_history_played: pd.DataFrame) -> None:
-    """Add temporal and adversaire features."""
+    """Add temporal, adversaire, and match context features."""
     from scripts.features.pipeline_extended import (
         extract_adversaire_niveau,
+        extract_match_important,
         extract_temporal_features,
     )
     from scripts.features.standings import calculate_standings
@@ -146,6 +152,8 @@ def _add_contextual_features(result: pd.DataFrame, df_history_played: pd.DataFra
     extract_temporal_features(result)
     standings = calculate_standings(df_history_played)
     extract_adversaire_niveau(result, standings)
+    # match_important needs zone_enjeu columns already merged
+    extract_match_important(result)
 
 
 def run_feature_engineering_v2(
