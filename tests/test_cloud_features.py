@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.cloud.train_kaggle import (
+from scripts.kaggle_trainers import (
     CATBOOST_CAT_FEATURES,
     CATEGORICAL_FEATURES,
     LABEL_COLUMN,

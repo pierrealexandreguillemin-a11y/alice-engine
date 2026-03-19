@@ -208,7 +208,7 @@ def _load_test_data() -> tuple:
 
     data_dir = Path(os.environ.get("ALICE_FEATURES_DIR", "data/features"))
     test = pd.read_parquet(data_dir / "test.parquet")
-    from scripts.cloud.train_kaggle import prepare_features  # noqa: PLC0415
+    from scripts.kaggle_trainers import prepare_features  # noqa: PLC0415
 
     _, _, _, _, X_test, y_test, _ = prepare_features(test.copy(), test.copy(), test)
     return X_test, y_test

@@ -95,17 +95,21 @@ class TestComputeFeaturesForSplit:
             }
         )
 
-        with patch("scripts.feature_engineering.extract_all_features") as mock_extract:
-            with patch("scripts.feature_engineering.merge_all_features") as mock_merge:
-                mock_extract.return_value = {}
-                mock_merge.return_value = df_split
+        with (
+            patch("scripts.feature_engineering.extract_all_features") as mock_extract,
+            patch("scripts.feature_engineering.merge_all_features") as mock_merge,
+            patch("scripts.feature_engineering._add_direct_features"),
+            patch("scripts.feature_engineering._add_contextual_features"),
+        ):
+            mock_extract.return_value = {}
+            mock_merge.return_value = df_split
 
-                result = compute_features_for_split(
-                    df_split, df_history, "test", include_advanced=False
-                )
+            result = compute_features_for_split(
+                df_split, df_history, "test", include_advanced=False
+            )
 
-                mock_extract.assert_called_once()
-                assert len(result) == 1
+            mock_extract.assert_called_once()
+            assert len(result) == 1
 
     def test_includes_advanced_flag(self):
         """Respecte le flag include_advanced."""
@@ -114,17 +118,19 @@ class TestComputeFeaturesForSplit:
         df_split = pd.DataFrame({"saison": [2024], "type_resultat": ["0-1"]})
         df_history = pd.DataFrame({"saison": [2023], "type_resultat": ["0-1"]})
 
-        with patch("scripts.feature_engineering.extract_all_features") as mock_extract:
-            with patch("scripts.feature_engineering.merge_all_features") as mock_merge:
-                mock_extract.return_value = {}
-                mock_merge.return_value = df_split
+        with (
+            patch("scripts.feature_engineering.extract_all_features") as mock_extract,
+            patch("scripts.feature_engineering.merge_all_features") as mock_merge,
+            patch("scripts.feature_engineering._add_direct_features"),
+            patch("scripts.feature_engineering._add_contextual_features"),
+        ):
+            mock_extract.return_value = {}
+            mock_merge.return_value = df_split
 
-                compute_features_for_split(df_split, df_history, "train", include_advanced=True)
+            compute_features_for_split(df_split, df_history, "train", include_advanced=True)
 
-                _, kwargs = mock_extract.call_args
-                # Le dernier argument positionnel est include_advanced
-                args = mock_extract.call_args[0]
-                assert args[-1] is True
+            args = mock_extract.call_args[0]
+            assert args[-1] is True
 
 
 class TestMain:

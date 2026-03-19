@@ -1,13 +1,13 @@
 {
-  "id": "pguillemin/alice-training-v2-135features",
-  "title": "ALICE Training V2 — 135 features from raw",
+  "id": "pguillemin/alice-training-v5",
+  "title": "alice-training-v5",
   "code_file": "train_kaggle.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
-  "enable_gpu": false,
+  "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": [],
+  "dataset_sources": ["pguillemin/alice-code"],
   "competition_sources": [],
   "kernel_sources": []
 }

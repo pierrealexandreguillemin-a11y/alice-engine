@@ -1,19 +1,4 @@
-"""Tests Cloud Training - ISO 29119.
-
-Document ID: ALICE-TEST-CLOUD-TRAINING
-Version: 2.0.0
-Tests: 16
-
-Classes:
-- TestComputeHash: Tests dataframe hashing (2 tests)
-- TestBuildLineage: Tests ISO 5259 lineage (2 tests)
-- TestQualityGates: Tests AUC gates (4 tests)
-- TestModelCard: Tests model card structure (4 tests)
-- TestHyperparamsSync: Tests config matches YAML (1 test)
-- TestPromoteModel: Tests promotion logic (3 tests)
-
-ISO: 29119, 42001. Author: ALICE Engine Team. Updated: 2026-03-18
-"""
+"""Tests Cloud Training — ISO 29119/42001. Doc: ALICE-TEST-CLOUD-TRAINING v2.0.0."""
 
 from __future__ import annotations
 
@@ -26,11 +11,14 @@ import pytest
 import yaml
 
 from scripts.cloud.train_kaggle import (
-    LABEL_COLUMN,
     build_lineage,
     build_model_card,
-    check_quality_gates,
     compute_dataframe_hash,
+)
+from scripts.kaggle_trainers import (
+    LABEL_COLUMN,
+    MODEL_EXTENSIONS,
+    check_quality_gates,
     default_hyperparameters,
 )
 
@@ -171,7 +159,9 @@ class TestModelCard:
         self, mock_results: dict, mock_lineage: dict, gate: dict
     ) -> None:
         """Model card dict must contain all fields including quality_gate_result."""
-        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
+        card = build_model_card(
+            mock_results, mock_lineage, gate, default_hyperparameters(), MODEL_EXTENSIONS
+        )
         required_fields = [
             "version",
             "created_at",
@@ -195,7 +185,9 @@ class TestModelCard:
         self, mock_results: dict, mock_lineage: dict, gate: dict
     ) -> None:
         """Each artifact entry must have sha256 and size_bytes fields."""
-        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
+        card = build_model_card(
+            mock_results, mock_lineage, gate, default_hyperparameters(), MODEL_EXTENSIONS
+        )
         for artifact in card["artifacts"]:
             assert "sha256" in artifact, f"Missing sha256 in {artifact}"
             assert "size_bytes" in artifact, f"Missing size_bytes in {artifact}"
@@ -204,7 +196,9 @@ class TestModelCard:
         self, mock_results: dict, mock_lineage: dict, gate: dict
     ) -> None:
         """Environment must include python_version, catboost, xgboost, lightgbm."""
-        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
+        card = build_model_card(
+            mock_results, mock_lineage, gate, default_hyperparameters(), MODEL_EXTENSIONS
+        )
         env = card["environment"]
         assert "python_version" in env
         for pkg in ("catboost", "xgboost", "lightgbm"):
@@ -214,7 +208,9 @@ class TestModelCard:
         self, mock_results: dict, mock_lineage: dict, gate: dict
     ) -> None:
         """Model card must contain quality_gate_result matching the gate dict."""
-        card = build_model_card(mock_results, mock_lineage, gate, default_hyperparameters())
+        card = build_model_card(
+            mock_results, mock_lineage, gate, default_hyperparameters(), MODEL_EXTENSIONS
+        )
         assert card["quality_gate_result"] == gate
 
 
@@ -226,7 +222,14 @@ class TestHyperparamsSync:
         with Path("config/hyperparameters.yaml").open() as fh:
             yaml_cfg = yaml.safe_load(fh)
         kaggle_cfg = default_hyperparameters()
-        skip_keys = {"thread_count", "n_jobs", "cat_features", "categorical_feature"}
+        skip_keys = {
+            "thread_count",
+            "n_jobs",
+            "cat_features",
+            "categorical_feature",
+            "device",
+            "task_type",
+        }
         for section in ("catboost", "xgboost", "lightgbm"):
             yaml_keys = {k for k in yaml_cfg[section] if k not in skip_keys}
             kaggle_keys = {k for k in kaggle_cfg[section] if k not in skip_keys}

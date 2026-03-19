@@ -146,7 +146,7 @@ scripts/
 ├── cloud/                  # Training cloud Kaggle (Phase B2)
 │   ├── train_kaggle.py     # Script auto-contenu Kaggle (single-file)
 │   ├── promote_model.py    # Promotion locale ISO 24029/24027/McNemar
-│   ├── upload_features.py  # Upload features → Kaggle Dataset
+│   ├── upload_all_data.py  # Upload data+code → Kaggle Dataset
 │   └── kernel-metadata.json # Config Kaggle API headless
 ├── sync_data/              # Sync données FFE (Phase B1)
 │   ├── freshness.py        # Vérification fraîcheur données
@@ -212,8 +212,8 @@ make refresh-data  # Sync + parse + validate ISO 5259 + features (pipeline compl
 
 ### Training cloud (Kaggle)
 ```bash
-python -m scripts.cloud.upload_features    # Upload features → Kaggle Dataset (one-time)
-kaggle kernels push -p scripts/cloud/      # Lancer training sur Kaggle (headless)
+python -m scripts.cloud.upload_all_data    # Upload data+code → Kaggle Dataset
+kaggle kernels push -p scripts/cloud/      # Lancer training sur Kaggle (headless, GPU T4)
 kaggle kernels status pierrax/alice-training  # Vérifier statut
 python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion ISO locale
 ```

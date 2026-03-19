@@ -51,7 +51,7 @@ catboost:
 
   # Performance
   thread_count: -1              # Utilise tous les cores CPU
-  task_type: "CPU"
+  task_type: "CPU"              # Auto-set GPU par kaggle_trainers.py si GPU detecte
 
   # Categorical features (ALICE dataset)
   cat_features:
@@ -61,7 +61,7 @@ catboost:
     - blanc_titre               # GM, IM, FM, etc.
     - noir_titre                # GM, IM, FM, etc.
     - jour_semaine              # Lundi-Dimanche
-    - zone_enjeu                # montee, danger, mi_tableau
+    - zone_enjeu_dom            # montee, danger, mi_tableau
 
   # Early stopping
   early_stopping_rounds: 50     # Standard pour gradient boosting
@@ -94,7 +94,7 @@ xgboost:
   min_child_weight: 1           # Min sum of instance weight
 
   # Performance
-  tree_method: "hist"           # Histogram-based (rapide, moins memoire)
+  tree_method: "hist"           # Histogram-based; device auto-set cuda par kaggle_trainers.py
   n_jobs: -1                    # Tous les cores
 
   # Early stopping
@@ -130,7 +130,7 @@ lightgbm:
   # Categorical features
   categorical_feature: "auto"   # Auto-detect from pandas categorical
 
-  # Performance
+  # Performance — device auto-set gpu par kaggle_trainers.py si GPU disponible
   n_jobs: -1
 
   # Early stopping
