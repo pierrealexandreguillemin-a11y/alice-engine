@@ -47,6 +47,16 @@ ADVANCED_CAT_FEATURES = [
     "elo_trajectory_noir",
     "pressure_type_blanc",
     "pressure_type_noir",
+    # V2: nouvelles features catégorielles
+    "categorie_blanc",
+    "categorie_noir",
+    "elo_type_blanc",
+    "elo_type_noir",
+    "phase_saison",
+    "regularite_blanc",
+    "regularite_noir",
+    "role_type_blanc",
+    "role_type_noir",
 ]
 # Bool features to cast to int
 BOOL_FEATURES = [
@@ -54,6 +64,11 @@ BOOL_FEATURES = [
     "joueur_fantome_noir",
     "ffe_multi_equipe_blanc",
     "ffe_multi_equipe_noir",
+    "est_dans_noyau_blanc",
+    "est_dans_noyau_noir",
+    "match_important",
+    "renforce_fin_saison_dom",
+    "renforce_fin_saison_ext",
 ]
 LABEL_COLUMN = "resultat_blanc"
 AUC_FLOOR = 0.70
