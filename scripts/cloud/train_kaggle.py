@@ -131,7 +131,13 @@ def main() -> None:
     X_train, y_train, X_valid, y_valid, X_test, y_test, encoders = prepare_features(
         train, valid, test
     )
+    version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
+    out_dir = OUTPUT_DIR / version
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     config = default_hyperparameters()
+    # CatBoost: write training logs inside versioned out_dir (not cwd)
+    config["catboost"]["train_dir"] = str(out_dir / "catboost_info")
     results = train_all_sequential(X_train, y_train, X_valid, y_valid, config)
     evaluate_on_test(results, X_test, y_test)
 
@@ -139,8 +145,6 @@ def main() -> None:
     gate = check_quality_gates(results, champion_auc=champion_auc)
     logger.info("Quality gate: %s", gate)
 
-    version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
-    out_dir = OUTPUT_DIR / version
     save_models(results, encoders, out_dir, model_extensions=MODEL_EXTENSIONS)
     save_diagnostics(results, X_test, y_test, X_valid, y_valid, X_train, out_dir)
     metadata = build_model_card(results, lineage, gate, config, MODEL_EXTENSIONS, out_dir=out_dir)

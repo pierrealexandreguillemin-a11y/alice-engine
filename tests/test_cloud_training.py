@@ -229,6 +229,7 @@ class TestHyperparamsSync:
             "categorical_feature",
             "device",
             "task_type",
+            "train_dir",
         }
         for section in ("catboost", "xgboost", "lightgbm"):
             yaml_keys = {k for k in yaml_cfg[section] if k not in skip_keys}

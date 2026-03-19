@@ -103,18 +103,15 @@ def default_hyperparameters() -> dict:
     """Auto-detect GPU and set optimal hyperparameters for Kaggle."""
     gpu = _has_gpu()
     logger.info("GPU detected: %s", gpu)
+    # fmt: off
     xgb_gpu = {"tree_method": "hist", "device": "cpu"}
-    if gpu:  # XGBoost >=2.0: device="cuda", older: tree_method="gpu_hist"
+    if gpu:
         try:
             from xgboost import __version__ as xv  # noqa: PLC0415
-
-            xgb_gpu = (
-                {"tree_method": "hist", "device": "cuda"}
-                if int(xv.split(".")[0]) >= 2
-                else {"tree_method": "gpu_hist"}
-            )
+            xgb_gpu = {"tree_method": "hist", "device": "cuda"} if int(xv.split(".")[0]) >= 2 else {"tree_method": "gpu_hist"}
         except Exception:
             xgb_gpu = {"tree_method": "gpu_hist"}
+    # fmt: on
     # fmt: off
     return {
         "global": {"random_seed": 42, "early_stopping_rounds": 50, "eval_metric": "auc"},
@@ -141,29 +138,10 @@ def default_hyperparameters() -> dict:
 
 
 def compute_validation_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
-    """10-field metrics on validation set."""
-    # fmt: off
-    from sklearn.metrics import (  # noqa: PLC0415, E501
-        accuracy_score,
-        confusion_matrix,
-        f1_score,
-        log_loss,
-        precision_score,
-        recall_score,
-        roc_auc_score,
-    )
-    # fmt: on
-    cm = confusion_matrix(y_true, y_pred)
-    # fmt: off
-    return {"auc_roc": float(roc_auc_score(y_true, y_proba)),
-            "accuracy": float(accuracy_score(y_true, y_pred)),
-            "precision": float(precision_score(y_true, y_pred, zero_division=0)),
-            "recall": float(recall_score(y_true, y_pred, zero_division=0)),
-            "f1_score": float(f1_score(y_true, y_pred, zero_division=0)),
-            "log_loss": float(log_loss(y_true, y_proba)),
-            "true_negatives": int(cm[0, 0]), "false_positives": int(cm[0, 1]),
-            "false_negatives": int(cm[1, 0]), "true_positives": int(cm[1, 1])}
-    # fmt: on
+    """Delegate to kaggle_diagnostics (moved for ISO 5055 line limit)."""
+    from scripts.kaggle_diagnostics import _compute_metrics  # noqa: PLC0415
+
+    return _compute_metrics(y_true, y_pred, y_proba)
 
 
 def _eval_model(model: Any, X_valid: Any, y_valid: Any, train_time: float) -> dict:
