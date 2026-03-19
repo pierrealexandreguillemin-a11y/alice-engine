@@ -5,7 +5,6 @@ from __future__ import annotations
 import gc  # noqa: E401
 import logging
 import time
-from pathlib import Path
 from typing import Any
 
 import pandas as pd  # noqa: TCH002 — used at runtime, not just type-checking
@@ -67,9 +66,9 @@ def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
         if col in df.columns:
             df[col] = df[col].fillna(0).astype(int)
     X = df.select_dtypes(include=["int64", "int32", "float64", "float32"])
-    for col in (LABEL_COLUMN, "resultat_noir"):
-        if col in X.columns:
-            X = X.drop(columns=[col])
+    # Drop target + any outcome column (leakage guard)
+    drop = [c for c in X.columns if c in (LABEL_COLUMN, "resultat_noir") or "resultat" in c.lower()]
+    X = X.drop(columns=drop, errors="ignore")
     return X, y
 
 
@@ -143,7 +142,8 @@ def default_hyperparameters() -> dict:
 
 def compute_validation_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
     """10-field metrics on validation set."""
-    from sklearn.metrics import (  # noqa: PLC0415
+    # fmt: off
+    from sklearn.metrics import (  # noqa: PLC0415, E501
         accuracy_score,
         confusion_matrix,
         f1_score,
@@ -152,7 +152,7 @@ def compute_validation_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
         recall_score,
         roc_auc_score,
     )
-
+    # fmt: on
     cm = confusion_matrix(y_true, y_pred)
     # fmt: off
     return {"auc_roc": float(roc_auc_score(y_true, y_proba)),
@@ -304,25 +304,3 @@ def check_quality_gates(results: dict, champion_auc: float | None = None) -> dic
         if drop_pct > 2.0:
             return {"passed": False, "reason": f"Degradation {drop_pct:.1f}% > 2.0%"}
     return {"passed": True, "best_model": best_name, "best_auc": best_auc}
-
-
-def save_models(results: dict, encoders: dict, out_dir: Path) -> None:
-    """Save model artifacts in native formats + encoders via joblib (I3)."""
-    import joblib  # noqa: PLC0415
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for name, r in results.items():
-        model = r["model"]
-        if model is None:
-            continue
-        ext = MODEL_EXTENSIONS.get(name, ".pkl")
-        path = out_dir / f"{name}{ext}"
-        if name == "CatBoost":
-            model.save_model(str(path))
-        elif name == "XGBoost":
-            model.save_model(str(path))
-        elif name == "LightGBM":
-            model.booster_.save_model(str(path))
-        else:
-            joblib.dump(model, path)
-    joblib.dump(encoders, out_dir / "encoders.joblib")

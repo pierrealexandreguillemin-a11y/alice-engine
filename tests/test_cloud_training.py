@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from scripts.cloud.train_kaggle import (
+from scripts.kaggle_artifacts import (
     build_lineage,
     build_model_card,
     compute_dataframe_hash,

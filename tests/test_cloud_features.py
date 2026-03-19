@@ -181,7 +181,7 @@ class TestFetchChampionAuc:
             # Re-import to pick up mocked module
             import importlib
 
-            import scripts.cloud.train_kaggle as mod
+            import scripts.kaggle_artifacts as mod
 
             importlib.reload(mod)
             result = mod.fetch_champion_auc()
@@ -198,7 +198,7 @@ class TestFetchChampionAuc:
         ):
             import importlib
 
-            import scripts.cloud.train_kaggle as mod
+            import scripts.kaggle_artifacts as mod
 
             importlib.reload(mod)
             result = mod.fetch_champion_auc()
