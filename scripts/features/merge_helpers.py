@@ -133,7 +133,15 @@ def _get_enjeu_cols(result: pd.DataFrame, team_enjeu: pd.DataFrame, col: str) ->
     """Recupere les colonnes d'enjeu disponibles."""
     if col not in result.columns or "saison" not in result.columns:
         return []
-    merge_cols = ["zone_enjeu", "niveau_hierarchique", "position"]
+    merge_cols = [
+        "zone_enjeu",
+        "niveau_hierarchique",
+        "position",
+        "ecart_premier",
+        "ecart_dernier",
+        "points_cumules",
+        "nb_equipes",
+    ]
     return [c for c in merge_cols if c in team_enjeu.columns]
 
 
@@ -144,17 +152,21 @@ def _execute_enjeu_merge(
     col: str,
     cols_exist: list[str],
 ) -> pd.DataFrame:
-    """Execute le merge d'enjeu."""
-    merge_keys = _get_merge_keys(result, merge_df)
-    left_keys = [col, "saison"] + (["ronde"] if "ronde" in result.columns else [])
+    """Execute le merge d'enjeu avec contexte competition complet."""
+    # Use full competition context to avoid cartesian product
+    # (a club in 2 competitions has 2 legitimate enjeu rows)
+    ctx_cols = ["competition", "division", "groupe"]
+    merge_keys = ["equipe", "saison"]
+    left_keys = [col, "saison"]
+    for c in ["ronde"] + ctx_cols:
+        if c in result.columns and c in merge_df.columns:
+            merge_keys.append(c)
+            left_keys.append(c)
 
-    result = result.merge(
-        merge_df[merge_keys + [f"{c}_{suffix}" for c in cols_exist]].drop_duplicates(),
-        left_on=left_keys,
-        right_on=merge_keys,
-        how="left",
-    )
+    value_cols = [f"{c}_{suffix}" for c in cols_exist]
+    sub = merge_df[merge_keys + value_cols].drop_duplicates(subset=merge_keys)
 
+    result = result.merge(sub, left_on=left_keys, right_on=merge_keys, how="left")
     if "equipe" in result.columns:
         result = result.drop(columns=["equipe"])
     return result
@@ -204,9 +216,10 @@ def merge_noyau_features(
             "est_dans_noyau": f"est_dans_noyau_{color}",
             "pct_noyau_match": f"pct_noyau_equipe_{'dom' if color == 'blanc' else 'ext'}",
         }
+        merge_keys = ["joueur_nom", "equipe", "saison", "ronde"]
         sub = noyau_df.rename(columns=rename_map)[
-            ["joueur_nom", "equipe", "saison", "ronde"] + list(rename_map.values())
-        ].drop_duplicates()
+            merge_keys + list(rename_map.values())
+        ].drop_duplicates(subset=merge_keys, keep="first")
 
         result = result.merge(
             sub,

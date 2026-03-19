@@ -52,80 +52,75 @@ def extract_ali_features(df_history_played: pd.DataFrame) -> dict[str, pd.DataFr
 
 
 def extract_absence_features(df_history_played: pd.DataFrame) -> pd.DataFrame:
-    """Calcule les features d'absence par joueur.
+    """Calcule les features d'absence par joueur (vectorise).
 
     Features:
     - rondes_manquees_consecutives: max rondes consecutives manquees
     - taux_presence_global: taux sur les 3 dernieres saisons
 
-    Args:
-    ----
-        df_history_played: DataFrame parties jouees (sans forfaits)
-
-    Returns:
-    -------
-        DataFrame avec colonnes: joueur_nom,
-        rondes_manquees_consecutives, taux_presence_global
+    Vectorized v2: groupby au lieu de boucle par joueur.
     """
     if df_history_played.empty:
         return pd.DataFrame()
 
-    rows: list[dict] = []
     saisons_all = sorted(df_history_played["saison"].unique())
     saisons_3 = saisons_all[-3:] if len(saisons_all) >= 3 else saisons_all
+    df3 = df_history_played[df_history_played["saison"].isin(saisons_3)]
 
-    joueurs = _collect_joueurs(df_history_played)
+    # Collect all player×saison×ronde appearances vectorized
+    parts_all: list[pd.DataFrame] = []
+    parts_3: list[pd.DataFrame] = []
+    for col in ("blanc_nom", "noir_nom"):
+        if col in df_history_played.columns:
+            sub = df_history_played[[col, "saison", "ronde"]].dropna(subset=[col])
+            parts_all.append(sub.rename(columns={col: "joueur_nom"}))
+        if col in df3.columns:
+            sub3 = df3[[col, "saison", "ronde"]].dropna(subset=[col])
+            parts_3.append(sub3.rename(columns={col: "joueur_nom"}))
 
-    for joueur in joueurs:
-        row = _compute_joueur_absence(df_history_played, joueur, saisons_3)
-        rows.append(row)
+    if not parts_all:
+        return pd.DataFrame()
 
-    result = pd.DataFrame(rows)
+    all_app = pd.concat(parts_all, ignore_index=True)
+
+    # taux_presence_global (3 dernieres saisons)
+    # Denominator = rondes per saison (not global) to handle varying group formats
+    if parts_3:
+        app_3 = pd.concat(parts_3, ignore_index=True)
+        rondes_per_saison = app_3.groupby("saison")["ronde"].nunique().reset_index()
+        rondes_per_saison.columns = ["saison", "nb_rondes_total"]
+        # Per joueur×saison: rondes played
+        joueur_saison = app_3.groupby(["joueur_nom", "saison"])["ronde"].nunique().reset_index()
+        joueur_saison.columns = ["joueur_nom", "saison", "nb_jouees"]
+        joueur_saison = joueur_saison.merge(rondes_per_saison, on="saison", how="left")
+        joueur_saison["taux_saison"] = joueur_saison["nb_jouees"] / joueur_saison["nb_rondes_total"]
+        # Mean across 3 seasons
+        taux = joueur_saison.groupby("joueur_nom")["taux_saison"].mean().reset_index()
+        taux.columns = ["joueur_nom", "taux_presence_global"]
+        taux["taux_presence_global"] = taux["taux_presence_global"].round(3)
+    else:
+        taux = pd.DataFrame(columns=["joueur_nom", "taux_presence_global"])
+
+    # rondes_manquees_consecutives: per-player universe based on own max ronde
+    app_cons = pd.concat(parts_3, ignore_index=True) if parts_3 else all_app
+    played_sets = app_cons.groupby("joueur_nom")["ronde"].agg(["max", set]).reset_index()
+    played_sets.columns = ["joueur_nom", "max_ronde", "rondes_jouees"]
+    played_sets["rondes_manquees_consecutives"] = played_sets.apply(
+        lambda row: _max_consecutive_absences(
+            list(range(1, int(row["max_ronde"]) + 1)), row["rondes_jouees"]
+        ),
+        axis=1,
+    )
+
+    result = played_sets[["joueur_nom", "rondes_manquees_consecutives"]].merge(
+        taux[["joueur_nom", "taux_presence_global"]],
+        on="joueur_nom",
+        how="left",
+    )
+    result["taux_presence_global"] = result["taux_presence_global"].fillna(0.0)
+
     logger.info("  Absence features: %d joueurs calcules", len(result))
     return result
-
-
-def _collect_joueurs(df: pd.DataFrame) -> set[str]:
-    """Collecte l'ensemble des joueurs (blanc + noir)."""
-    joueurs: set[str] = set()
-    for col in ("blanc_nom", "noir_nom"):
-        if col in df.columns:
-            joueurs.update(df[col].dropna().unique())
-    return joueurs
-
-
-def _compute_joueur_absence(
-    df: pd.DataFrame,
-    joueur: str,
-    saisons_3: list,
-) -> dict:
-    """Calcule les stats d'absence pour un joueur."""
-    # Rondes jouees toutes saisons confondues (3 dernieres)
-    df3 = df[df["saison"].isin(saisons_3)]
-    rondes_jouees = _get_rondes_jouees(df3, joueur)
-    rondes_totales = df3["ronde"].nunique() if not df3.empty else 0
-
-    taux_global = len(rondes_jouees) / rondes_totales if rondes_totales > 0 else 0.0
-
-    # Rondes manquees consecutives (toutes saisons)
-    rondes_all = sorted(df["ronde"].unique()) if not df.empty else []
-    rondes_jouees_all = _get_rondes_jouees(df, joueur)
-    max_consecutives = _max_consecutive_absences(rondes_all, rondes_jouees_all)
-
-    return {
-        "joueur_nom": joueur,
-        "rondes_manquees_consecutives": max_consecutives,
-        "taux_presence_global": round(taux_global, 3),
-    }
-
-
-def _get_rondes_jouees(df: pd.DataFrame, joueur: str) -> set[int]:
-    """Retourne les rondes jouees par un joueur."""
-    rondes: set[int] = set()
-    for col in ("blanc_nom", "noir_nom"):
-        if col in df.columns:
-            rondes.update(df.loc[df[col] == joueur, "ronde"].dropna().astype(int).tolist())
-    return rondes
 
 
 def _max_consecutive_absences(

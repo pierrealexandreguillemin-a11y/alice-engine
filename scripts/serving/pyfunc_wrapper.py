@@ -44,7 +44,7 @@ import numpy as np
 import pandas as pd
 
 # Features: canonical source is scripts.training.features (DRY - ISO 24027)
-from scripts.training.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+from scripts.training.features import NUMERIC_FEATURES
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +220,8 @@ class AliceModelWrapper(mlflow.pyfunc.PythonModel):
 
     def _collect_categorical_features(self, df: pd.DataFrame, parts: list[pd.DataFrame]) -> None:
         """Encode categorical features using stored label encoders."""
-        cat_cols = [c for c in CATEGORICAL_FEATURES if c in df.columns]
+        # Use ALL encoder keys (not just CATEGORICAL_FEATURES) to match training
+        cat_cols = [c for c in self.encoders if c in df.columns]
         if not cat_cols or not self.encoders:
             return
         cat_data = df[cat_cols].fillna("UNKNOWN").astype(str)

@@ -84,17 +84,17 @@ def extract_all_features(
     ali_features = extract_ali_features(df_history_played)
     features.update(ali_features)
 
-    if include_advanced:
-        # Composition strategy (A02 Art. 3.6.e)
-        compo_raw = extract_composition_strategy(df_history_played)
-        compo_agg = _aggregate_composition(compo_raw)
+    # Composition strategy (A02 Art. 3.6.e) — always computed
+    compo_raw = extract_composition_strategy(df_history_played)
+    compo_agg = _aggregate_composition(compo_raw)
+    features["composition"] = compo_agg
 
+    if include_advanced:
         features.update(
             {
                 "h2h": calculate_head_to_head(df_history_played),
                 "pressure": calculate_pressure_performance(df_history_played),
                 "trajectory": calculate_elo_trajectory(df_history_played),
-                "composition": compo_agg,
             }
         )
 
@@ -152,7 +152,7 @@ def merge_all_features(
     result = merge_player_features(
         result,
         features["color_perf"],
-        ["score_blancs", "score_noirs", "couleur_preferee", "data_quality"],
+        ["score_blancs", "score_noirs", "avantage_blancs", "couleur_preferee", "data_quality"],
     )
 
     # FFE regulatory features
@@ -174,6 +174,13 @@ def merge_all_features(
 
     # ALI features (presence + patterns + absence per player)
     result = merge_ali_features(result, features)
+
+    # Composition strategy (always merged)
+    result = merge_player_features(
+        result,
+        features.get("composition", pd.DataFrame()),
+        ["decalage_position", "joueur_decale_haut", "joueur_decale_bas"],
+    )
 
     # Advanced features
     if include_advanced:
@@ -226,9 +233,4 @@ def _merge_advanced_features(
         ["clutch_factor", "pressure_type"],
     )
     result = merge_h2h_features(result, features.get("h2h", pd.DataFrame()))
-    result = merge_player_features(
-        result,
-        features.get("composition", pd.DataFrame()),
-        ["decalage_position", "joueur_decale_haut", "joueur_decale_bas"],
-    )
     return result

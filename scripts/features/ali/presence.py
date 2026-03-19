@@ -1,25 +1,14 @@
-"""Présence joueur (ALI) - ISO 5055/5259.
+"""Presence joueur (ALI) - ISO 5055/5259.
 
-Ce module calcule les features de présence pour ALI
-(Adversarial Lineup Inference).
+Features:
+- taux_presence_saison: % rondes jouees cette saison [0, 1]
+- derniere_presence: Nombre de rondes depuis derniere apparition
+- regularite: 'regulier' (>70%), 'occasionnel' (30-70%), 'rare' (<30%)
 
-Features (DOCUMENTÉES ISO 5259):
-- taux_presence_saison: % rondes jouées cette saison [0, 1]
-- derniere_presence: Nombre de rondes depuis dernière apparition
-- regularite: Classification basée sur taux de présence
-  - 'regulier': > 70% des rondes (titulaire stable)
-  - 'occasionnel': 30-70% des rondes (rotation)
-  - 'rare': < 30% des rondes (remplaçant, blessé, indisponible)
+Vectorized implementation v2 — no Python loops over players.
 
-Justification seuils:
-- 70%: Joueur présent 6+ rondes sur 9 = titulaire
-- 30%: Joueur présent 2-3 rondes sur 9 = remplaçant occasionnel
-- Référence: Analyse statistique compositions interclubs FFE
-
-Conformité:
-- ISO 5055: Module <300 lignes, responsabilité unique
-- ISO 5259: Features depuis données réelles, seuils documentés
-- ISO 42001: Prédictions AI traçables
+Document ID: ALICE-FEA-PRESENCE-001
+Version: 2.0.0
 """
 
 from __future__ import annotations
@@ -35,96 +24,92 @@ def calculate_presence_features(
     df: pd.DataFrame,
     saison: int | None = None,
 ) -> pd.DataFrame:
-    """Calcule les features de présence par joueur.
+    """Calcule les features de presence par joueur (vectorise).
 
-    Args:
-    ----
-        df: DataFrame échiquiers avec colonnes joueur, ronde, saison
-        saison: Saison à analyser (None = toutes)
-
-    Returns:
+    Returns
     -------
-        DataFrame avec colonnes:
-        - joueur_nom: nom joueur
-        - saison: saison concernée
-        - taux_presence_saison: float [0, 1]
-        - derniere_presence: int (nb rondes depuis dernier match)
-        - nb_rondes_jouees: int
-        - nb_rondes_total: int
-        - regularite: 'regulier', 'occasionnel', 'rare'
-
-    ISO 5259: Présence calculée depuis historique réel.
+        DataFrame avec colonnes: joueur_nom, saison,
+        taux_presence_saison, derniere_presence, regularite
     """
-    logger.info("Calcul features présence joueur...")
+    logger.info("Calcul features presence joueur...")
 
-    df_filtered = _filter_by_saison(df, saison)
+    if df.empty:
+        return pd.DataFrame()
+
+    df_filtered = df[df["saison"] == saison].copy() if saison else df.copy()
     if df_filtered.empty:
         return pd.DataFrame()
 
-    presence_data = _collect_presence_data(df_filtered)
-    result = _aggregate_presence_data(presence_data)
+    parts = []
+    for color in ("blanc", "noir"):
+        nom_col = f"{color}_nom"
+        if nom_col not in df_filtered.columns:
+            continue
+        part = _compute_presence_vectorized(df_filtered, nom_col)
+        if not part.empty:
+            parts.append(part)
 
-    logger.info(f"  {len(result)} joueurs avec features présence")
+    if not parts:
+        return pd.DataFrame()
+
+    # Deduplicate: same player may appear as blanc and noir
+    result = pd.concat(parts, ignore_index=True)
+    result = (
+        result.groupby(["joueur_nom", "saison"])
+        .agg(
+            taux_presence_saison=("taux_presence_saison", "max"),
+            derniere_presence=("derniere_presence", "min"),
+            nb_rondes_jouees=("nb_rondes_jouees", "max"),
+            nb_rondes_total=("nb_rondes_total", "first"),
+            regularite=("regularite", "first"),
+        )
+        .reset_index()
+    )
+
+    logger.info("  %d joueurs avec features presence", len(result))
     return result
 
 
-def _filter_by_saison(df: pd.DataFrame, saison: int | None) -> pd.DataFrame:
-    """Filtre le DataFrame par saison."""
-    if df.empty:
-        return pd.DataFrame()
-    if saison is not None:
-        return df[df["saison"] == saison].copy()
-    return df
+def _compute_presence_vectorized(df: pd.DataFrame, nom_col: str) -> pd.DataFrame:
+    """Vectorized presence for one color."""
+    sub = df[[nom_col, "saison", "ronde"]].dropna(subset=[nom_col]).copy()
+    sub.columns = ["joueur_nom", "saison", "ronde"]
 
+    # Rondes total per saison
+    rondes_total = sub.groupby("saison")["ronde"].nunique().reset_index()
+    rondes_total.columns = ["saison", "nb_rondes_total"]
 
-def _collect_presence_data(df: pd.DataFrame) -> list[dict]:
-    """Collecte les donnees de presence par joueur/saison."""
-    presence_data = []
+    ronde_max = sub.groupby("saison")["ronde"].max().reset_index()
+    ronde_max.columns = ["saison", "ronde_max"]
 
-    for s in df["saison"].unique():
-        df_saison = df[df["saison"] == s]
-        nb_rondes_total = df_saison["ronde"].nunique()
-        if nb_rondes_total == 0:
-            continue
+    # Per joueur×saison: nb rondes jouees + derniere ronde
+    stats = (
+        sub.groupby(["joueur_nom", "saison"])
+        .agg(
+            nb_rondes_jouees=("ronde", "nunique"),
+            derniere_ronde=("ronde", "max"),
+        )
+        .reset_index()
+    )
 
-        ronde_max = df_saison["ronde"].max()
-        _collect_saison_presence(df_saison, s, nb_rondes_total, ronde_max, presence_data)
+    stats = stats.merge(rondes_total, on="saison", how="left")
+    stats = stats.merge(ronde_max, on="saison", how="left")
 
-    return presence_data
+    stats["taux_presence_saison"] = (stats["nb_rondes_jouees"] / stats["ronde_max"]).round(3)
+    stats["derniere_presence"] = stats["ronde_max"] - stats["derniere_ronde"]
+    stats["regularite"] = stats["taux_presence_saison"].apply(_classify_regularite)
 
-
-def _collect_saison_presence(
-    df_saison: pd.DataFrame, s: int, nb_rondes_total: int, ronde_max: int, presence_data: list
-) -> None:
-    """Collecte presence pour une saison."""
-    for couleur in ["blanc", "noir"]:
-        nom_col = f"{couleur}_nom"
-        if nom_col not in df_saison.columns:
-            continue
-
-        for joueur, group in df_saison.groupby(nom_col):
-            entry = _compute_player_presence(joueur, group, s, nb_rondes_total, ronde_max)
-            presence_data.append(entry)
-
-
-def _compute_player_presence(
-    joueur: str, group: pd.DataFrame, saison: int, nb_rondes_total: int, ronde_max: int
-) -> dict:
-    """Calcule les stats de presence d'un joueur."""
-    rondes_jouees = group["ronde"].unique()
-    nb_rondes_jouees = len(rondes_jouees)
-    taux = nb_rondes_jouees / nb_rondes_total
-    regularite = _classify_regularite(taux)
-
-    return {
-        "joueur_nom": joueur,
-        "saison": saison,
-        "taux_presence_saison": round(taux, 3),
-        "derniere_presence": ronde_max - max(rondes_jouees),
-        "nb_rondes_jouees": nb_rondes_jouees,
-        "nb_rondes_total": nb_rondes_total,
-        "regularite": regularite,
-    }
+    return stats[
+        [
+            "joueur_nom",
+            "saison",
+            "taux_presence_saison",
+            "derniere_presence",
+            "nb_rondes_jouees",
+            "nb_rondes_total",
+            "regularite",
+        ]
+    ]
 
 
 def _classify_regularite(taux: float) -> str:
@@ -134,21 +119,3 @@ def _classify_regularite(taux: float) -> str:
     if taux >= 0.3:
         return "occasionnel"
     return "rare"
-
-
-def _aggregate_presence_data(presence_data: list[dict]) -> pd.DataFrame:
-    """Agrege les donnees de presence."""
-    result = pd.DataFrame(presence_data)
-    if not result.empty:
-        result = (
-            result.groupby(["joueur_nom", "saison"])
-            .agg(
-                taux_presence_saison=("taux_presence_saison", "max"),
-                derniere_presence=("derniere_presence", "min"),
-                nb_rondes_jouees=("nb_rondes_jouees", "max"),
-                nb_rondes_total=("nb_rondes_total", "first"),
-                regularite=("regularite", "first"),
-            )
-            .reset_index()
-        )
-    return result

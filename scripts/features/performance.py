@@ -118,6 +118,8 @@ def _aggregate_form_data(forme_data: list[dict]) -> pd.DataFrame:
     """Agrege les donnees de forme."""
     result = pd.DataFrame(forme_data)
     if len(result) > 0:
+        # Keep forme_tendance from the color with the most games
+        result = result.sort_values("nb_matchs_forme", ascending=False)
         result = (
             result.groupby("joueur_nom")
             .agg(

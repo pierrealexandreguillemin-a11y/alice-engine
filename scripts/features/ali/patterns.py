@@ -34,116 +34,75 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_selection_patterns(df: pd.DataFrame) -> pd.DataFrame:
-    """Calcule les patterns de sélection par joueur.
+    """Calcule les patterns de selection par joueur (vectorise).
 
-    Args:
-    ----
-        df: DataFrame échiquiers avec colonnes joueur, echiquier, ronde
-
-    Returns:
-    -------
-        DataFrame avec colonnes:
-        - joueur_nom: nom joueur
-        - saison: saison concernée
-        - role_type: 'titulaire', 'remplacant', 'polyvalent'
-        - echiquier_prefere: int (échiquier modal)
-        - flexibilite_echiquier: float (std positions)
-        - nb_echiquiers_differents: int
-
-    ISO 5259: Patterns calculés depuis compositions réelles.
+    ISO 5259: Patterns calcules depuis compositions reelles.
     """
     logger.info("Calcul patterns sélection joueur...")
 
     if df.empty or "echiquier" not in df.columns:
         return pd.DataFrame()
 
-    pattern_data = []
-
-    for saison in df["saison"].unique():
-        df_saison = df[df["saison"] == saison]
-        nb_rondes_total = df_saison["ronde"].nunique()
-        if nb_rondes_total == 0:
+    # Build long-form (joueur, saison, ronde, echiquier)
+    parts: list[pd.DataFrame] = []
+    for couleur in ["blanc", "noir"]:
+        nom_col = f"{couleur}_nom"
+        if nom_col not in df.columns:
             continue
+        sub = df[[nom_col, "saison", "ronde", "echiquier"]].dropna(subset=[nom_col]).copy()
+        sub = sub.rename(columns={nom_col: "joueur_nom"})
+        parts.append(sub)
 
-        for couleur in ["blanc", "noir"]:
-            _process_color_patterns(df_saison, couleur, saison, nb_rondes_total, pattern_data)
+    if not parts:
+        return pd.DataFrame()
 
-    return _deduplicate_patterns(pattern_data)
+    all_data = pd.concat(parts, ignore_index=True)
 
+    # Deduplicate per (joueur, saison, ronde) BEFORE aggregation
+    # A player appearing as blanc AND noir in the same round should count once
+    all_data = all_data.drop_duplicates(subset=["joueur_nom", "saison", "ronde"])
 
-def _process_color_patterns(
-    df_saison: pd.DataFrame,
-    couleur: str,
-    saison: int,
-    nb_rondes_total: int,
-    pattern_data: list[dict],
-) -> None:
-    """Traite les patterns pour une couleur donnee."""
-    nom_col = f"{couleur}_nom"
-    if nom_col not in df_saison.columns:
-        return
+    # Total rondes per saison
+    rondes_per_saison = all_data.groupby("saison")["ronde"].nunique().reset_index()
+    rondes_per_saison.columns = ["saison", "nb_rondes_total"]
 
-    for joueur, group in df_saison.groupby(nom_col):
-        pattern = _analyze_player_pattern(joueur, group, saison, nb_rondes_total)
-        pattern_data.append(pattern)
-
-
-def _analyze_player_pattern(
-    joueur: str,
-    group: pd.DataFrame,
-    saison: int,
-    nb_rondes_total: int,
-) -> dict:
-    """Analyse le pattern d'un joueur."""
-    echiquiers = group["echiquier"].tolist()
-    nb_rondes_jouees = group["ronde"].nunique()
-    nb_echiquiers_diff = len(set(echiquiers))
-
-    echiquier_prefere = pd.Series(echiquiers).value_counts().index[0]
-    flexibilite = float(np.std(echiquiers)) if len(echiquiers) > 1 else 0.0
-    taux_presence = nb_rondes_jouees / nb_rondes_total
-
-    role = _classify_role(flexibilite, nb_echiquiers_diff, taux_presence)
-
-    return {
-        "joueur_nom": joueur,
-        "saison": saison,
-        "role_type": role,
-        "echiquier_prefere": int(echiquier_prefere),
-        "flexibilite_echiquier": round(flexibilite, 2),
-        "nb_echiquiers_differents": nb_echiquiers_diff,
-        "taux_presence": round(taux_presence, 3),
-    }
-
-
-def _classify_role(flexibilite: float, nb_echiquiers_diff: int, taux_presence: float) -> str:
-    """Classifie le role du joueur."""
-    if flexibilite > 2 and nb_echiquiers_diff >= 3:
-        return "polyvalent"
-    if taux_presence > 0.7:
-        return "titulaire"
-    if taux_presence < 0.3:
-        return "remplacant"
-    return "rotation"
-
-
-def _deduplicate_patterns(pattern_data: list[dict]) -> pd.DataFrame:
-    """Deduplique les patterns par joueur/saison."""
-    result = pd.DataFrame(pattern_data)
-    if result.empty:
-        return result
-
-    result = (
-        result.groupby(["joueur_nom", "saison"])
+    # Per joueur×saison: stats vectorisees (one row per joueur×saison after dedup)
+    stats = (
+        all_data.groupby(["joueur_nom", "saison"])
         .agg(
-            role_type=("role_type", "first"),
-            echiquier_prefere=("echiquier_prefere", lambda x: int(pd.Series(x).mode().iloc[0])),
-            flexibilite_echiquier=("flexibilite_echiquier", "max"),
-            nb_echiquiers_differents=("nb_echiquiers_differents", "max"),
-            taux_presence=("taux_presence", "max"),
+            nb_rondes_jouees=("ronde", "nunique"),
+            flexibilite_echiquier=("echiquier", "std"),
+            nb_echiquiers_differents=("echiquier", "nunique"),
         )
         .reset_index()
     )
 
-    logger.info(f"  {len(result)} joueurs avec patterns sélection")
-    return result
+    # echiquier_prefere: most frequent via idxmax (fully vectorized)
+    counts = all_data.groupby(["joueur_nom", "saison", "echiquier"]).size().reset_index(name="cnt")
+    idx = counts.groupby(["joueur_nom", "saison"])["cnt"].idxmax()
+    mode_df = counts.loc[idx, ["joueur_nom", "saison", "echiquier"]].rename(
+        columns={"echiquier": "echiquier_prefere"}
+    )
+
+    stats = stats.merge(mode_df, on=["joueur_nom", "saison"], how="left")
+    stats = stats.merge(rondes_per_saison, on="saison", how="left")
+
+    stats["taux_presence"] = (stats["nb_rondes_jouees"] / stats["nb_rondes_total"]).round(3)
+    stats["flexibilite_echiquier"] = stats["flexibilite_echiquier"].fillna(0.0).round(2)
+    stats["echiquier_prefere"] = stats["echiquier_prefere"].fillna(1).astype(int)
+
+    # Classify role (vectorized via np.select)
+    stats["role_type"] = np.where(
+        (stats["flexibilite_echiquier"] > 2) & (stats["nb_echiquiers_differents"] >= 3),
+        "polyvalent",
+        np.where(
+            stats["taux_presence"] > 0.7,
+            "titulaire",
+            np.where(stats["taux_presence"] < 0.3, "remplacant", "rotation"),
+        ),
+    )
+
+    # No second dedup needed: drop_duplicates before groupby ensures
+    # one row per (joueur_nom, saison) after the first aggregation.
+    logger.info("  %d joueurs avec patterns sélection", len(stats))
+    return stats
