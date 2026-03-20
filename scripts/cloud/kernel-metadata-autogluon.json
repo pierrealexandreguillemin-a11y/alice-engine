@@ -6,6 +6,7 @@
   "kernel_type": "script",
   "is_private": true,
   "enable_gpu": true,
+  "accelerator": "gpu_t4x2",
   "enable_internet": true,
   "dataset_sources": ["pguillemin/alice-features", "pguillemin/alice-code"],
   "competition_sources": [],
