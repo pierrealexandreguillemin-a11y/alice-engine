@@ -58,11 +58,13 @@ AG_MEMORY_LIMIT = 24  # GB — leave ~5 GB headroom on Kaggle 29 GB RAM
 AG_SEED = 42
 AUC_FLOOR = 0.70
 HF_REPO_ID = "Pierrax/alice-engine"
+AG_NUM_GPUS = 1
+# All models use ag_args_fit for GPU — AutoGluon's unified API
 AG_GPU_HYPERPARAMETERS: dict[str, Any] = {
     "GBM": [{"ag_args_fit": {"num_gpus": 1}}],
-    "CAT": [{"task_type": "GPU"}],
-    "XGB": [{"tree_method": "hist", "device": "cuda"}],
-    "NN_TORCH": {},
+    "CAT": [{"ag_args_fit": {"num_gpus": 1}}],
+    "XGB": [{"ag_args_fit": {"num_gpus": 1}}],
+    "NN_TORCH": [{"ag_args_fit": {"num_gpus": 1}}],
 }
 
 DATA_PATH = Path("/kaggle/input/alice-features")
@@ -134,9 +136,10 @@ def train_autogluon(
         time_limit=AG_TIME_LIMIT,
         num_bag_folds=AG_BAG_FOLDS,
         num_stack_levels=AG_STACK_LEVELS,
+        use_bag_holdout=True,  # Required when tuning_data + num_bag_folds > 0
         memory_limit=AG_MEMORY_LIMIT,
+        num_gpus=AG_NUM_GPUS,
         hyperparameters=AG_GPU_HYPERPARAMETERS,
-        ag_args={"ag.seed": AG_SEED},
     )
     leaderboard = predictor.leaderboard(test_data, silent=True)
     logger.info("Trained %d models. Best: %s", len(leaderboard), leaderboard.iloc[0]["model"])
@@ -242,8 +245,9 @@ def main() -> None:
         "time_limit": AG_TIME_LIMIT,
         "num_bag_folds": AG_BAG_FOLDS,
         "num_stack_levels": AG_STACK_LEVELS,
-        "seed": AG_SEED,
         "memory_limit": AG_MEMORY_LIMIT,
+        "num_gpus": AG_NUM_GPUS,
+        "note": "AutoGluon ensemble not fully reproducible (no seed param in fit API)",
     }
     model_card = build_model_card(
         metrics,
