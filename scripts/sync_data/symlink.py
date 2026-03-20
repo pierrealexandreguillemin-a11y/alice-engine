@@ -36,7 +36,9 @@ def update_symlink(target: Path, link: Path) -> None:
 
 def _is_link_or_junction(path: Path) -> bool:
     """Check if path is a symlink or NTFS junction."""
-    return path.is_symlink() or path.is_junction()
+    if path.is_symlink():
+        return True
+    return hasattr(path, "is_junction") and path.is_junction()
 
 
 def _create_symlink(target: Path, link: Path) -> None:
