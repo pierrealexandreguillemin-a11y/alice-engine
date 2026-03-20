@@ -1,10 +1,4 @@
-"""AutoGluon Kaggle Training — ALICE Engine (ISO 42001/5259/5055).
-
-Standalone script for Kaggle kernel. Loads pre-computed features from
-pguillemin/alice-features, trains AutoGluon ensemble, saves all artifacts.
-
-Usage: python train_autogluon_kaggle.py  (Kaggle kernel)
-"""
+"""AutoGluon Kaggle Training — ALICE Engine (ISO 42001/5259/5055)."""
 
 from __future__ import annotations
 
@@ -13,10 +7,16 @@ import hashlib
 import json
 import logging
 import os
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+try:  # AutoGluon not pre-installed on Kaggle
+    import autogluon  # noqa: F401
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "autogluon>=1.5"])
 
 import pandas as pd
 
@@ -190,26 +190,25 @@ def push_to_hf(out_dir: Path, version: str) -> None:
     logger.info("Pushed to HF Hub: %s/autogluon/%s", HF_REPO_ID, version)
 
 
-# --- Main ---
+def _resolve_path(name: str, candidates: list[Path]) -> Path:
+    for c in candidates:
+        if c.exists():
+            return c
+    msg = f"{name} not found in {candidates}"
+    raise FileNotFoundError(msg)
 
 
 def main() -> None:
     """Full AutoGluon training pipeline."""
     logger.info("ALICE Engine — AutoGluon Kaggle Training")
-
-    code_path = None
-    candidates = [
+    _code_prefixes = [
         Path("/kaggle/input/alice-code"),
         Path("/kaggle/input/datasets/pguillemin/alice-code"),
         Path("."),
     ]
-    for candidate in candidates:
-        if (candidate / "scripts").exists():
-            code_path = candidate
-            break
-    if code_path is None:
-        msg = "scripts/ not found in any candidate path"
-        raise FileNotFoundError(msg)
+    code_path = _resolve_path(
+        "alice-code", [p for p in _code_prefixes if (p / "scripts").exists()] or _code_prefixes
+    )
     sys.path.insert(0, str(code_path))
     logger.info("Code path: %s", code_path)
 
