@@ -2,15 +2,23 @@
 # Equivalent complet des scripts npm de chess-app
 # Version: 3.0 - FULL ISO COVERAGE + ML LIFECYCLE + MONITORING
 
-.PHONY: help install hooks lint format typecheck test test-cov security audit
+.PHONY: help venv install hooks lint format typecheck test test-cov security audit
 .PHONY: complexity quality graphs iso-docs architecture all dev clean
 .PHONY: iso-audit train evaluate ensemble features parse-data
 .PHONY: model-card drift-report data-lineage ml-pipeline all-iso validate-iso
 .PHONY: sync refresh-data
 
-# Variables
-PYTHON := python
-PIP := pip
+# Variables — use venv if available, else system Python
+VENV := .venv
+ifeq ($(OS),Windows_NT)
+VENV_PYTHON := $(VENV)/Scripts/python.exe
+VENV_PIP := $(VENV)/Scripts/pip.exe
+else
+VENV_PYTHON := $(VENV)/bin/python
+VENV_PIP := $(VENV)/bin/pip
+endif
+PYTHON := $(if $(wildcard $(VENV_PYTHON)),$(VENV_PYTHON),python)
+PIP := $(if $(wildcard $(VENV_PIP)),$(VENV_PIP),pip)
 SRC := app/ services/
 TESTS := tests/
 
@@ -78,11 +86,17 @@ help:
 # ============================================
 # SETUP
 # ============================================
-install:
-	$(PIP) install -r requirements.txt
+venv:
+	python -m venv $(VENV)
+	$(PIP) install --upgrade pip
+	@echo "Venv cree dans $(VENV)/"
+
+install: venv
+	$(PIP) install statsforecast --only-binary :all:
+	$(PIP) install -r requirements.txt --only-binary statsforecast
 	$(PIP) install -r requirements-dev.txt
 	@echo ""
-	@echo "Dependances installees!"
+	@echo "Dependances installees dans $(VENV)/"
 	@echo "Executez 'make hooks' pour installer les git hooks"
 
 hooks:

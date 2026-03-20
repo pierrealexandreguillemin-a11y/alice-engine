@@ -163,11 +163,13 @@ repos:
         description: "Audit dependencies for known CVEs"
         entry: python
         args: [
-          -m, pip_audit, --local, --skip-editable,
+          -m, pip_audit, --strict, --local,
+          # Unfixable upstream CVEs — autogluon transitive deps, not used by Alice-Engine
           --ignore-vuln, CVE-2025-69872,
-          --ignore-vuln, GHSA-rf74-v2fm-23pw,   # nltk 3.9.3 - no fix available (latest)
-          --ignore-vuln, CVE-2026-33230,         # nltk 3.9.3 - no fix available (latest)
-          --ignore-vuln, CVE-2026-33231,         # nltk 3.9.3 - no fix available (latest)
+          --ignore-vuln, GHSA-rf74-v2fm-23pw,   # nltk 3.9.3 - no fix available
+          --ignore-vuln, CVE-2026-33230,         # nltk 3.9.3 - no fix available
+          --ignore-vuln, CVE-2026-33231,         # nltk 3.9.3 - no fix available
+          --ignore-vuln, CVE-2026-25990,         # pillow 11.3 - autogluon caps <12
         ]
         language: system
         pass_filenames: false
