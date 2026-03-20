@@ -50,6 +50,10 @@ def extract_composition_strategy(df_played: pd.DataFrame) -> pd.DataFrame:
 
     A02 Art. 3.6.e: inversion autorisée si écart < 100 pts.
     """
+    if df_played.empty or "blanc_elo" not in df_played.columns:
+        return pd.DataFrame(
+            columns=["nom", "decalage_position", "joueur_decale_haut", "joueur_decale_bas"]
+        )
     # Construire les compositions dom + ext séparément
     dom = _composition_shift(df_played, "equipe_dom", "blanc")
     ext = _composition_shift(df_played, "equipe_ext", "noir")

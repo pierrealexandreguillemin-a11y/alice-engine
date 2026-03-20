@@ -32,9 +32,9 @@ class TestCalculateEloTrajectory:
 
     def test_trajectory_progression(self, sample_dated_games: pd.DataFrame) -> None:
         """Test detection progression Elo."""
-        result = calculate_elo_trajectory(sample_dated_games, window=4)
+        result = calculate_elo_trajectory(sample_dated_games, window=6)
 
-        # Joueur Test: 1500 -> 1560 = +60 = progression
+        # Joueur Test: 1500 -> 1560 = +60 = progression (window=6 for all 6 games)
         row = result[result["joueur_nom"] == "Joueur Test"]
         if not row.empty:
             assert row["elo_trajectory"].values[0] == "progression"
