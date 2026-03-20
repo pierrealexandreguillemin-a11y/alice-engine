@@ -118,7 +118,7 @@ ECHIQUIER_MIN = 1
 ECHIQUIER_MAX_ABSOLUTE = 16
 ECHIQUIER_JEUNES_HIGH_BOARDS = 6  # J02 Art. 4.1: boards 1-6 have win=2
 RONDE_MIN = 1
-RONDE_MAX_ABSOLUTE = 18
+RONDE_MAX_ABSOLUTE = 20  # Ligue IDF 2026 has ronde 19
 
 # FFE Regulatory thresholds (A02 Art. 3.7.j)
 NIVEAU_N4 = 4  # N4 = niveau 4

@@ -1,5 +1,67 @@
 # Alice-Engine - Guide Claude
 
+## BUT DU PROJET
+
+Alice Engine est un **système de recommandation de composition d'équipe** pour les interclubs FFE.
+Satellite de chess-app (SaaS clubs d'échecs). Déployé sur Render (FastAPI).
+
+**Pipeline complet :**
+1. **ALI** (Adversarial Lineup Inference) : prédire la composition probable de l'adversaire
+2. **Modèle ML** : prédire P(victoire blanc) pour chaque affectation joueur→échiquier
+3. **CE** (Composition Engine) : optimiser la composition sous contraintes FFE (100pts, noyau, mutés)
+4. **API** : POST /api/v1/predict retourne composition recommandée + alternatives + score attendu
+
+**Contraintes métier** : les compositions sont soumises simultanément sur place (A02 Art. 3.6.a) — le capitaine ne connaît PAS la composition adverse.
+
+## État actuel (mars 2026)
+
+| Couche | Statut | Fichiers |
+|--------|--------|----------|
+| API FastAPI + schemas | COMPLET | `app/api/routes.py` (STUBS), `schemas.py` |
+| ComposerService (CE) | FONCTIONNEL | `services/composer.py` |
+| InferenceService (ALI) | PARTIEL (fallback Elo) | `services/inference.py` |
+| DataLoader (MongoDB) | FONCTIONNEL | `services/data_loader.py` |
+| ML Training | FONCTIONNEL | `scripts/cloud/`, `scripts/kaggle_*.py` |
+| Data Refresh | FONCTIONNEL | `make refresh-data` |
+| **Câblage routes→services** | **MANQUANT** | routes.py retourne des zéros |
+| **Chargement modèle ML** | **MANQUANT** | modèle entraîné mais pas chargé |
+| **ALI prédiction adverse** | **MANQUANT** | generate_scenarios() vide |
+| **Optimisation OR-Tools** | **MANQUANT** | get_alternatives() vide |
+
+## Données Source (FFE)
+
+**Dataset HuggingFace** : https://huggingface.co/datasets/Pierrax/ffe-history (public)
+
+| Fichier | Contenu | Taille |
+|---------|---------|--------|
+| `parsed/echiquiers.parquet` | Echiquiers parsés (saison, ronde, elo, resultat) | ~35 MB |
+| `parsed/joueurs.parquet` | Joueurs FFE (NrFFE, nom, elo, categorie, club) | ~3 MB |
+| `compositions/` | HTML brut interclubs 2002-2026 (85,492 fichiers) | ~2.2 GB |
+| `players_v2/` | HTML joueurs par club (83,930 joueurs) | ~150 MB |
+| `clubs/clubs_index.json` | Index des 992 clubs FFE | ~200 KB |
+
+**Scraping** : repo `C:\Dev\ffe_scrapper` (GitHub: `ffe-history`)
+- `scrape.py --refresh-season 2026` : refresh compositions saison en cours
+- `scrape_all_players.py --refresh` : refresh joueurs (Elos, nouveaux licencies)
+- `discover.py --season 2026` : decouvrir nouveaux groupes
+
+**Données locales** : `dataset_alice/` (symlink) et `data/echiquiers.parquet`, `data/joueurs.parquet`
+
+```python
+# Charger depuis HuggingFace
+from datasets import load_dataset
+ds = load_dataset("Pierrax/ffe-history", data_files="parsed/echiquiers.parquet")
+
+# Ou push un modèle entraîné
+from huggingface_hub import HfApi
+api = HfApi()
+api.upload_file("models/model.pkl", repo_id="Pierrax/alice-engine", repo_type="model")
+```
+
+**Compte HF** : Pierrax (token dans `~/.cache/huggingface/token`)
+
+---
+
 ## RÈGLES ABSOLUES (ISO Compliance)
 
 **TOUJOURS APPLIQUER - AUCUNE EXCEPTION:**
@@ -81,6 +143,21 @@ scripts/
 ├── comparison/             # Tests statistiques (ISO 24029)
 │   ├── mcnemar_test.py     # Test McNemar 5x2cv
 │   └── run_mcnemar.py      # Runner Phase 4.4 (<50 lignes)
+├── cloud/                  # Training cloud Kaggle (Phase B2)
+│   ├── train_kaggle.py     # Orchestration Kaggle (loads SRP modules)
+│   ├── promote_model.py    # Promotion locale ISO 24029/24027/McNemar
+│   ├── upload_all_data.py  # Upload data+code → Kaggle Dataset
+│   └── kernel-metadata.json # Config Kaggle API headless
+├── kaggle_trainers.py      # ML training logic (CatBoost/XGBoost/LightGBM)
+├── kaggle_artifacts.py     # Model persistence + HF Hub push
+├── kaggle_diagnostics.py   # ISO diagnostics (ROC, calibration, learning curves)
+├── sync_data/              # Sync données FFE (Phase B1)
+│   ├── freshness.py        # Vérification fraîcheur données
+│   ├── symlink.py          # Gestion symlink/junction Windows
+│   ├── huggingface.py      # Pull/push HuggingFace Hub
+│   └── types.py            # Pydantic models (SyncConfig, etc.)
+├── parse_dataset/          # Parsing HTML → Parquet
+│   └── __main__.py         # Entry point + validation ISO 5259
 └── reports/                # Rapports ISO
     └── generate_iso25059.py # Rapport final ISO 25059 (<50 lignes)
 ```
@@ -125,16 +202,55 @@ docs/iso/IMPLEMENTATION_STATUS.md
 ## Commandes
 
 ```bash
-make install    # Installer dépendances
-make hooks      # Installer git hooks
-make quality    # Lint + Format + Typecheck + Security
-make test-cov   # Tests + coverage
-make all        # Validation complète
-make graphs     # Générer graphs SVG
-make iso-docs   # MAJ documentation ISO
+make install       # Installer dépendances
+make hooks         # Installer git hooks
+make quality       # Lint + Format + Typecheck + Security
+make test-cov      # Tests + coverage
+make all           # Validation complète
+make graphs        # Générer graphs SVG
+make iso-docs      # MAJ documentation ISO
+make sync          # Sync données depuis ffe_scrapper
+make refresh-data  # Sync + parse + validate ISO 5259 + features (pipeline complet)
+```
+
+### Training cloud (Kaggle)
+```bash
+python -m scripts.cloud.upload_all_data    # Upload data+code → Kaggle Dataset
+kaggle kernels push -p scripts/cloud/      # Lancer training sur Kaggle (headless, GPU T4)
+kaggle kernels status pierrax/alice-training  # Vérifier statut
+python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion ISO locale
 ```
 
 ## Documentation
 
 - `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
 - `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
+- `docs/superpowers/specs/2026-03-17-data-refresh-pipeline-design.md` - Spec data refresh
+- `docs/superpowers/specs/2026-03-18-kaggle-cloud-training-design.md` - Spec Kaggle training
+- `docs/superpowers/plans/2026-03-17-data-refresh-pipeline.md` - Plan data refresh
+- `docs/superpowers/plans/2026-03-18-kaggle-cloud-training.md` - Plan Kaggle training
+
+## Contraintes Training
+
+- **Séquentiel obligatoire** : 15.4 GB RAM, train set ~7 GB → un modèle à la fois avec `gc.collect()` entre chaque
+- `scripts/training/parallel.py` est déjà séquentiel malgré son nom (refactoré en jan 2026)
+- **Split temporel** (pas k-fold random) : les règles FFE évoluent au fil des saisons (scoring 2pts jeunes U12+, catégories d'âge, seuils Elo E/N/F), k-fold mélangerait des ères réglementaires différentes
+- **@TODO Rolling Window** : comparer training 2012-2026 vs 2002-2026
+  - 2012+ : features réglementaires plus cohérentes (scoring, catégories modernes)
+  - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
+  - Test : entraîner sur 2012+ d'abord, comparer AUC vs modèle actuel (2002+)
+- **Training cloud Kaggle** (FAIT, 2026-03-19) : GPU P100, 29 GB RAM, pipeline SRP 4 modules
+  - CatBoost AUC=0.8276 (GPU P100), XGBoost AUC=0.7600 (GPU cuda), LightGBM AUC=0.7292 (CPU)
+  - 147 features, 1.14M rows, quality gate PASSED, models on HF Hub `Pierrax/alice-engine`
+  - GPU auto-detection : CatBoost GPU natif, XGBoost cuda, LightGBM CPU only (pas d'OpenCL sur Kaggle)
+
+## @TODO - Phase C : Pipeline CI automatisé
+
+> Prérequis : Phase B (sync + validation ISO 5259) complétée
+
+- [ ] GitHub Action : détection nouvelles données → re-training automatique
+- [ ] Push automatique des modèles entraînés sur HuggingFace (`Pierrax/alice-engine`)
+- [ ] Drift monitoring intégré (PSI thresholds, feature drift detection)
+- [ ] Alertes sur dégradation AUC / fairness (seuils ISO 24027/24029)
+- [ ] Rapport ISO 25059 auto-généré à chaque re-training
+- [ ] Scheduled refresh : `scrape.py --refresh-season` + `sync_data.py` + `make train` en cron

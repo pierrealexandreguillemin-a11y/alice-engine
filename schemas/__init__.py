@@ -5,6 +5,8 @@ ISO Compliance:
 - ISO/IEC 42001:2023 - AI Management System
 """
 
+from schemas.parsing_schemas import EchiquiersRawSchema, JoueursRawSchema
+from schemas.parsing_validation import validate_raw_echiquiers, validate_raw_joueurs
 from schemas.training_constants import (
     AGE_CATEGORIES,
     COMPETITION_TYPES,
@@ -83,6 +85,11 @@ __all__ = [
     "VALID_RESULT_SUMS",
     "VALID_RESULT_TYPES",
     "VALID_ZONES_ENJEU",
+    # Raw Parsing Validation (ISO 5259)
+    "EchiquiersRawSchema",
+    "JoueursRawSchema",
+    "validate_raw_echiquiers",
+    "validate_raw_joueurs",
     # ISO 5259 Data Quality Structures
     "DataLineage",
     "ErrorSeverity",

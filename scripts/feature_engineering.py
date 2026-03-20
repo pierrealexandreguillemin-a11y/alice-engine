@@ -58,7 +58,11 @@ def temporal_split(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Split temporel des données pour éviter data leakage."""
     logger.info(
-        f"Split temporel: train<={train_end}, valid={train_end + 1}-{valid_end}, test>{valid_end}"
+        "Split temporel: train<=%d, valid=%d-%d, test>%d",
+        train_end,
+        train_end + 1,
+        valid_end,
+        valid_end,
     )
 
     train = df[df["saison"] <= train_end]
@@ -68,11 +72,14 @@ def temporal_split(
     for name, split in [("Train", train), ("Valid", valid), ("Test", test)]:
         if not split.empty and "saison" in split.columns:
             logger.info(
-                f"  {name}: {len(split):,} échiquiers "
-                f"({split['saison'].min()}-{split['saison'].max()})"
+                "  %s: %d echiquiers (%d-%d)",
+                name,
+                len(split),
+                split["saison"].min(),
+                split["saison"].max(),
             )
         else:
-            logger.info(f"  {name}: {len(split):,} échiquiers")
+            logger.info("  %s: %d echiquiers", name, len(split))
 
     return train, valid, test
 
@@ -87,6 +94,7 @@ def compute_features_for_split(
     df_history: pd.DataFrame,
     split_name: str,
     include_advanced: bool = True,
+    data_dir: Path | None = None,
 ) -> pd.DataFrame:
     """Calcule les features pour un split avec historique approprié.
 
@@ -94,24 +102,60 @@ def compute_features_for_split(
     ISO 5055: Complexité réduite via helpers (merge_helpers.py).
     """
     logger.info(
-        f"  Computing features for {split_name} using {len(df_history):,} historical records..."
+        "  Computing features for %s using %s historical records...",
+        split_name,
+        f"{len(df_history):,}",
     )
 
-    # Filter played games only
     df_history_played = df_history[
         ~df_history["type_resultat"].isin(
             ["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"]
         )
     ]
 
-    # Extract all features from history
     features = extract_all_features(df_history, df_history_played, include_advanced)
-
-    # Merge features onto split
     result = merge_all_features(df_split.copy(), features, include_advanced)
 
-    logger.info(f"  {split_name}: {len(result):,} samples, {len(result.columns)} features")
+    _add_direct_features(result, data_dir=data_dir or DEFAULT_DATA_DIR)
+    _add_contextual_features(result, df_history_played)
+
+    logger.info(
+        "  %s: %s samples, %d features", split_name, f"{len(result):,}", len(result.columns)
+    )
     return result
+
+
+def _add_direct_features(result: pd.DataFrame, data_dir: Path | None = None) -> None:
+    """Add features computed directly from the row (no history needed)."""
+    from scripts.features.composition import extract_home_feature, extract_title_features
+    from scripts.features.player_enrichment import enrich_from_joueurs
+
+    title_feats = extract_title_features(result)
+    for col in title_feats.columns:
+        result[col] = title_feats[col]
+
+    home_feat = extract_home_feature(result)
+    for col in home_feat.columns:
+        result[col] = home_feat[col]
+
+    joueurs_path = (data_dir or DEFAULT_DATA_DIR) / "joueurs.parquet"
+    enrich_from_joueurs(result, joueurs_path)
+
+
+def _add_contextual_features(result: pd.DataFrame, df_history_played: pd.DataFrame) -> None:
+    """Add temporal, adversaire, and match context features."""
+    from scripts.features.pipeline_extended import (
+        extract_adversaire_niveau,
+        extract_match_important,
+        extract_temporal_features,
+    )
+    from scripts.features.standings import calculate_standings
+
+    extract_temporal_features(result)
+    standings = calculate_standings(df_history_played)
+    extract_adversaire_niveau(result, standings)
+    # match_important needs zone_enjeu columns already merged
+    extract_match_important(result)
 
 
 def run_feature_engineering_v2(
@@ -131,21 +175,20 @@ def run_feature_engineering_v2(
     # Charger données
     echiquiers_path = data_dir / "echiquiers.parquet"
     if not echiquiers_path.exists():
-        logger.error(f"Fichier non trouvé: {echiquiers_path}")
-        logger.error("Exécutez d'abord: python scripts/parse_dataset.py")
-        return
+        msg = "echiquiers.parquet not found at %s. Run parse_dataset first."
+        raise FileNotFoundError(msg % echiquiers_path)
 
-    logger.info(f"\nChargement {echiquiers_path}...")
+    logger.info("Chargement %s...", echiquiers_path)
     df = pd.read_parquet(echiquiers_path)
-    logger.info(f"  {len(df):,} échiquiers chargés")
+    logger.info("  %d echiquiers charges", len(df))
 
     # 1. Filtrer parties jouées et Elo valide
-    logger.info("\n[1/4] Filtrage données...")
+    logger.info("[1/4] Filtrage donnees...")
     df_played = df[
         ~df["type_resultat"].isin(["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"])
     ]
     df_clean = df_played[(df_played["blanc_elo"] > 0) & (df_played["noir_elo"] > 0)]
-    logger.info(f"  {len(df_clean):,} parties valides")
+    logger.info("  %d parties valides", len(df_clean))
 
     # 2. SPLIT TEMPOREL D'ABORD (crucial pour éviter leakage)
     logger.info("\n[2/4] Split temporel AVANT features...")
@@ -161,16 +204,18 @@ def run_feature_engineering_v2(
         df_history=df[df["saison"] <= train_raw["saison"].max()],
         split_name="train",
         include_advanced=include_advanced,
+        data_dir=data_dir,
     )
 
-    # Valid: features calculées sur train + valid historique
+    # Valid: features calculées sur historique AVANT la saison valid (no leakage)
     logger.info("\n  --- VALID ---")
-    valid_history = df[df["saison"] <= valid_raw["saison"].max()]
+    valid_history = df[df["saison"] < valid_raw["saison"].min()]
     valid = compute_features_for_split(
         df_split=valid_raw,
         df_history=valid_history,
         split_name="valid",
         include_advanced=include_advanced,
+        data_dir=data_dir,
     )
 
     # Test: features calculées sur tout l'historique (avant test)
@@ -181,6 +226,7 @@ def run_feature_engineering_v2(
         df_history=test_history,
         split_name="test",
         include_advanced=include_advanced,
+        data_dir=data_dir,
     )
 
     # 4. Export
@@ -195,10 +241,10 @@ def run_feature_engineering_v2(
     logger.info("\n" + "=" * 60)
     logger.info("Feature engineering V2 terminé!")
     logger.info("=" * 60)
-    logger.info(f"\nFichiers générés dans {output_dir}/:")
-    logger.info(f"  - train.parquet ({len(train):,} échiquiers, {len(train.columns)} features)")
-    logger.info(f"  - valid.parquet ({len(valid):,} échiquiers)")
-    logger.info(f"  - test.parquet ({len(test):,} échiquiers)")
+    logger.info("Fichiers generes dans %s/:", output_dir)
+    logger.info("  - train.parquet (%d echiquiers, %d features)", len(train), len(train.columns))
+    logger.info("  - valid.parquet (%d echiquiers)", len(valid))
+    logger.info("  - test.parquet (%d echiquiers)", len(test))
     logger.info("\nDATA LEAKAGE: CORRIGÉ")
     logger.info("  - Split temporel effectué AVANT calcul des features")
     logger.info("  - Chaque split utilise uniquement les données historiques visibles")

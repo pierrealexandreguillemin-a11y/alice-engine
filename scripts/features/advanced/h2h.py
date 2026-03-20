@@ -58,48 +58,42 @@ def calculate_head_to_head(df: pd.DataFrame, min_games: int = 3) -> pd.DataFrame
     if "blanc_nom" not in parties.columns or "noir_nom" not in parties.columns:
         return pd.DataFrame()
 
-    # Collecter confrontations
-    h2h_data: dict[tuple[str, str], dict[str, float]] = {}
+    # Vectorized: normalize pair order (alphabetical) for unique keys
+    b = parties["blanc_nom"].astype(str)
+    n = parties["noir_nom"].astype(str)
+    # Filter out self-confrontations (data quality guard)
+    valid = b != n
+    b, n = b[valid], n[valid]
+    parties = parties[valid]
+    mask = b < n
 
-    for _, row in parties.iterrows():
-        blanc = str(row["blanc_nom"])
-        noir = str(row["noir_nom"])
-        res_blanc = row.get("resultat_blanc", 0.5)
-        res_noir = row.get("resultat_noir", 0.5)
+    joueur_a = b.where(mask, n)
+    joueur_b = n.where(mask, b)
+    score_a = parties["resultat_blanc"].where(mask, parties["resultat_noir"])
+    score_b = parties["resultat_noir"].where(mask, parties["resultat_blanc"])
 
-        # Ordonner alphabétiquement pour clé unique
-        if blanc < noir:
-            key = (blanc, noir)
-            score_a, score_b = res_blanc, res_noir
-        else:
-            key = (noir, blanc)
-            score_a, score_b = res_noir, res_blanc
+    h2h_df = pd.DataFrame(
+        {
+            "joueur_a": joueur_a.values,
+            "joueur_b": joueur_b.values,
+            "score_a": score_a.values,
+            "score_b": score_b.values,
+        }
+    )
 
-        if key not in h2h_data:
-            h2h_data[key] = {"games": 0, "score_a": 0.0, "score_b": 0.0}
+    result = (
+        h2h_df.groupby(["joueur_a", "joueur_b"])
+        .agg(
+            nb_confrontations=("score_a", "count"),
+            score_a=("score_a", "mean"),
+            score_b=("score_b", "mean"),
+        )
+        .reset_index()
+    )
 
-        h2h_data[key]["games"] += 1
-        h2h_data[key]["score_a"] += score_a
-        h2h_data[key]["score_b"] += score_b
+    result = result[result["nb_confrontations"] >= min_games].copy()
+    result["avantage_a"] = result["score_a"] - result["score_b"]
 
-    # Construire résultat
-    result_data = []
-    for (joueur_a, joueur_b), stats in h2h_data.items():
-        if stats["games"] >= min_games:
-            avg_a = stats["score_a"] / stats["games"]
-            avg_b = stats["score_b"] / stats["games"]
-            result_data.append(
-                {
-                    "joueur_a": joueur_a,
-                    "joueur_b": joueur_b,
-                    "nb_confrontations": int(stats["games"]),
-                    "score_a": avg_a,
-                    "score_b": avg_b,
-                    "avantage_a": avg_a - avg_b,
-                }
-            )
-
-    result = pd.DataFrame(result_data)
-    logger.info(f"  {len(result)} paires H2H avec >= {min_games} confrontations")
+    logger.info("  %d paires H2H avec >= %d confrontations", len(result), min_games)
 
     return result

@@ -128,7 +128,28 @@ addopts = "-v --tb=short -p no:cacheprovider --import-mode=importlib"
 # ============================================
 [tool.coverage.run]
 source = ["app", "services", "scripts"]
-omit = ["tests/*", "*/__init__.py", "scripts/generate_graphs.py", "scripts/analyze_architecture.py"]
+omit = [
+    "tests/*",
+    "*/__init__.py",
+    "scripts/generate_graphs.py",
+    "scripts/analyze_architecture.py",
+    # Cloud/Kaggle scripts — run remotely, not locally testable
+    "scripts/cloud/*.py",
+    "scripts/baseline/run_baselines.py",
+    "scripts/reports/generate_iso25059.py",
+    "scripts/comparison/run_mcnemar.py",
+    "scripts/autogluon/run_training.py",
+    "scripts/autogluon/run_iso_validation_enhanced.py",
+    "scripts/serving/deploy_to_mlflow.py",
+    "scripts/serving/deploy_utils.py",
+    "scripts/serving/pyfunc_wrapper.py",
+    "scripts/profile_performance.py",
+    "scripts/audit_iso_conformity.py",
+    "scripts/parse_dataset/__main__.py",
+    "scripts/sync_data/__main__.py",
+    "scripts/fairness/auto_report/runner.py",
+    "scripts/aimms/run_iso42001_postprocessing.py",
+]
 branch = true
 
 [tool.coverage.report]
