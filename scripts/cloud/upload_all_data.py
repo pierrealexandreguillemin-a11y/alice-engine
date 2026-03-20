@@ -92,6 +92,16 @@ def _package_all(tmp_path: Path) -> None:
     )
     logger.info("Copied scripts/ (feature engineering + dependencies)")
 
+    # AutoGluon diagnostics (needed by train_autogluon_kaggle.py)
+    cloud_dir = dst_scripts / "cloud"
+    cloud_dir.mkdir(exist_ok=True)
+    (cloud_dir / "__init__.py").touch()
+    shutil.copy2(
+        src_scripts / "cloud" / "autogluon_diagnostics.py",
+        cloud_dir / "autogluon_diagnostics.py",
+    )
+    logger.info("Copied autogluon_diagnostics.py")
+
     # Schemas
     shutil.copytree(
         PROJECT_ROOT / "schemas", tmp_path / "schemas", ignore=shutil.ignore_patterns("__pycache__")
