@@ -193,18 +193,29 @@ def main() -> None:
     """Full AutoGluon training pipeline."""
     logger.info("ALICE Engine — AutoGluon Kaggle Training")
 
+    code_path = None
     for candidate in [Path("/kaggle/input/alice-code"), Path(".")]:
         if (candidate / "scripts").exists():
-            sys.path.insert(0, str(candidate))
+            code_path = candidate
             break
+    if code_path is None:
+        # List what's actually in /kaggle/input/ for debugging
+        kaggle_input = Path("/kaggle/input")
+        if kaggle_input.exists():
+            for p in sorted(kaggle_input.rglob("*"))[:30]:
+                logger.info("  INPUT: %s", p)
+        msg = "scripts/ not found in /kaggle/input/alice-code or ."
+        raise FileNotFoundError(msg)
+    sys.path.insert(0, str(code_path))
+    logger.info("Code path: %s", code_path)
 
-    from scripts.cloud.autogluon_diagnostics import (  # noqa: PLC0415
+    from scripts.cloud.autogluon_diagnostics import (
         save_diagnostics,
         save_predictions,
         test_fairness,
         test_robustness,
     )
-    from scripts.cloud.autogluon_model_card import build_model_card  # noqa: PLC0415
+    from scripts.cloud.autogluon_model_card import build_model_card
 
     version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
     out_dir = OUTPUT_DIR / version
