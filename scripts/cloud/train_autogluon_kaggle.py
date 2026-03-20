@@ -64,7 +64,7 @@ AG_GPU_HYPERPARAMETERS: dict[str, Any] = {
     "GBM": [{"ag_args_fit": {"num_gpus": 1}}],
     "CAT": [{"ag_args_fit": {"num_gpus": 1}}],
     "XGB": [{"ag_args_fit": {"num_gpus": 1}}],
-    "NN_TORCH": [{"ag_args_fit": {"num_gpus": 1}}],
+    "NN_TORCH": [{"ag_args_fit": {"num_gpus": 0}}],  # CPU — P100 sm_60 incompatible PyTorch cu128
 }
 
 DATA_CANDIDATES = [

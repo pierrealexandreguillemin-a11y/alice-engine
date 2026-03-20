@@ -1,6 +1,6 @@
 {
-  "id": "pguillemin/alice-autogluon-v1",
-  "title": "alice-autogluon-v1",
+  "id": "pguillemin/alice-autogluon-v2",
+  "title": "alice-autogluon-v2",
   "code_file": "train_autogluon_kaggle.py",
   "language": "python",
   "kernel_type": "script",

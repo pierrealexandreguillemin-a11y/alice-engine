@@ -267,6 +267,7 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
   - best_quality preset, 6h time limit, 5-fold bagging, 2-stack levels
   - 123 features (3 dropped par AutoGluon), tuning_data=valid, use_bag_holdout=True
   - **NOTE** : P100 incompatible CUDA 12.8/PyTorch 2.9 → TOUJOURS utiliser T4x2
+  - **NOTE** : NN_TORCH doit être en CPU (num_gpus=0) tant que P100 est assigné
 
 ## @TODO - Phase C : Pipeline CI automatisé
 
