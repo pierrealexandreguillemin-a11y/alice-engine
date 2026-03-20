@@ -67,7 +67,11 @@ AG_GPU_HYPERPARAMETERS: dict[str, Any] = {
     "NN_TORCH": [{"ag_args_fit": {"num_gpus": 1}}],
 }
 
-DATA_PATH = Path("/kaggle/input/alice-features")
+DATA_CANDIDATES = [
+    Path("/kaggle/input/alice-features"),
+    Path("/kaggle/input/datasets/pguillemin/alice-features"),
+    Path("data/features"),
+]
 OUTPUT_DIR = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))
 
 
@@ -194,17 +198,17 @@ def main() -> None:
     logger.info("ALICE Engine — AutoGluon Kaggle Training")
 
     code_path = None
-    for candidate in [Path("/kaggle/input/alice-code"), Path(".")]:
+    candidates = [
+        Path("/kaggle/input/alice-code"),
+        Path("/kaggle/input/datasets/pguillemin/alice-code"),
+        Path("."),
+    ]
+    for candidate in candidates:
         if (candidate / "scripts").exists():
             code_path = candidate
             break
     if code_path is None:
-        # List what's actually in /kaggle/input/ for debugging
-        kaggle_input = Path("/kaggle/input")
-        if kaggle_input.exists():
-            for p in sorted(kaggle_input.rglob("*"))[:30]:
-                logger.info("  INPUT: %s", p)
-        msg = "scripts/ not found in /kaggle/input/alice-code or ."
+        msg = "scripts/ not found in any candidate path"
         raise FileNotFoundError(msg)
     sys.path.insert(0, str(code_path))
     logger.info("Code path: %s", code_path)
@@ -222,7 +226,8 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Load + clean
-    data_path = DATA_PATH if DATA_PATH.exists() else Path("data/features")
+    data_path = next((p for p in DATA_CANDIDATES if p.exists()), DATA_CANDIDATES[-1])
+    logger.info("Data path: %s", data_path)
     train, valid, test = load_and_clean(data_path)
     lineage = build_lineage(train, valid, test)
 
