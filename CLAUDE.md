@@ -144,10 +144,14 @@ scripts/
 │   ├── mcnemar_test.py     # Test McNemar 5x2cv
 │   └── run_mcnemar.py      # Runner Phase 4.4 (<50 lignes)
 ├── cloud/                  # Training cloud Kaggle (Phase B2)
-│   ├── train_kaggle.py     # Orchestration Kaggle (loads SRP modules)
-│   ├── promote_model.py    # Promotion locale ISO 24029/24027/McNemar
-│   ├── upload_all_data.py  # Upload data+code → Kaggle Dataset
-│   └── kernel-metadata.json # Config Kaggle API headless
+│   ├── train_kaggle.py           # CatBoost/XGBoost/LightGBM Kaggle
+│   ├── train_autogluon_kaggle.py # AutoGluon ensemble (T4x2 GPU)
+│   ├── autogluon_diagnostics.py  # ISO 24029/24027 diagnostics
+│   ├── autogluon_model_card.py   # ISO 42001 Model Card builder
+│   ├── promote_model.py          # Promotion locale ISO
+│   ├── upload_all_data.py        # Upload data+code → Kaggle Dataset
+│   ├── kernel-metadata.json      # Config Kaggle CatBoost kernel
+│   └── kernel-metadata-autogluon.json # Config Kaggle AutoGluon kernel
 ├── kaggle_trainers.py      # ML training logic (CatBoost/XGBoost/LightGBM)
 ├── kaggle_artifacts.py     # Model persistence + HF Hub push
 ├── kaggle_diagnostics.py   # ISO diagnostics (ROC, calibration, learning curves)
@@ -202,7 +206,8 @@ docs/iso/IMPLEMENTATION_STATUS.md
 ## Commandes
 
 ```bash
-make install       # Installer dépendances
+make venv          # Créer venv isolé (.venv/)
+make install       # Installer dépendances (dans .venv/)
 make hooks         # Installer git hooks
 make quality       # Lint + Format + Typecheck + Security
 make test-cov      # Tests + coverage
@@ -216,10 +221,26 @@ make refresh-data  # Sync + parse + validate ISO 5259 + features (pipeline compl
 ### Training cloud (Kaggle)
 ```bash
 python -m scripts.cloud.upload_all_data    # Upload data+code → Kaggle Dataset
-kaggle kernels push -p scripts/cloud/      # Lancer training sur Kaggle (headless, GPU T4)
-kaggle kernels status pierrax/alice-training  # Vérifier statut
+
+# CatBoost/XGBoost/LightGBM (kernel-metadata.json)
+cp scripts/cloud/kernel-metadata.json scripts/cloud/kernel-metadata.json.bak
+kaggle kernels push -p scripts/cloud/
+kaggle kernels status pguillemin/alice-training
+
+# AutoGluon (kernel-metadata-autogluon.json → T4x2 GPU)
+cp scripts/cloud/kernel-metadata-autogluon.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+git checkout -- scripts/cloud/kernel-metadata.json
+kaggle kernels status pguillemin/alice-autogluon-v1
+
 python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion ISO locale
 ```
+
+**IMPORTANT Kaggle :**
+- Datasets montés à `/kaggle/input/datasets/{user}/{slug}/` (PAS `/kaggle/input/{slug}/`)
+- AutoGluon pas pré-installé — pip install au runtime dans le script
+- GPU T4x2 (sm_75) compatible CUDA 12.8 — P100 (sm_60) INCOMPATIBLE
+- Toujours re-uploader `alice-code` dataset AVANT push kernel si fichiers modifiés
 
 ## Documentation
 
@@ -239,10 +260,13 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
   - 2012+ : features réglementaires plus cohérentes (scoring, catégories modernes)
   - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
   - Test : entraîner sur 2012+ d'abord, comparer AUC vs modèle actuel (2002+)
-- **Training cloud Kaggle** (FAIT, 2026-03-19) : GPU P100, 29 GB RAM, pipeline SRP 4 modules
+- **Training cloud Kaggle CatBoost** (FAIT, 2026-03-19) : GPU P100, 29 GB RAM, pipeline SRP 4 modules
   - CatBoost AUC=0.8276 (GPU P100), XGBoost AUC=0.7600 (GPU cuda), LightGBM AUC=0.7292 (CPU)
   - 147 features, 1.14M rows, quality gate PASSED, models on HF Hub `Pierrax/alice-engine`
-  - GPU auto-detection : CatBoost GPU natif, XGBoost cuda, LightGBM CPU only (pas d'OpenCL sur Kaggle)
+- **Training cloud Kaggle AutoGluon** (EN COURS, 2026-03-20) : T4x2 GPU, AutoGluon 1.5.0
+  - best_quality preset, 6h time limit, 5-fold bagging, 2-stack levels
+  - 123 features (3 dropped par AutoGluon), tuning_data=valid, use_bag_holdout=True
+  - **NOTE** : P100 incompatible CUDA 12.8/PyTorch 2.9 → TOUJOURS utiliser T4x2
 
 ## @TODO - Phase C : Pipeline CI automatisé
 
