@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-autogluon-v1",
+  "title": "alice-autogluon-v1",
+  "code_file": "train_autogluon_kaggle.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["pguillemin/alice-features", "pguillemin/alice-code"],
+  "competition_sources": [],
+  "kernel_sources": []
+}
