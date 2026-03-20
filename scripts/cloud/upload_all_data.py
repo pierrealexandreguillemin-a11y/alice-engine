@@ -96,11 +96,9 @@ def _package_all(tmp_path: Path) -> None:
     cloud_dir = dst_scripts / "cloud"
     cloud_dir.mkdir(exist_ok=True)
     (cloud_dir / "__init__.py").touch()
-    shutil.copy2(
-        src_scripts / "cloud" / "autogluon_diagnostics.py",
-        cloud_dir / "autogluon_diagnostics.py",
-    )
-    logger.info("Copied autogluon_diagnostics.py")
+    for cloud_module in ["autogluon_diagnostics.py", "autogluon_model_card.py"]:
+        shutil.copy2(src_scripts / "cloud" / cloud_module, cloud_dir / cloud_module)
+    logger.info("Copied autogluon_diagnostics.py + autogluon_model_card.py")
 
     # Schemas
     shutil.copytree(

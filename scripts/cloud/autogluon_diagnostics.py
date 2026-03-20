@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def save_predictions(predictor: Any, test_data: pd.DataFrame, label: str, out_dir: Path) -> None:
     """Save test predictions for future McNemar comparison."""
-    y_proba = predictor.predict_proba(test_data.drop(columns=label))[1]
+    y_proba = predictor.predict_proba(test_data.drop(columns=label))[predictor.positive_class]
     preds = pd.DataFrame(
         {
             "y_true": test_data[label].values,
@@ -42,7 +42,7 @@ def save_diagnostics(
     from sklearn.metrics import RocCurveDisplay  # noqa: PLC0415
 
     y_true = test_data[label]
-    y_proba = predictor.predict_proba(test_data.drop(columns=label))[1]
+    y_proba = predictor.predict_proba(test_data.drop(columns=label))[predictor.positive_class]
 
     # ROC curve
     RocCurveDisplay.from_predictions(y_true, y_proba)
@@ -76,13 +76,18 @@ def test_robustness(
     label: str,
     noise_level: float = 0.1,
     seed: int = 42,
+    baseline_auc: float | None = None,
 ) -> dict:
     """ISO 24029: Gaussian noise perturbation test."""
     from sklearn.metrics import roc_auc_score  # noqa: PLC0415
 
     X_test = test_data.drop(columns=label)
     y_true = test_data[label]
-    baseline_auc = float(roc_auc_score(y_true, predictor.predict_proba(X_test)[1]))
+
+    if baseline_auc is None:
+        baseline_auc = float(
+            roc_auc_score(y_true, predictor.predict_proba(X_test)[predictor.positive_class])
+        )
 
     X_noisy = X_test.copy()
     rng = np.random.default_rng(seed)
@@ -90,7 +95,9 @@ def test_robustness(
         std = X_noisy[col].std()
         if std > 0:
             X_noisy[col] = X_noisy[col] + rng.normal(0, std * noise_level, len(X_noisy))
-    noisy_auc = float(roc_auc_score(y_true, predictor.predict_proba(X_noisy)[1]))
+    noisy_auc = float(
+        roc_auc_score(y_true, predictor.predict_proba(X_noisy)[predictor.positive_class])
+    )
 
     tolerance = noisy_auc / baseline_auc if baseline_auc > 0 else 0
     status = "ROBUST" if tolerance >= 0.95 else ("ACCEPTABLE" if tolerance >= 0.90 else "FRAGILE")
@@ -109,20 +116,40 @@ def test_fairness(
     label: str,
     attr: str = "ligue_code",
 ) -> dict:
-    """ISO 24027: Demographic parity across groups."""
+    """ISO 24027: Demographic parity + per-group AUC across groups."""
+    if attr not in test_data.columns:
+        logger.warning("Fairness attr '%s' not in test data — skipping", attr)
+        return {"attribute": attr, "status": "SKIPPED", "reason": "column not found"}
+
+    from sklearn.metrics import roc_auc_score  # noqa: PLC0415
+
     X_test = test_data.drop(columns=label)
+    y_true = test_data[label]
     y_pred = predictor.predict(X_test)
+    y_proba = predictor.predict_proba(X_test)[predictor.positive_class]
+
     groups = test_data[attr].value_counts()
-    rates = {}
-    for group in groups[groups >= 100].index:
+    eligible = groups[groups >= 100].index
+    rates: dict[str, float] = {}
+    group_aucs: dict[str, float] = {}
+    for group in eligible:
         mask = test_data[attr] == group
         rates[str(group)] = float(y_pred[mask].mean())
+        try:
+            group_aucs[str(group)] = float(roc_auc_score(y_true[mask], y_proba[mask]))
+        except ValueError:
+            group_aucs[str(group)] = float("nan")
+
     vals = list(rates.values())
     parity = max(vals) - min(vals) if vals else 0
+    auc_vals = [v for v in group_aucs.values() if not np.isnan(v)]
+    auc_spread = max(auc_vals) - min(auc_vals) if auc_vals else 0
     status = "FAIR" if parity < 0.05 else ("ACCEPTABLE" if parity < 0.10 else "CRITICAL")
     return {
         "attribute": attr,
         "positive_rates": rates,
         "demographic_parity": parity,
+        "group_aucs": group_aucs,
+        "auc_spread": auc_spread,
         "status": status,
     }
