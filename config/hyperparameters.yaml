@@ -1,6 +1,6 @@
 # Hyperparameters Configuration - Alice-Engine ML Pipeline
-# Version: 2.0.0
-# Date: 10 Janvier 2026
+# Version: 3.0.0
+# Date: 21 Mars 2026
 # Conformite: ISO/IEC 42001 (AI Management), ISO/IEC 5259 (Data Quality)
 #
 # Usage:
@@ -10,7 +10,7 @@
 # JUSTIFICATIONS TECHNIQUES:
 # Toutes les valeurs sont justifiees par:
 # - Documentation officielle CatBoost/XGBoost/LightGBM
-# - Caracteristiques dataset ALICE (1.1M echiquiers, 12 features)
+# - Caracteristiques dataset ALICE (1.1M echiquiers, ~156 features V8)
 # - Best practices industrie (Kaggle, papers, benchmarks)
 #
 # Sources:
@@ -70,7 +70,7 @@ catboost:
     - zone_enjeu_dom            # montee, danger, mi_tableau
 
   # Early stopping
-  early_stopping_rounds: 50     # Standard pour gradient boosting
+  early_stopping_rounds: 100    # 100 iterations, coherent with global + kaggle_trainers.py
 
   # Reproducibility
   random_seed: 42
@@ -104,7 +104,7 @@ xgboost:
   n_jobs: -1                    # Tous les cores
 
   # Early stopping
-  early_stopping_rounds: 50
+  early_stopping_rounds: 100   # Coherent with global + kaggle_trainers.py
 
   # Reproducibility
   random_state: 42
@@ -140,7 +140,7 @@ lightgbm:
   n_jobs: -1
 
   # Early stopping
-  early_stopping_rounds: 50
+  early_stopping_rounds: 100   # Coherent with global + kaggle_trainers.py
 
   # Reproducibility
   random_state: 42

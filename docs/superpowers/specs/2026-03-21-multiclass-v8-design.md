@@ -161,7 +161,7 @@ Color/home confound: model learns interaction via `est_domicile_blanc` × color 
 | `elo_proximity` | 1 - min(\|diff_elo\|, 800)/800 | Per game | 1 |
 | `draw_rate_prior` | Lookup (elo_band × diff_band) on train. Bins: 200-point Elo bands, 100-point diff bands | Train only | 1 |
 | `draw_rate_blanc`, `draw_rate_noir` | Player historical draw rate | 3 seasons, same level | 2 |
-| `draw_rate_h2h` | H2H draw rate (≥3 confrontations, else NaN). 0.8% coverage — kept with `h2h_exists` flag (Cat 7) for model to learn when to trust it | Global | 1 |
+| `h2h_draw_rate` | H2H draw rate (≥3 confrontations, else NaN). 0.8% coverage — same as Cat 7 `h2h_draw_rate`. Kept with `h2h_exists` flag for model to learn when to trust it | Global | 1 |
 | `draw_rate_equipe_dom`, `draw_rate_equipe_ext` | Team draw rate | 3 seasons | 2 |
 
 Fallback: players <10 games at same level → use `draw_rate_prior` (Elo band). H2H <3 confrontations → NaN (CatBoost handles natively).
