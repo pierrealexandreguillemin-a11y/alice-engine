@@ -53,6 +53,7 @@ class AutoGluonWrapper:
         """Initialise le wrapper AutoGluon.
 
         Args:
+        ----
             predictor: AutoGluon TabularPredictor entraîné
             feature_names: Noms des features (pour conversion array→DataFrame)
         """
@@ -110,11 +111,13 @@ def compute_ece(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10) -> flo
     Plus ECE est proche de 0, meilleure est la calibration.
 
     Args:
+    ----
         y_true: Labels réels (0/1)
         y_prob: Probabilités prédites
         n_bins: Nombre de bins
 
     Returns:
+    -------
         ECE score
     """
     bin_boundaries = np.linspace(0, 1, n_bins + 1)
@@ -139,6 +142,7 @@ class Calibrator:
     les probabilités via Platt scaling ou isotonic regression.
 
     Example:
+    -------
         config = CalibrationConfig(method=CalibrationMethod.PLATT)
         calibrator = Calibrator(config)
 
@@ -162,11 +166,13 @@ class Calibrator:
         """Calibre un modèle sur les données de calibration.
 
         Args:
+        ----
             base_model: Modèle de base avec predict_proba
             X: Features de calibration
             y: Labels de calibration
 
         Returns:
+        -------
             CalibrationResult avec modèle calibré et métriques
         """
         # Wrapper pour AutoGluon si nécessaire
@@ -250,6 +256,7 @@ def calibrate_model(
     """Fonction utilitaire pour calibration rapide.
 
     Args:
+    ----
         base_model: Modèle de base
         X: Features de calibration
         y: Labels de calibration
@@ -257,6 +264,7 @@ def calibrate_model(
         cv: Nombre de folds CV (0 = prefit, modèle déjà entraîné)
 
     Returns:
+    -------
         CalibrationResult
     """
     config = CalibrationConfig(method=method, cv=cv)

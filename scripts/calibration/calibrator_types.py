@@ -29,7 +29,8 @@ class CalibrationMethod(Enum):
 class CalibrationConfig:
     """Configuration de calibration.
 
-    Attributes:
+    Attributes
+    ----------
         method: Méthode de calibration (platt, isotonic)
         cv: Nombre de folds pour cross-validation (0 = prefit)
         n_bins: Nombre de bins pour calibration curve
@@ -44,7 +45,8 @@ class CalibrationConfig:
 class CalibrationMetrics:
     """Métriques de calibration.
 
-    Attributes:
+    Attributes
+    ----------
         brier_before: Brier score avant calibration
         brier_after: Brier score après calibration
         ece_before: Expected Calibration Error avant
@@ -73,7 +75,8 @@ class CalibrationMetrics:
 class CalibrationResult:
     """Résultat de calibration.
 
-    Attributes:
+    Attributes
+    ----------
         calibrator: Modèle calibré (sklearn CalibratedClassifierCV)
         method: Méthode utilisée
         metrics: Métriques de calibration

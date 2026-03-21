@@ -28,7 +28,8 @@ class UncertaintyMethod(Enum):
 class UncertaintyConfig:
     """Configuration pour quantification d'incertitude.
 
-    Attributes:
+    Attributes
+    ----------
         method: Méthode de quantification
         alpha: Niveau de significativité (1 - confidence)
         n_bootstrap: Nombre d'itérations bootstrap
@@ -43,7 +44,8 @@ class UncertaintyConfig:
 class PredictionInterval:
     """Intervalle de prédiction pour une observation.
 
-    Attributes:
+    Attributes
+    ----------
         point_estimate: Probabilité ponctuelle
         lower: Borne inférieure de l'intervalle
         upper: Borne supérieure de l'intervalle
@@ -66,7 +68,8 @@ class PredictionInterval:
 class UncertaintyMetrics:
     """Métriques globales d'incertitude.
 
-    Attributes:
+    Attributes
+    ----------
         mean_interval_width: Largeur moyenne des intervalles
         coverage: Couverture empirique (% vrais dans intervalle)
         efficiency: Efficacité (1 - taille moyenne ensemble)
@@ -95,7 +98,8 @@ class UncertaintyMetrics:
 class UncertaintyResult:
     """Résultat de quantification d'incertitude.
 
-    Attributes:
+    Attributes
+    ----------
         intervals: Intervalles de prédiction par observation
         metrics: Métriques globales
         method: Méthode utilisée

@@ -51,6 +51,7 @@ class ConformalPredictor:
     pour produire des ensembles de prédiction avec garantie de couverture.
 
     Example:
+    -------
         config = UncertaintyConfig(alpha=0.10)  # 90% coverage
         cp = ConformalPredictor(config)
 
@@ -84,6 +85,7 @@ class ConformalPredictor:
         3. Calcule le quantile (1-α)(n+1)/n des scores
 
         Args:
+        ----
             model: Modèle de base avec predict_proba
             X: Features de calibration
             y: Labels de calibration (0/1)
@@ -134,10 +136,12 @@ class ConformalPredictor:
         - Équivalent: p(y) >= 1 - q_hat
 
         Args:
+        ----
             X: Features de test
             y_true: Labels réels optionnels (pour métriques de couverture)
 
         Returns:
+        -------
             UncertaintyResult avec intervalles et métriques
         """
         if self._model is None or self._quantile is None:
@@ -228,6 +232,7 @@ def quantify_uncertainty(
     """Fonction utilitaire pour quantification d'incertitude.
 
     Args:
+    ----
         model: Modèle de base
         X_calib: Features de calibration
         y_calib: Labels de calibration
@@ -236,6 +241,7 @@ def quantify_uncertainty(
         alpha: Niveau de significativité
 
     Returns:
+    -------
         UncertaintyResult
     """
     config = UncertaintyConfig(alpha=alpha)
