@@ -87,6 +87,19 @@ api.upload_file("models/model.pkl", repo_id="Pierrax/alice-engine", repo_type="m
 - Fixtures réutilisables
 - Tests groupés par classe thématique
 
+### Démarche de rigueur (OBLIGATOIRE)
+- **Raisonnement profond** : comprendre le scope métier AVANT de coder (Alice = P(victoire) pour CE, pas classification)
+- **WebSearch si doute** : vérifier la doc officielle de CHAQUE API/outil avant utilisation. Ne JAMAIS assumer.
+- **Checklist pré-déploiement** : avant tout push cloud (Kaggle, HF Hub), vérifier :
+  - [ ] Dépendances dans l'env cible ?
+  - [ ] Paths/montages corrects ?
+  - [ ] Credentials/secrets configurés ?
+  - [ ] Hardware compatible (GPU/CUDA/PyTorch) ?
+  - [ ] Dataset uploadé avec les bons fichiers ?
+  - [ ] Kernel slug versionné ?
+- **Post-mortem** : diagnostiquer CHAQUE échec avant de relancer. Documenter dans `docs/postmortem/`.
+- **Pas de mensonge** : "je ne sais pas" > affirmation fausse. Toujours.
+
 ## Setup DevOps
 
 Hooks pre-commit Python équivalents aux hooks Husky de `C:\Dev\chess-app`.
