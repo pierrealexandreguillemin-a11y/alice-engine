@@ -7,9 +7,13 @@ Satellite de chess-app (SaaS clubs d'échecs). Déployé sur Render (FastAPI).
 
 **Pipeline complet :**
 1. **ALI** (Adversarial Lineup Inference) : prédire la composition probable de l'adversaire
-2. **Modèle ML** : prédire P(victoire blanc) pour chaque affectation joueur→échiquier
-3. **CE** (Composition Engine) : optimiser la composition sous contraintes FFE (100pts, noyau, mutés)
+2. **Modèle ML** : prédire **P(win), P(draw), P(loss)** pour chaque affectation joueur→échiquier (MultiClass 3-way)
+3. **CE** (Composition Engine) : optimiser E[score] = P(win) + 0.5×P(draw) sous contraintes FFE (100pts, noyau, mutés)
 4. **API** : POST /api/v1/predict retourne composition recommandée + alternatives + score attendu
+
+**IMPORTANT ML** : Le modèle DOIT produire 3 probabilités (win/draw/loss), PAS binaire.
+Le CE attend `(win_probability, draw_probability, loss_probability)` — voir `services/composer.py:36-39`.
+Les nulles = 12.6% des parties, varient de 4.9% (Elo<1200) à 45.8% (Elo>2400). Ignorer perd ~0.5 pts/match.
 
 **Contraintes métier** : les compositions sont soumises simultanément sur place (A02 Art. 3.6.a) — le capitaine ne connaît PAS la composition adverse.
 
@@ -273,14 +277,75 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
   - 2012+ : features réglementaires plus cohérentes (scoring, catégories modernes)
   - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
   - Test : entraîner sur 2012+ d'abord, comparer AUC vs modèle actuel (2002+)
-- **Training cloud Kaggle CatBoost** (FAIT, 2026-03-19) : GPU P100, 29 GB RAM, pipeline SRP 4 modules
-  - CatBoost AUC=0.8276 (GPU P100), XGBoost AUC=0.7600 (GPU cuda), LightGBM AUC=0.7292 (CPU)
-  - 147 features, 1.14M rows, quality gate PASSED, models on HF Hub `Pierrax/alice-engine`
+- **Training cloud Kaggle CatBoost V7** (OBSOLÈTE, 2026-03-19) : GPU P100, 29 GB RAM
+  - AUC=0.8276 INVALIDE (leakage score_dom/ext + target bug forfaits 2.0)
+  - Corrigé localement (commit 05b19a7) : leakage fixé, eval_metric=Logloss, hyperparams améliorés
+  - **Remplacé par V8 MultiClass** (en cours)
 - **Training cloud Kaggle AutoGluon** (EN COURS, 2026-03-20) : T4x2 GPU, AutoGluon 1.5.0
   - best_quality preset, 6h time limit, 5-fold bagging, 2-stack levels
   - 123 features (3 dropped par AutoGluon), tuning_data=valid, use_bag_holdout=True
   - **NOTE** : P100 incompatible CUDA 12.8/PyTorch 2.9 → TOUJOURS utiliser T4x2
   - **NOTE** : NN_TORCH doit être en CPU (num_gpus=0) tant que P100 est assigné
+
+## V8 MultiClass 3-way (EN COURS, 2026-03-21)
+
+**Remplace V7 binaire** (4 bugs critiques + 8 bugs logique features)
+
+### Décisions validées
+- **Target** : loss=0, draw=1, win=2. Forfaits (2.0) exclus de TOUT (target + features)
+- **Loss** : CatBoost `MultiClass`, XGBoost `multi:softprob`, LightGBM `multiclass`
+- **Eval** : MultiClass log loss + RPS (Ranked Probability Score, standard ordinal)
+- **Sortie** : P(win), P(draw), P(loss) → CE calcule E[score] = P(win) + 0.5×P(draw)
+- **Calibration** : Isotonic par classe + renormalisation. Pas de class weights (dégrade calibration)
+- **Quality gate** : log loss < baselines, E[score] MAE < Elo baseline, RPS < baselines, ECE < 0.05, calibration P(draw) ±2%
+
+### Bugs logique corrigés dans features
+1. `clutch_factor` : remplacer `|score_dom-score_ext|<=1` par `zone_enjeu IN (montee,danger)`
+2. `score_blancs/noirs` : séparer home/away (color confondant avec domicile)
+3. Features joueur : stratifier par type_competition (national 20.9% draws ≠ régional 9.6%)
+4. Features joueur : rolling 3 saisons au lieu de global career
+5. Forfaits (2.0) : exclure de TOUS les calculs de rates
+
+### Nouvelles features (draw + club-level)
+- **8 draw features** (8 cols) : avg_elo, elo_proximity, draw_rate_prior, draw_rate_joueur×2, draw_rate_h2h, draw_rate_equipe×2
+- **8 club/vases features** (16 cols) : joueur_promu/relegue, player_team_elo_gap, stabilite_effectif, elo_moyen_evolution, team_rank_in_club, reinforcement_rate, club_nb_teams
+- **Toutes features rolling** (données antérieures), stratifiées par niveau de compétition
+
+### Spec complète
+- `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
+- Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
+
+## V9 CE multi-équipe (@TODO après V8)
+
+> Prérequis : V8 ML terminé (prédictions P(W/D/L) fiables par board dans tous contextes)
+
+**Le vrai problème métier :** Un club a N équipes jouant le MÊME week-end. Le capitaine distribue
+~30-50 joueurs entre toutes les équipes sous contraintes FFE (noyau, mutés, 100pts).
+
+### Architecture cible
+```
+ML model (V8) → matrice P(W/D/L) pour CHAQUE combinaison joueur×board×équipe
+  ↓
+CE multi-équipe (V9) → allocation optimale joueurs×équipes
+  ↓
+Objectif modulable par l'utilisateur
+```
+
+### Modes de stratégie (V9)
+| Mode | Objectif | Usage |
+|------|----------|-------|
+| **Agressif** | Max E[score] équipe prioritaire, seuil min pour les autres | Montée/titre |
+| **Conservateur** | Max min(E[score]) toutes équipes (maximin) | Club loisir |
+| **Tactique ronde** | Max P(victoire match) pour équipe en zone enjeu | Maintien |
+| **Saison** | Min variance inter-équipes sur la saison | Cohérence |
+| **Risk-adjusted** | Max E[score] - λ×Var[score] | P(draw) vs P(win) critique ici |
+
+### Contraintes FFE multi-équipe
+- Chaque joueur dans UNE SEULE équipe par week-end
+- Noyau (A02 3.7.f) : verrouillé après 1er match dans une équipe
+- Max 3 mutés par équipe par saison (A02 3.7.g)
+- Joueur peut descendre (renforcer) mais pas monter sans conditions
+- Ordre Elo par équipe (100pts A02 3.6.e)
 
 ## @TODO - Phase C : Pipeline CI automatisé
 
