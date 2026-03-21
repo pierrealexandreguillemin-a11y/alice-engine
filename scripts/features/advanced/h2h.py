@@ -10,7 +10,7 @@ Sources:
 
 Conformité:
 - ISO 5055: Module <300 lignes, responsabilité unique
-- ISO 5259: Features calculées depuis données réelles
+- ISO 5259: Features calculées depuis données réelles (forfaits exclus)
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from __future__ import annotations
 import logging
 
 import pandas as pd
+
+from scripts.features.helpers import filter_played_games
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,7 @@ def calculate_head_to_head(df: pd.DataFrame, min_games: int = 3) -> pd.DataFrame
 
     Feature importante pour prédiction: certains joueurs ont
     des résultats atypiques contre des adversaires spécifiques.
+    Forfaits exclus via filter_played_games() (ISO 5259).
 
     Args:
     ----
@@ -39,21 +42,19 @@ def calculate_head_to_head(df: pd.DataFrame, min_games: int = 3) -> pd.DataFrame
         - joueur_a: premier joueur (ordre alphabétique)
         - joueur_b: second joueur
         - nb_confrontations: nombre total de parties
-        - score_a: score moyen joueur A contre B [0, 1]
-        - score_b: score moyen joueur B contre A [0, 1]
-        - avantage_a: score_a - score_b
+        - h2h_win_rate: taux de victoires joueur_a [0, 1]
+        - h2h_draw_rate: taux de nulles [0, 1] (symétrique)
+        - h2h_exists: True (H2H data disponible)
 
-    ISO 5259: H2H calculé depuis confrontations réelles.
+    ISO 5259: H2H calculé depuis confrontations réelles uniquement.
     """
     logger.info("Calcul historique H2H entre joueurs...")
 
     if df.empty:
         return pd.DataFrame()
 
-    # Filtrer parties jouées
-    parties = df[
-        ~df["type_resultat"].isin(["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"])
-    ].copy()
+    # Exclude forfeits and non-played (ISO 5259)
+    parties = filter_played_games(df)
 
     if "blanc_nom" not in parties.columns or "noir_nom" not in parties.columns:
         return pd.DataFrame()
@@ -69,15 +70,14 @@ def calculate_head_to_head(df: pd.DataFrame, min_games: int = 3) -> pd.DataFrame
 
     joueur_a = b.where(mask, n)
     joueur_b = n.where(mask, b)
+    # result from joueur_a perspective: win=1.0, draw=0.5, loss=0.0
     score_a = parties["resultat_blanc"].where(mask, parties["resultat_noir"])
-    score_b = parties["resultat_noir"].where(mask, parties["resultat_blanc"])
 
     h2h_df = pd.DataFrame(
         {
             "joueur_a": joueur_a.values,
             "joueur_b": joueur_b.values,
             "score_a": score_a.values,
-            "score_b": score_b.values,
         }
     )
 
@@ -85,14 +85,17 @@ def calculate_head_to_head(df: pd.DataFrame, min_games: int = 3) -> pd.DataFrame
         h2h_df.groupby(["joueur_a", "joueur_b"])
         .agg(
             nb_confrontations=("score_a", "count"),
-            score_a=("score_a", "mean"),
-            score_b=("score_b", "mean"),
+            wins_a=("score_a", lambda x: (x == 1.0).sum()),
+            draws=("score_a", lambda x: (x == 0.5).sum()),
         )
         .reset_index()
     )
 
     result = result[result["nb_confrontations"] >= min_games].copy()
-    result["avantage_a"] = result["score_a"] - result["score_b"]
+    result["h2h_win_rate"] = (result["wins_a"] / result["nb_confrontations"]).round(4)
+    result["h2h_draw_rate"] = (result["draws"] / result["nb_confrontations"]).round(4)
+    result["h2h_exists"] = True
+    result = result.drop(columns=["wins_a", "draws"])
 
     logger.info("  %d paires H2H avec >= %d confrontations", len(result), min_games)
 

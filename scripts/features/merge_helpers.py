@@ -238,39 +238,60 @@ def merge_h2h_features(
 ) -> pd.DataFrame:
     """Merge features head-to-head.
 
+    Produit les colonnes:
+    - h2h_win_rate: taux victoire du joueur blanc (perspective blanc)
+    - h2h_draw_rate: taux nulles (symétrique)
+    - h2h_nb_confrontations: nombre de confrontations
+    - h2h_exists: True si H2H existe, False sinon (jamais NaN)
+
     Args:
     ----
         result: DataFrame cible
-        h2h: DataFrame confrontations directes
+        h2h: DataFrame depuis calculate_head_to_head()
 
     Returns:
     -------
-        DataFrame avec features mergées
+        DataFrame avec features H2H mergées
     """
-    if h2h.empty:
-        return result
-
     if "blanc_nom" not in result.columns or "noir_nom" not in result.columns:
         return result
 
-    def get_h2h_key(row: pd.Series) -> tuple[str, str]:
-        b, n = str(row["blanc_nom"]), str(row["noir_nom"])
-        return (b, n) if b < n else (n, b)
+    if h2h.empty:
+        result["h2h_win_rate"] = float("nan")
+        result["h2h_draw_rate"] = float("nan")
+        result["h2h_nb_confrontations"] = float("nan")
+        result["h2h_exists"] = False
+        return result
 
-    result["_h2h_key"] = result.apply(get_h2h_key, axis=1)
-    h2h["_h2h_key"] = list(zip(h2h["joueur_a"], h2h["joueur_b"], strict=False))
+    # Build canonical key (alphabetical order) for both sides
+    b = result["blanc_nom"].astype(str)
+    n = result["noir_nom"].astype(str)
+    mask_b_lt_n = b < n
+    result = result.copy()
+    result["_h2h_key"] = list(
+        zip(
+            b.where(mask_b_lt_n, n),
+            n.where(mask_b_lt_n, b),
+            strict=False,
+        )
+    )
 
-    h2h_merge = h2h[["_h2h_key", "nb_confrontations", "avantage_a"]].copy()
+    h2h_work = h2h.copy()
+    h2h_work["_h2h_key"] = list(zip(h2h_work["joueur_a"], h2h_work["joueur_b"], strict=False))
+
+    h2h_merge = h2h_work[["_h2h_key", "nb_confrontations", "h2h_win_rate", "h2h_draw_rate"]].copy()
     result = result.merge(h2h_merge, on="_h2h_key", how="left")
 
-    def adjust_h2h(row: pd.Series) -> float:
-        if pd.isna(row.get("avantage_a")):
-            return float("nan")
-        b, n = str(row["blanc_nom"]), str(row["noir_nom"])
-        return row["avantage_a"] if b < n else -row["avantage_a"]
+    # Flip win_rate when blanc > noir alphabetically (stored from joueur_a perspective)
+    raw_win = result["h2h_win_rate"].copy()
+    result["h2h_win_rate"] = raw_win.where(
+        mask_b_lt_n | raw_win.isna(),
+        1.0 - raw_win - result["h2h_draw_rate"],
+    )
+    # draw_rate is symmetric — no flip needed
 
-    result["h2h_avantage_blanc"] = result.apply(adjust_h2h, axis=1)
     result["h2h_nb_confrontations"] = result["nb_confrontations"]
-    result = result.drop(columns=["_h2h_key", "nb_confrontations", "avantage_a"], errors="ignore")
+    result["h2h_exists"] = result["h2h_win_rate"].notna()
+    result = result.drop(columns=["_h2h_key", "nb_confrontations"], errors="ignore")
 
     return result
