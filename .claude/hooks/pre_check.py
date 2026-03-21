@@ -91,12 +91,15 @@ def main() -> None:
         errors = _check_autogluon_model(cwd) + _check_baseline(cwd)
     # Report generation
     elif "iso25059" in cmd.lower() or "generate_iso" in cmd.lower():
-        errors = _check_reports(cwd, [
-            "autogluon_results.json",
-            "iso24029_robustness.json",
-            "iso24027_fairness.json",
-            "mcnemar_comparison.json",
-        ])
+        errors = _check_reports(
+            cwd,
+            [
+                "autogluon_results.json",
+                "iso24029_robustness.json",
+                "iso24027_fairness.json",
+                "mcnemar_comparison.json",
+            ],
+        )
 
     if errors:
         issues = [e[0] for e in errors]

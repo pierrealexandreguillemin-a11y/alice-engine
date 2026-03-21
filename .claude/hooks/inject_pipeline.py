@@ -48,7 +48,7 @@ def _get_status(cwd: Path) -> str:
     done = []
     next_step = None
 
-    for step_id, step in state.get("steps", {}).items():
+    for _step_id, step in state.get("steps", {}).items():
         check = step.get("check", "").split(" AND ")[0].replace(" EXISTS", "").strip()
         is_done = _check_exists(cwd, check) if check else False
 
@@ -61,7 +61,9 @@ def _get_status(cwd: Path) -> str:
                 prereqs_met = True
                 for req in step.get("requires", []):
                     req_step = state["steps"].get(req, {})
-                    req_check = req_step.get("check", "").split(" AND ")[0].replace(" EXISTS", "").strip()
+                    req_check = (
+                        req_step.get("check", "").split(" AND ")[0].replace(" EXISTS", "").strip()
+                    )
                     if not _check_exists(cwd, req_check):
                         prereqs_met = False
                         break

@@ -37,9 +37,7 @@ def main() -> None:
 
     # Stop hooks use top-level fields only (no hookSpecificOutput)
     if missing:
-        reason = (
-            f"ISO INCOMPLETE - Missing: {', '.join(missing)}"
-        )
+        reason = f"ISO INCOMPLETE - Missing: {', '.join(missing)}"
         output = {"stopReason": reason}
     else:
         # Empty object = success, no message needed
