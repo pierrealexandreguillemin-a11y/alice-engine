@@ -37,18 +37,18 @@
 
 | Norme | Exigence | Implémentation ALICE |
 |-------|----------|---------------------|
-| ISO 42001 | Model Card | `ProductionModelCard` dans `model_registry.py` |
-| ISO 42001 | Traçabilité | Git commit tracking, versioning modèles |
-| ISO 42001 | Explicabilité | Feature importance SHAP/permutation |
-| ISO 5259 | Qualité données | `DataLineage`, `validate_dataframe_schema()` |
-| ISO 5259 | Lineage | `compute_data_lineage()` train/valid/test |
+| ISO 42001 | Model Card | `ProductionModelCard` dans `model_registry.py`. V8: MultiClass 3-way, ~156 features |
+| ISO 42001 | Traçabilité | Git commit tracking, versioning modèles. V8: `alice-training-v8` slug |
+| ISO 42001 | Explicabilité | Feature importance per class (MultiClass). SHAP pending. |
+| ISO 5259 | Qualité données | `DataLineage`, `validate_dataframe_schema()`. V8: forfaits excluded |
+| ISO 5259 | Lineage | `compute_data_lineage()` train/valid/test. V8: ~156 features, temporal split ≤2022/2023/≥2024 |
 | ISO 27001 | Intégrité | SHA-256 checksums, HMAC signatures |
 | ISO 27001 | Confidentialité | Chiffrement AES-256-GCM |
 | ISO 27001 | Auditabilité | Logs, retention policy, drift reports |
 | ISO 23894 | Risques AI | Drift monitoring PSI, alertes seuils |
 | ISO 24027 | Biais | `scripts/fairness/bias_detection.py` - SPD, EOD, DIR |
 | ISO 24029 | Robustesse | `scripts/robustness/adversarial_tests.py` - Tests adversariaux |
-| ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - Individus/Groupes/Société |
+| ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - V7/AutoGluon era. V8: redo after MultiClass training |
 
 ---
 
@@ -370,17 +370,33 @@ valider_composition(composition, equipe, hist_brulage, hist_noyau, regles) -> li
 
 ### Feature Engineering (`scripts/feature_engineering.py`)
 
-Pipeline ML intégrant les features FFE:
+Pipeline ML V8 — MultiClass 3-way (win/draw/loss). ~156 features across 13 categories.
 
-| Feature | Type | Source |
-|---------|------|--------|
-| `nb_equipes` | int | Multi-équipes joueur |
-| `niveau_max` | int | Niveau hiérarchique max joué |
-| `niveau_min` | int | Niveau hiérarchique min joué |
-| `type_competition` | cat | A02, F01, C01, etc. |
-| `multi_equipe` | bool | Joueur dans plusieurs équipes |
-| `zone_enjeu` | cat | montee/danger/mi_tableau |
-| `niveau_hierarchique` | int | Niveau équipe (1-10) |
+**Spec complète :** `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
+
+| Category | Features | Columns | Status V8 |
+|----------|----------|---------|-----------|
+| 1. Match context | echiquier, est_domicile, type_competition, division, etc. | 12 | Unchanged |
+| 2. Player strength | Elo, titres, categorie_age, K_coefficient | 10 | +4 new (age, K) |
+| 3. Player form W/D/L | win_rate/draw_rate/expected_score (recent, color, trend) | 20 | Refactored from 12 binary |
+| 4. Draw priors | avg_elo, elo_proximity, draw_rate_prior, player, equipe | 8 | All new (Pawnalyze) |
+| 5. Presence/availability | taux_presence, regularite, role_type, echiquier_prefere | 16 | Wire existing code |
+| 6. Pressure | clutch_win/draw (zone_enjeu, not score_dom) | 6 | Fixed (leakage) |
+| 7. H2H | h2h_win_rate, h2h_draw_rate, h2h_exists | 4 | Refactored W/D/L |
+| 8. Standings | position, ecart, points_cumules, zone_enjeu | 16 | Unchanged (draw-aware) |
+| 9. Club behavior | rotation, noyau, win/draw_rate_home | 16 | Wire + refactor W/D/L |
+| 10. Vases communiquants | joueur_promu/relegue, team_rank, reinforcement_rate | 16 | All new (REGLES_FFE §4) |
+| 11. FFE regulatory | est_dans_noyau, ffe_nb_equipes, joueur_fantome | 20 | Unchanged |
+| 12. Elo trajectory | momentum, elo_trajectory | 4 | Unchanged |
+| 13. Composition strategy | decalage_position, echiquier_moyen | 8 | Minor fix (rolling) |
+
+**Key V8 changes vs V7 :**
+- Target: 3-class (loss=0, draw=1, win=2). Forfaits (2.0) excluded from everything.
+- All result-derived features decomposed into (win_rate, draw_rate) instead of `.mean()`
+- All player features stratified by `type_competition` (national ≠ regional)
+- All player features rolling (3 seasons) instead of global career
+- `score_dom`/`score_ext` removed (match score leakage)
+- `clutch_factor` fixed: uses `zone_enjeu` instead of `score_dom`
 
 ### Tests (`tests/test_ffe_rules_features.py`)
 
@@ -481,11 +497,15 @@ apply_retention_policy(dir, max=10)   # Nettoyage anciennes versions
 
 ### Seuils Drift Monitoring
 
-| Métrique | Warning | Critical |
-|----------|---------|----------|
-| PSI | ≥ 0.1 | ≥ 0.25 |
-| Accuracy drop | ≥ 5% | - |
-| ELO shift | ≥ 50 pts | - |
+**V8 note:** MultiClass 3-way requires monitoring PSI per class (3 distributions).
+Current PSI code works per-column — call 3x (P(loss), P(draw), P(win)). Phase C scope.
+
+| Métrique | Warning | Critical | V8 Adaptation |
+|----------|---------|----------|---------------|
+| PSI | ≥ 0.1 | ≥ 0.25 | Per-class: PSI(P_loss), PSI(P_draw), PSI(P_win) |
+| Log loss drift | ≥ 5% increase | ≥ 10% increase | NEW — replaces accuracy drop |
+| ELO shift | ≥ 50 pts | - | Unchanged |
+| Draw rate drift | ≥ 3% absolute | ≥ 5% | NEW — mean(P(draw)) vs observed |
 
 ### Recommandations Drift
 
