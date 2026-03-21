@@ -32,7 +32,8 @@ class LifecyclePhase(Enum):
 class AIMSConfig:
     """Configuration AIMMS post-processing.
 
-    Attributes:
+    Attributes
+    ----------
         enable_calibration: Activer calibration probabilités
         enable_uncertainty: Activer quantification incertitude
         enable_alerting: Configurer alerting drift
@@ -116,7 +117,8 @@ class AlertingSummary:
 class AIMSResult:
     """Résultat complet AIMMS post-processing.
 
-    Attributes:
+    Attributes
+    ----------
         phase: Phase lifecycle actuelle
         timestamp: Horodatage ISO 8601
         model_version: Version du modèle

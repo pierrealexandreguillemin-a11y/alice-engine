@@ -24,7 +24,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
-import numpy as np  # noqa: TC002 - Used at runtime
+import numpy as np  # noqa: TCH002 - Used at runtime
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -59,6 +59,7 @@ class AIMSPostprocessor:
     3. Alerting (ISO 23894) - configuration monitoring drift
 
     Example:
+    -------
         config = AIMSConfig(enable_calibration=True)
         postprocessor = AIMSPostprocessor(config)
         result = postprocessor.run(model, X_calib, y_calib, X_test, y_test)
@@ -82,6 +83,7 @@ class AIMSPostprocessor:
         """Execute le pipeline AIMMS complet.
 
         Args:
+        ----
             model: Modèle entraîné avec predict_proba
             X_calib: Features de calibration
             y_calib: Labels de calibration
@@ -90,6 +92,7 @@ class AIMSPostprocessor:
             model_version: Version du modèle
 
         Returns:
+        -------
             AIMSResult avec tous les résumés
         """
         result = AIMSResult.create(model_version, LifecyclePhase.VALIDATION)
@@ -246,6 +249,7 @@ def run_postprocessing(
     """Fonction utilitaire pour postprocessing rapide.
 
     Args:
+    ----
         model: Modèle entraîné
         X_calib: Features calibration
         y_calib: Labels calibration
@@ -255,6 +259,7 @@ def run_postprocessing(
         config: Configuration AIMMS
 
     Returns:
+    -------
         AIMSResult
     """
     postprocessor = AIMSPostprocessor(config)

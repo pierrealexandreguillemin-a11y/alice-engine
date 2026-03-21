@@ -49,9 +49,11 @@ def _validate_slack_url(url: str) -> bool:
     """Valide qu'une URL est un webhook Slack valide (ISO 27034).
 
     Args:
+    ----
         url: URL à valider
 
     Returns:
+    -------
         True si URL valide, False sinon
     """
     if not url:
@@ -69,6 +71,7 @@ class DriftAlerter:
     via Slack lorsque les seuils sont dépassés.
 
     Example:
+    -------
         config = AlertConfig(slack_webhook_url=os.environ["ALICE_SLACK_WEBHOOK"])
         alerter = DriftAlerter(config)
 
@@ -91,9 +94,11 @@ class DriftAlerter:
         """Vérifie le drift et envoie une alerte si nécessaire.
 
         Args:
+        ----
             report: Rapport de drift à analyser
 
         Returns:
+        -------
             DriftAlert si alerte envoyée, None sinon
         """
         if not report.rounds:
@@ -201,10 +206,12 @@ def send_drift_alert(report: DriftReport, config: AlertConfig | None = None) -> 
     """Fonction utilitaire pour envoi rapide d'alerte.
 
     Args:
+    ----
         report: Rapport de drift
         config: Configuration optionnelle
 
     Returns:
+    -------
         DriftAlert si envoyée, None sinon
     """
     alerter = DriftAlerter(config)

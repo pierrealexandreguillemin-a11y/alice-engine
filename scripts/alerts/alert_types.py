@@ -43,7 +43,8 @@ class AlertChannel(Enum):
 class AlertConfig:
     """Configuration des alertes drift.
 
-    Attributes:
+    Attributes
+    ----------
         slack_webhook_url: URL du webhook Slack (env: ALICE_SLACK_WEBHOOK)
         enable_slack: Activer les notifications Slack
         enable_email: Activer les notifications email (future)
@@ -62,7 +63,8 @@ class AlertConfig:
 class DriftAlert:
     """Alerte de drift détectée.
 
-    Attributes:
+    Attributes
+    ----------
         severity: Niveau de sévérité
         title: Titre court de l'alerte
         message: Description détaillée
