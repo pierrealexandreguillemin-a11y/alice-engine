@@ -245,7 +245,7 @@ def compute_draw_priors(df_split: pd.DataFrame, df_history: pd.DataFrame) -> pd.
     result["elo_proximity"] = (1 - diff.clip(upper=800) / 800).round(4)
 
     # Lookup table from history
-    lookup = _build_draw_rate_lookup(df_history)
+    lookup = build_draw_rate_lookup(df_history)
     result["_elo_band"] = pd.cut(result["avg_elo"], bins=ELO_BINS, labels=False)
     result["_diff_band"] = pd.cut(diff, bins=DIFF_BINS, labels=False)
     result = result.merge(
@@ -259,7 +259,7 @@ def compute_draw_priors(df_split: pd.DataFrame, df_history: pd.DataFrame) -> pd.
     return result
 
 
-def _build_draw_rate_lookup(df: pd.DataFrame) -> pd.DataFrame:
+def build_draw_rate_lookup(df: pd.DataFrame) -> pd.DataFrame:
     """Build (elo_band x diff_band) → draw_rate lookup from history."""
     clean = exclude_forfeits(df)
     clean = clean[clean["resultat_blanc"].isin([0.0, 0.5, 1.0])].copy()
