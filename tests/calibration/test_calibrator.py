@@ -43,9 +43,7 @@ def sample_data():
         n_redundant=2,
         random_state=42,
     )
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.3, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
     return X_train, X_test, y_train, y_test
 
 
@@ -183,10 +181,12 @@ class TestAutoGluonWrapper:
         predictor = MagicMock()
         predictor.class_labels = [0, 1]
         predictor.predict.return_value = pd.Series([0, 1, 0, 1, 0])
-        predictor.predict_proba.return_value = pd.DataFrame({
-            0: [0.8, 0.3, 0.7, 0.2, 0.9],
-            1: [0.2, 0.7, 0.3, 0.8, 0.1],
-        })
+        predictor.predict_proba.return_value = pd.DataFrame(
+            {
+                0: [0.8, 0.3, 0.7, 0.2, 0.9],
+                1: [0.2, 0.7, 0.3, 0.8, 0.1],
+            }
+        )
         return predictor
 
     def test_init_with_class_labels(self, mock_autogluon_predictor) -> None:
