@@ -21,20 +21,21 @@ class TestCalculateRecentForm:
     """Tests pour calculate_recent_form()."""
 
     def test_form_basic(self, sample_color_games: pd.DataFrame) -> None:
-        """Test calcul forme recente basique."""
+        """Test calcul forme recente basique — colonnes W/D/L."""
         result = calculate_recent_form(sample_color_games, window=5)
 
         assert not result.empty
-        assert "forme_recente" in result.columns
-        assert "forme_tendance" in result.columns
+        assert "win_rate_recent" in result.columns
+        assert "draw_rate_recent" in result.columns
+        assert "expected_score_recent" in result.columns
 
-    def test_form_tendance_values(self, sample_color_games: pd.DataFrame) -> None:
-        """Test que tendance a les bonnes valeurs."""
+    def test_form_trend_values(self, sample_color_games: pd.DataFrame) -> None:
+        """Test que win_trend et draw_trend ont les bonnes valeurs."""
         result = calculate_recent_form(sample_color_games, window=5)
 
-        tendances = result["forme_tendance"].unique()
-        for t in tendances:
-            assert t in ["hausse", "baisse", "stable"]
+        for col in ("win_trend", "draw_trend"):
+            for val in result[col].dropna().unique():
+                assert val in ["hausse", "baisse", "stable"]
 
     def test_form_empty_df(self) -> None:
         """Test avec DataFrame vide."""

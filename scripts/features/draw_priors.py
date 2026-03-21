@@ -93,7 +93,7 @@ def compute_draw_priors(
 
     result["avg_elo"] = (result["blanc_elo"] + result["noir_elo"]) / 2
 
-    abs_diff = result["diff_elo"].abs()
+    abs_diff = result["_diff_elo_tmp"].abs()
     result["elo_proximity"] = (1 - (abs_diff.clip(upper=800) / 800)).clip(0.0, 1.0)
 
     lookup = build_draw_rate_lookup(df_history)
@@ -103,7 +103,9 @@ def compute_draw_priors(
     result["draw_rate_prior"] = result["draw_rate_prior"].fillna(global_rate)
 
     # Drop helper band columns added internally
-    result = result.drop(columns=["elo_band", "diff_band", "diff_elo"], errors="ignore")
+    result = result.drop(
+        columns=["elo_band", "diff_band", "_diff_elo_tmp", "avg_elo_tmp"], errors="ignore"
+    )
 
     logger.info(
         "compute_draw_priors: %d rows, global_rate=%.3f, " "null_priors=%d",
@@ -233,11 +235,11 @@ def _fill_elo_medians(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _add_elo_bands(df: pd.DataFrame) -> pd.DataFrame:
-    """Add elo_band and diff_elo / diff_band columns."""
+    """Add elo_band and diff_band temp columns. Does NOT overwrite existing diff_elo."""
     result = df.copy()
     result["avg_elo_tmp"] = (result["blanc_elo"] + result["noir_elo"]) / 2
-    result["diff_elo"] = result["blanc_elo"] - result["noir_elo"]
-    abs_diff = result["diff_elo"].abs()
+    result["_diff_elo_tmp"] = result["blanc_elo"] - result["noir_elo"]
+    abs_diff = result["_diff_elo_tmp"].abs()
 
     result["elo_band"] = pd.cut(
         result["avg_elo_tmp"],
