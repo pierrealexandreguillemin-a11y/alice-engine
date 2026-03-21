@@ -68,9 +68,15 @@ models/*.json
 # Dataset (lien symbolique vers 2.4 GB)
 # ============================================
 dataset_alice/
+data/
 exports/
 *.parquet
 *.csv
+
+# Kaggle kernel outputs (downloaded for analysis)
+autogluon_output/
+catboost_v7_output/
+alice_training_v5.py
 
 # ============================================
 # Tests
