@@ -129,23 +129,28 @@ class TestComputeValidationMetrics:
         y_pred = (y_proba >= 0.5).astype(int)
         return y_true, y_pred, y_proba
 
-    def test_metrics_has_10_fields(self, binary_predictions: tuple) -> None:
-        """compute_validation_metrics must return exactly 10 fields."""
+    def test_metrics_has_required_fields(self, binary_predictions: tuple) -> None:
+        """compute_validation_metrics must return all required fields."""
         y_true, y_pred, y_proba = binary_predictions
         metrics = compute_validation_metrics(y_true, y_pred, y_proba)
-        expected_keys = {
+        required_keys = {
             "auc_roc",
             "accuracy",
             "precision",
             "recall",
             "f1_score",
             "log_loss",
+            "log_loss_baseline",
+            "log_loss_ratio",
+            "brier_score",
+            "mean_proba",
+            "positive_rate",
             "true_negatives",
             "false_positives",
             "false_negatives",
             "true_positives",
         }
-        assert set(metrics.keys()) == expected_keys
+        assert required_keys.issubset(set(metrics.keys()))
 
     def test_metrics_values_in_range(self, binary_predictions: tuple) -> None:
         """All probability metrics must be in [0, 1], confusion counts >= 0."""

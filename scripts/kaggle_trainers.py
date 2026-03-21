@@ -28,6 +28,8 @@ BOOL_FEATURES = [
     "match_important", "renforce_fin_saison_dom", "renforce_fin_saison_ext"]
 # fmt: on
 LABEL_COLUMN = "resultat_blanc"
+# Match score = sum of individual board results → target leakage
+LEAKY_COLUMNS = {"score_dom", "score_ext"}
 AUC_FLOOR = 0.70
 MODEL_EXTENSIONS = {"CatBoost": ".cbm", "XGBoost": ".ubj", "LightGBM": ".txt"}
 
@@ -66,8 +68,12 @@ def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
         if col in df.columns:
             df[col] = df[col].fillna(0).astype(int)
     X = df.select_dtypes(include=["int64", "int32", "float64", "float32"])
-    # Drop target + any outcome column (leakage guard)
-    drop = [c for c in X.columns if c in (LABEL_COLUMN, "resultat_noir") or "resultat" in c.lower()]
+    # Drop target + outcome columns + match-score leakage (ISO 5259)
+    drop = [
+        c
+        for c in X.columns
+        if c in (LABEL_COLUMN, "resultat_noir") or "resultat" in c.lower() or c in LEAKY_COLUMNS
+    ]
     X = X.drop(columns=drop, errors="ignore")
     return X, y
 
@@ -114,24 +120,24 @@ def default_hyperparameters() -> dict:
     # fmt: on
     # fmt: off
     return {
-        "global": {"random_seed": 42, "early_stopping_rounds": 50, "eval_metric": "auc"},
+        "global": {"random_seed": 42, "early_stopping_rounds": 100, "eval_metric": "logloss"},
         "catboost": {
-            "iterations": 1000, "learning_rate": 0.03, "depth": 6,
+            "iterations": 3000, "depth": 8, "border_count": 254,
             "l2_leaf_reg": 3, "min_data_in_leaf": 20, "thread_count": 4,
-            "task_type": "GPU" if gpu else "CPU",
-            "random_seed": 42, "verbose": 100, "early_stopping_rounds": 50,
+            "task_type": "GPU" if gpu else "CPU", "use_best_model": True,
+            "random_seed": 42, "verbose": 100, "early_stopping_rounds": 100,
         },
         "xgboost": {
-            "n_estimators": 1000, "learning_rate": 0.03, "max_depth": 6,
+            "n_estimators": 3000, "max_depth": 8,
             "reg_lambda": 1.0, "reg_alpha": 0.0, "min_child_weight": 1,
             **xgb_gpu, "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 50, "verbosity": 1,
+            "early_stopping_rounds": 100, "verbosity": 1,
         },
         "lightgbm": {
-            "n_estimators": 1000, "learning_rate": 0.03, "num_leaves": 63,
+            "n_estimators": 3000, "num_leaves": 255,
             "max_depth": -1, "reg_lambda": 1.0, "reg_alpha": 0.0,
             "min_child_samples": 20, "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 50, "verbose": -1,
+            "early_stopping_rounds": 100, "verbose": -1,
         },
     }
     # fmt: on
@@ -170,7 +176,7 @@ def _train_catboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
     try:
         from catboost import CatBoostClassifier  # noqa: PLC0415
 
-        cb = CatBoostClassifier(**params, eval_metric="AUC")
+        cb = CatBoostClassifier(**params, eval_metric="Logloss")
         t0 = time.time()
         cb.fit(X_train, y_train, eval_set=(X_valid, y_valid))
         result = _eval_model(cb, X_valid, y_valid, time.time() - t0)
@@ -187,7 +193,7 @@ def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, param
     try:
         from xgboost import XGBClassifier  # noqa: PLC0415
 
-        xgb = XGBClassifier(**params, eval_metric="auc")
+        xgb = XGBClassifier(**params, eval_metric="logloss")
         t0 = time.time()
         xgb.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=100)
         result = _eval_model(xgb, X_valid, y_valid, time.time() - t0)
@@ -218,7 +224,7 @@ def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
                     X_train,
                     y_train,
                     eval_set=[(X_valid, y_valid)],
-                    eval_metric="auc",
+                    eval_metric="binary_logloss",
                     callbacks=cbs,
                 )
                 result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)

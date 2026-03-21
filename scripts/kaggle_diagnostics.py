@@ -27,8 +27,9 @@ def save_diagnostics(
 ) -> None:
     """Save all diagnostic artifacts for ISO 42001/25059/24029/5259 compliance."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    _save_predictions(results, X_test, y_test, "test", out_dir)
-    _save_predictions(results, X_valid, y_valid, "valid", out_dir)
+    calibrators = calibrate_models(results, X_valid, y_valid, out_dir)
+    _save_predictions(results, X_test, y_test, "test", out_dir, calibrators)
+    _save_predictions(results, X_valid, y_valid, "valid", out_dir, calibrators)
     _save_feature_importance(results, out_dir)
     _save_classification_reports(results, X_test, y_test, out_dir)
     _save_learning_curves(results, out_dir)
@@ -38,28 +39,57 @@ def save_diagnostics(
     logger.info("Diagnostics saved to %s", out_dir)
 
 
+def calibrate_models(
+    results: dict,
+    X_valid: Any,
+    y_valid: Any,
+    out_dir: Path,
+) -> dict:
+    """Fit isotonic calibration per model on validation set. Save calibrators."""
+    import joblib  # noqa: PLC0415
+    from sklearn.isotonic import IsotonicRegression  # noqa: PLC0415
+
+    calibrators: dict = {}
+    for name, r in results.items():
+        if r["model"] is None:
+            continue
+        y_proba = r["model"].predict_proba(X_valid)[:, 1]
+        y_true = y_valid.values if hasattr(y_valid, "values") else y_valid
+        iso = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+        iso.fit(y_proba, y_true)
+        calibrators[name] = iso
+        logger.info("  %s isotonic calibration fitted (valid set)", name)
+    if calibrators:
+        joblib.dump(calibrators, out_dir / "calibrators.joblib")
+        logger.info("  Calibrators saved to %s", out_dir / "calibrators.joblib")
+    return calibrators
+
+
 def _save_predictions(
     results: dict,
     X: Any,
     y: Any,
     split: str,
     out_dir: Path,
+    calibrators: dict | None = None,
 ) -> None:
-    """Save per-model predictions as parquet (threshold tuning, calibration)."""
+    """Save per-model predictions as parquet (raw + calibrated)."""
     for name, r in results.items():
         if r["model"] is None:
             continue
         y_proba = r["model"].predict_proba(X)[:, 1]
         y_pred = (y_proba >= 0.5).astype(int)
-        df = pd.DataFrame(
-            {
-                "y_true": y.values if hasattr(y, "values") else y,
-                "y_proba": y_proba,
-                "y_pred": y_pred,
-            }
-        )
+        data: dict = {
+            "y_true": y.values if hasattr(y, "values") else y,
+            "y_proba": y_proba,
+            "y_pred": y_pred,
+        }
+        if calibrators and name in calibrators:
+            y_cal = calibrators[name].predict(y_proba)
+            data["y_proba_calibrated"] = y_cal
+            data["y_pred_calibrated"] = (y_cal >= 0.5).astype(int)
         path = out_dir / f"{name}_{split}_predictions.parquet"
-        df.to_parquet(path, index=False)
+        pd.DataFrame(data).to_parquet(path, index=False)
     logger.info(
         "  Predictions saved for %s split (%d models)",
         split,
@@ -179,9 +209,11 @@ def _save_feature_distributions(X_train: Any, out_dir: Path) -> None:
 
 
 def _compute_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
-    """10-field validation metrics (ISO 25059)."""
+    """Validation metrics with calibration quality (ISO 25059)."""
+    import numpy as np  # noqa: PLC0415
     from sklearn.metrics import (  # noqa: PLC0415
         accuracy_score,
+        brier_score_loss,
         confusion_matrix,
         f1_score,
         log_loss,
@@ -191,13 +223,21 @@ def _compute_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
     )
 
     cm = confusion_matrix(y_true, y_pred)
+    pos_rate = float(np.mean(y_true))
+    baseline_ll = float(log_loss(y_true, np.full(len(y_true), pos_rate)))
+    model_ll = float(log_loss(y_true, y_proba))
     # fmt: off
     return {"auc_roc": float(roc_auc_score(y_true, y_proba)),
             "accuracy": float(accuracy_score(y_true, y_pred)),
             "precision": float(precision_score(y_true, y_pred, zero_division=0)),
             "recall": float(recall_score(y_true, y_pred, zero_division=0)),
             "f1_score": float(f1_score(y_true, y_pred, zero_division=0)),
-            "log_loss": float(log_loss(y_true, y_proba)),
+            "log_loss": model_ll,
+            "log_loss_baseline": baseline_ll,
+            "log_loss_ratio": round(model_ll / baseline_ll, 4) if baseline_ll > 0 else 0.0,
+            "brier_score": float(brier_score_loss(y_true, y_proba)),
+            "mean_proba": float(np.mean(y_proba)),
+            "positive_rate": pos_rate,
             "true_negatives": int(cm[0, 0]), "false_positives": int(cm[0, 1]),
             "false_negatives": int(cm[1, 0]), "true_positives": int(cm[1, 1])}
     # fmt: on

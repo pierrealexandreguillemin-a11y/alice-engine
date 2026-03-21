@@ -24,8 +24,8 @@
 global:
   random_seed: 42               # Standard reproducibility seed
   n_folds: 5                    # K-Fold CV: 5 est standard (bias-variance tradeoff)
-  early_stopping_rounds: 50     # 50 iterations sans amelioration = stop
-  eval_metric: "auc"            # AUC pour classification binaire equilibree
+  early_stopping_rounds: 100    # 100 iterations sans amelioration = stop
+  eval_metric: "logloss"        # Logloss: optimise calibration des probas (pas juste ranking)
   task_type: "CPU"              # CPU par defaut, GPU si disponible
   verbose: 100                  # Log tous les 100 iterations
 
@@ -34,24 +34,30 @@ global:
 # Documentation: https://catboost.ai/docs/concepts/parameter-tuning.html
 #
 # JUSTIFICATIONS CATBOOST:
-# - depth=6: Defaut CatBoost, optimal pour 12 features
-# - learning_rate=0.03: Conservateur, permet early stopping efficace
-# - l2_leaf_reg=3: Defaut CatBoost, regularisation moderee
-# - min_data_in_leaf=20: Evite overfitting sur petits groupes
+# - depth=8: Recommended 6-10 (catboost.ai/docs), 147 features need more splits
+# - learning_rate: NOT SET — auto-calculated by CatBoost for Logloss (doc recommended)
+# - iterations=3000 + early_stopping=100: let model converge probabilities, not just ranking
+# - border_count=254: CPU default, GPU default is 128 (quality over speed)
+# - l2_leaf_reg=3: Default CatBoost, moderate regularization
+# - min_data_in_leaf=20: Prevents overfitting on small groups
 # =============================================================================
 catboost:
   # Boosting parameters
-  iterations: 1000              # 1000 iterations avec early_stopping
-  learning_rate: 0.03           # Bas pour stabilite (doc: 0.03 recommande)
-  depth: 6                      # Defaut CatBoost, bon pour 12 features
+  iterations: 3000              # 3000 with early_stopping=100 — converge calibration
+  # learning_rate: auto         # NOT SET — CatBoost auto-calculates for Logloss
+  depth: 8                      # 6->8: 147 features need deeper trees (doc: 6-10)
+  border_count: 254             # Max splits per feature (GPU default 128 is too low)
 
   # Regularization
-  l2_leaf_reg: 3                # Defaut CatBoost (L2 regularization)
-  min_data_in_leaf: 20          # Min samples par feuille (evite overfitting)
+  l2_leaf_reg: 3                # Default CatBoost (L2 regularization)
+  min_data_in_leaf: 20          # Min samples per leaf
+
+  # Model selection
+  use_best_model: true          # Restore best iteration from eval_metric on valid set
 
   # Performance
-  thread_count: -1              # Utilise tous les cores CPU
-  task_type: "CPU"              # Auto-set GPU par kaggle_trainers.py si GPU detecte
+  thread_count: -1              # All CPU cores
+  task_type: "CPU"              # Auto-set GPU by kaggle_trainers.py if GPU detected
 
   # Categorical features (ALICE dataset)
   cat_features:
@@ -77,16 +83,16 @@ catboost:
 # Documentation: https://xgboost.readthedocs.io/en/stable/parameter.html
 #
 # JUSTIFICATIONS XGBOOST:
-# - max_depth=6: Standard, controle overfitting
-# - learning_rate=0.03: Coherent avec CatBoost pour comparaison
-# - tree_method="hist": Histogram-based, 10x plus rapide
-# - reg_lambda=1.0: L2 regularization defaut
+# - max_depth=8: Aligned with CatBoost depth, 147 features
+# - learning_rate: NOT SET — let XGBoost use default 0.3 or tune
+# - tree_method="hist": Histogram-based, 10x faster
+# - reg_lambda=1.0: L2 regularization default
 # =============================================================================
 xgboost:
   # Boosting parameters
-  n_estimators: 1000
-  learning_rate: 0.03           # Coherent avec CatBoost
-  max_depth: 6                  # Standard (doc recommande 3-10)
+  n_estimators: 3000
+  # learning_rate: auto         # NOT SET — XGBoost default 0.3, adjusted by early stopping
+  max_depth: 8                  # 6->8: aligned with CatBoost
 
   # Regularization
   reg_lambda: 1.0               # L2 regularization (defaut)
@@ -111,15 +117,15 @@ xgboost:
 # Documentation: https://lightgbm.readthedocs.io/en/latest/Parameters.html
 #
 # JUSTIFICATIONS LIGHTGBM:
-# - num_leaves=63: 2^6-1 (equivalent depth=6)
-# - max_depth=-1: Controle par num_leaves, pas depth
-# - min_child_samples=20: Coherent avec CatBoost min_data_in_leaf
+# - num_leaves=255: 2^8-1 (equivalent depth=8, aligned with CatBoost)
+# - max_depth=-1: Controlled by num_leaves, not depth
+# - min_child_samples=20: Consistent with CatBoost min_data_in_leaf
 # =============================================================================
 lightgbm:
   # Boosting parameters
-  n_estimators: 1000
-  learning_rate: 0.03
-  num_leaves: 63                # 2^depth - 1 = 2^6 - 1 (depth=6 equivalent)
+  n_estimators: 3000
+  # learning_rate: auto         # NOT SET — LightGBM default 0.1
+  num_leaves: 255               # 2^depth - 1 = 2^8 - 1 (depth=8 equivalent)
   max_depth: -1                 # -1 = no limit (controle par num_leaves)
 
   # Regularization
