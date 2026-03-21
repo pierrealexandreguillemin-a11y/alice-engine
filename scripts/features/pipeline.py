@@ -144,7 +144,15 @@ def merge_all_features(
         result, features["player_reliability"], ["taux_presence", "joueur_fantome"]
     )
     result = merge_player_features(
-        result, features["recent_form"], ["forme_recente", "forme_tendance"]
+        result,
+        features["recent_form"],
+        [
+            "win_rate_recent",
+            "draw_rate_recent",
+            "expected_score_recent",
+            "win_trend",
+            "draw_trend",
+        ],
     )
     result = merge_player_features(
         result, features["board_position"], ["echiquier_moyen", "echiquier_std"]
@@ -152,7 +160,16 @@ def merge_all_features(
     result = merge_player_features(
         result,
         features["color_perf"],
-        ["score_blancs", "score_noirs", "avantage_blancs", "couleur_preferee", "data_quality"],
+        [
+            "win_rate_white",
+            "draw_rate_white",
+            "win_rate_black",
+            "draw_rate_black",
+            "win_adv_white",
+            "draw_adv_white",
+            "couleur_preferee",
+            "data_quality",
+        ],
     )
 
     # FFE regulatory features
@@ -230,7 +247,15 @@ def _merge_advanced_features(
     result = merge_player_features(
         result,
         features.get("pressure", pd.DataFrame()),
-        ["clutch_factor", "pressure_type"],
+        [
+            "win_rate_normal",
+            "draw_rate_normal",
+            "win_rate_pression",
+            "draw_rate_pression",
+            "clutch_win",
+            "clutch_draw",
+            "pressure_type",
+        ],
     )
     result = merge_h2h_features(result, features.get("h2h", pd.DataFrame()))
     return result
