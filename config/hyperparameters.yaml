@@ -230,28 +230,28 @@ optuna:
 
 # =============================================================================
 # METRICS THRESHOLDS (ISO 25010 / 25059)
-# Seuils bases sur benchmarks classification binaire echecs
+# Seuils multiclass 3-way: loss/draw/win (mise a jour Plan B v8)
 # =============================================================================
 metrics_thresholds:
-  auc_roc:
-    minimum: 0.70               # En dessous = modele inutilisable
-    target: 0.78                # Objectif production
+  log_loss:
+    maximum: 1.10               # Plafond: mieux que naive log(3)~1.099
+    target: 0.95                # Objectif production
     excellent: 0.85             # Tres bon modele
 
-  accuracy:
-    minimum: 0.60               # Mieux que random (50%)
-    target: 0.70                # Objectif
-    excellent: 0.75
+  rps:
+    maximum: 0.25               # Plafond RPS (ordinal-aware)
+    target: 0.18                # Objectif production
 
-  f1_score:
-    minimum: 0.55
-    target: 0.65
-    excellent: 0.75
+  expected_score_mae:
+    maximum: 0.40               # Plafond MAE score espere
+    target: 0.30                # Objectif production
 
-  log_loss:
-    maximum: 0.70               # Au dela = mauvaise calibration
-    target: 0.55
-    excellent: 0.45
+  ece:
+    maximum: 0.05               # Plafond ECE par classe
+    production_target: 0.015    # Cible post-calibration isotonique
+
+  draw_calibration_bias:
+    maximum: 0.02               # Biais max P(draw) predit vs observe
 
 # =============================================================================
 # MLFLOW TRACKING (ISO 42001 Tracabilite)

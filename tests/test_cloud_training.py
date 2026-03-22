@@ -112,39 +112,78 @@ class TestBuildLineage:
 
 
 class TestQualityGates:
-    """Tests log-loss quality gates (multiclass) -- 4 tests."""
+    """Tests 8-condition quality gates (multiclass) -- 6 tests."""
 
-    def _make_results(self, ll: float) -> dict:
+    def _make_results(self, ll: float, ece_draw: float = 0.01, bias: float = 0.005) -> dict:
         m = MagicMock()
         return {
             "CatBoost": {
                 "model": m,
-                "metrics": {"test_log_loss": ll, "test_accuracy": 0.7, "test_f1_macro": 0.6},
+                "metrics": {
+                    "test_log_loss": ll,
+                    "test_accuracy": 0.7,
+                    "test_f1_macro": 0.6,
+                    "rps": 0.15,
+                    "brier_multiclass": 0.30,
+                    "expected_score_mae": 0.25,
+                    "ece_class_draw": ece_draw,
+                    "draw_calibration_bias": bias,
+                },
                 "importance": {},
             }
         }
 
-    def test_logloss_above_ceiling_fails(self) -> None:
-        """LogLoss 1.20 > 1.10 ceiling must fail quality gate."""
-        gate = check_quality_gates(self._make_results(1.20))
-        assert gate["passed"] is False
-        assert "LogLoss" in gate["reason"]
+    def _make_baselines(self, naive_ll: float = 1.10, elo_ll: float = 1.05) -> dict:
+        return {
+            "naive": {"log_loss": naive_ll, "rps": 0.22, "brier": 0.40},
+            "elo": {"log_loss": elo_ll, "rps": 0.20, "es_mae": 0.35},
+        }
 
-    def test_logloss_below_ceiling_passes(self) -> None:
-        """LogLoss 0.85 < 1.10 ceiling must pass quality gate."""
-        gate = check_quality_gates(self._make_results(0.85))
+    def test_logloss_beats_naive_fails(self) -> None:
+        """LogLoss 1.20 >= naive 1.10 must fail quality gate."""
+        gate = check_quality_gates(
+            self._make_results(1.20), baseline_metrics=self._make_baselines()
+        )
+        assert gate["passed"] is False
+        assert "naive" in gate["reason"]
+
+    def test_logloss_beats_baselines_passes(self) -> None:
+        """LogLoss 0.85 < naive and elo must pass baseline checks."""
+        gate = check_quality_gates(
+            self._make_results(0.85), baseline_metrics=self._make_baselines()
+        )
         assert gate["passed"] is True
         assert gate["best_log_loss"] == pytest.approx(0.85)
 
+    def test_ece_draw_above_threshold_fails(self) -> None:
+        """ECE draw 0.08 >= 0.05 must fail quality gate."""
+        gate = check_quality_gates(
+            self._make_results(0.85, ece_draw=0.08), baseline_metrics=self._make_baselines()
+        )
+        assert gate["passed"] is False
+        assert "ece_draw" in gate["reason"]
+
+    def test_draw_calibration_bias_fails(self) -> None:
+        """draw_calibration_bias 0.03 >= 0.02 must fail quality gate."""
+        gate = check_quality_gates(
+            self._make_results(0.85, bias=0.03), baseline_metrics=self._make_baselines()
+        )
+        assert gate["passed"] is False
+        assert "draw_calibration_bias" in gate["reason"]
+
     def test_degradation_relative_fails(self) -> None:
         """Champion 0.80, new 0.85 -> 6.25% rise > 5% threshold -> fail."""
-        gate = check_quality_gates(self._make_results(0.85), champion_ll=0.80)
+        gate = check_quality_gates(
+            self._make_results(0.85), baseline_metrics=self._make_baselines(), champion_ll=0.80
+        )
         assert gate["passed"] is False
         assert "Degradation" in gate["reason"]
 
     def test_first_run_no_champion_passes(self) -> None:
         """champion_ll=None must skip degradation check."""
-        gate = check_quality_gates(self._make_results(0.85), champion_ll=None)
+        gate = check_quality_gates(
+            self._make_results(0.85), baseline_metrics=self._make_baselines(), champion_ll=None
+        )
         assert gate["passed"] is True
 
 
@@ -215,7 +254,7 @@ class TestModelCard:
 
 
 class TestHyperparamsSync:
-    """Tests config matches YAML -- 1 test."""
+    """Tests config matches YAML -- 2 tests."""
 
     def test_kaggle_params_match_yaml(self) -> None:
         """Keys in default_hyperparameters() must match config/hyperparameters.yaml."""
@@ -236,6 +275,25 @@ class TestHyperparamsSync:
             yaml_keys = {k for k in yaml_cfg[section] if k not in skip_keys}
             kaggle_keys = {k for k in kaggle_cfg[section] if k not in skip_keys}
             assert yaml_keys == kaggle_keys, f"[{section}] mismatch"
+
+    def test_multiclass_keys_present(self) -> None:
+        """Multiclass-specific keys must exist in both YAML and code."""
+        with Path("config/hyperparameters.yaml").open() as fh:
+            yaml_cfg = yaml.safe_load(fh)
+        kaggle_cfg = default_hyperparameters()
+        # CatBoost: loss_function=MultiClass
+        assert yaml_cfg["catboost"].get("loss_function") == "MultiClass"
+        assert kaggle_cfg["catboost"].get("loss_function") == "MultiClass"
+        # XGBoost: objective=multi:softprob, num_class=3
+        assert yaml_cfg["xgboost"].get("objective") == "multi:softprob"
+        assert kaggle_cfg["xgboost"].get("objective") == "multi:softprob"
+        assert yaml_cfg["xgboost"].get("num_class") == 3
+        assert kaggle_cfg["xgboost"].get("num_class") == 3
+        # LightGBM: objective=multiclass, num_class=3
+        assert yaml_cfg["lightgbm"].get("objective") == "multiclass"
+        assert kaggle_cfg["lightgbm"].get("objective") == "multiclass"
+        assert yaml_cfg["lightgbm"].get("num_class") == 3
+        assert kaggle_cfg["lightgbm"].get("num_class") == 3
 
 
 class TestPromoteModel:
