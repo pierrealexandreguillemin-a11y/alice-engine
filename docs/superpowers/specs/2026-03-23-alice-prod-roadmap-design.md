@@ -55,8 +55,9 @@ Elo baseline:  P_elo(loss), P_elo(draw), P_elo(win)
 
 ### Quality Gate (unchanged)
 
-8 conditions: log_loss < naive, log_loss < Elo, RPS < naive, RPS < Elo,
-Brier < naive, E[score] MAE < Elo, ECE < 0.05 per class, draw bias < 0.02.
+9 conditions: log_loss < naive, log_loss < Elo, RPS < naive, RPS < Elo,
+Brier < naive, E[score] MAE < Elo, ECE < 0.05 per class, draw bias < 0.02,
+draw recall > 1% (model must actually predict draws, not ignore minority class).
 
 ### ISO Deliverables
 

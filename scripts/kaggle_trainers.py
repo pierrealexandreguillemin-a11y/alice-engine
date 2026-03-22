@@ -249,29 +249,22 @@ def train_all_sequential(
 
 
 def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
-    """Compute test metrics for each model (multiclass). Mutates results."""
-    import numpy as np  # noqa: PLC0415
-    from sklearn.metrics import accuracy_score, f1_score, log_loss  # noqa: PLC0415
+    """Delegate to kaggle_metrics (moved for ISO 5055 <300 lines)."""
+    from scripts.kaggle_metrics import evaluate_on_test as _eval  # noqa: PLC0415
 
-    from scripts.kaggle_metrics import (  # noqa: PLC0415
-        compute_expected_score_mae,
-        compute_multiclass_brier,
-        compute_rps,
-    )
+    _eval(results, X_test, y_test)
 
-    for _name, r in results.items():
-        if r["model"] is None:
-            continue
-        y_proba = r["model"].predict_proba(X_test)  # (n, 3)
-        y_pred = np.argmax(y_proba, axis=1)
-        r["metrics"]["test_log_loss"] = float(log_loss(y_test, y_proba))
-        r["metrics"]["test_accuracy"] = float(accuracy_score(y_test, y_pred))
-        r["metrics"]["test_f1_macro"] = float(
-            f1_score(y_test, y_pred, average="macro", zero_division=0)
-        )
-        r["metrics"]["test_rps"] = float(compute_rps(y_test.values, y_proba))
-        r["metrics"]["test_brier"] = float(compute_multiclass_brier(y_test.values, y_proba))
-        r["metrics"]["test_es_mae"] = float(compute_expected_score_mae(y_test.values, y_proba))
+
+def _check_calibration(m: dict) -> str | None:
+    """Check ECE per class, draw bias, and draw recall (conditions 7-9)."""
+    for cls in ("loss", "draw", "win"):
+        if m.get(f"ece_class_{cls}", 1.0) >= 0.05:
+            return f"ece_{cls} >= 0.05"
+    if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
+        return "draw_calibration_bias >= 0.02"
+    if m.get("recall_draw", 0.0) < 0.01:
+        return "recall_draw < 0.01 (model ignores draw class)"
+    return None
 
 
 def check_quality_gates(
@@ -279,7 +272,7 @@ def check_quality_gates(
     baseline_metrics: dict | None = None,
     champion_ll: float | None = None,
 ) -> dict:
-    """ISO 42001: 8-condition quality gate (baselines + calibration + champion)."""
+    """ISO 42001: 9-condition quality gate (baselines + calibration + draw recall + champion)."""
     from scripts.kaggle_metrics import check_baseline_conditions  # noqa: PLC0415
 
     candidates = [(n, r) for n, r in results.items() if r["model"] is not None]
@@ -292,11 +285,10 @@ def check_quality_gates(
         reason = check_baseline_conditions(m, baseline_metrics)
         if reason:
             return {"passed": False, "reason": reason}
-    for cls in ("loss", "draw", "win"):
-        if m.get(f"ece_class_{cls}", 1.0) >= 0.05:
-            return {"passed": False, "reason": f"ece_{cls} >= 0.05"}
-    if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
-        return {"passed": False, "reason": "draw_calibration_bias >= 0.02"}
+    # Calibration + draw prediction checks (conditions 7-9)
+    cal_reason = _check_calibration(m)
+    if cal_reason:
+        return {"passed": False, "reason": cal_reason}
     if champion_ll and champion_ll > 0:
         rise_pct = (best_ll - champion_ll) / champion_ll * 100
         if rise_pct > 5.0:

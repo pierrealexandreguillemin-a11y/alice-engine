@@ -9,6 +9,8 @@ Provides: RPS, expected-score MAE, multiclass Brier, ECE, baseline conditions.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 
@@ -105,3 +107,33 @@ def check_baseline_conditions(m: dict, baseline_metrics: dict) -> str | None:
         if fail_cond:
             return label
     return None
+
+
+def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
+    """Compute test metrics for each model (multiclass). Mutates results in-place."""
+    from sklearn.metrics import accuracy_score, f1_score, log_loss, recall_score
+
+    for _name, r in results.items():
+        if r["model"] is None:
+            continue
+        y_proba = r["model"].predict_proba(X_test)  # (n, 3)
+        y_pred = np.argmax(y_proba, axis=1)
+        y_arr = y_test.values if hasattr(y_test, "values") else np.asarray(y_test)
+        r["metrics"]["test_log_loss"] = float(log_loss(y_arr, y_proba))
+        r["metrics"]["test_accuracy"] = float(accuracy_score(y_arr, y_pred))
+        r["metrics"]["test_f1_macro"] = float(
+            f1_score(y_arr, y_pred, average="macro", zero_division=0)
+        )
+        per_class_recall = recall_score(y_arr, y_pred, average=None, zero_division=0)
+        r["metrics"]["recall_loss"] = (
+            float(per_class_recall[0]) if len(per_class_recall) > 0 else 0.0
+        )
+        r["metrics"]["recall_draw"] = (
+            float(per_class_recall[1]) if len(per_class_recall) > 1 else 0.0
+        )
+        r["metrics"]["recall_win"] = (
+            float(per_class_recall[2]) if len(per_class_recall) > 2 else 0.0
+        )
+        r["metrics"]["test_rps"] = float(compute_rps(y_arr, y_proba))
+        r["metrics"]["test_brier"] = float(compute_multiclass_brier(y_arr, y_proba))
+        r["metrics"]["test_es_mae"] = float(compute_expected_score_mae(y_arr, y_proba))
