@@ -112,7 +112,7 @@ def _artifact_entry(name: str, path: Path) -> dict:
 
 
 def fetch_champion_auc() -> float | None:
-    """Fetch best_model.auc from latest metadata.json on HF Hub."""
+    """Fetch best_model.auc from latest metadata.json on HF Hub (legacy)."""
     try:
         from huggingface_hub import hf_hub_download  # noqa: PLC0415
 
@@ -124,6 +124,22 @@ def fetch_champion_auc() -> float | None:
         return auc if auc > 0 else None
     except Exception:
         logger.warning("Could not fetch champion AUC — first run assumed.")
+        return None
+
+
+def fetch_champion_ll() -> float | None:
+    """Fetch best_log_loss from latest metadata.json on HF Hub (multiclass gate)."""
+    try:
+        from huggingface_hub import hf_hub_download  # noqa: PLC0415
+
+        path = hf_hub_download(HF_REPO_ID, "metadata.json", repo_type="model")
+        with open(path) as fh:
+            data = json.load(fh)
+        gate = data.get("quality_gate_result", {})
+        ll = float(gate.get("best_log_loss", 0.0)) if gate else 0.0
+        return ll if ll > 0 else None
+    except Exception:
+        logger.warning("Could not fetch champion log_loss — first run assumed.")
         return None
 
 

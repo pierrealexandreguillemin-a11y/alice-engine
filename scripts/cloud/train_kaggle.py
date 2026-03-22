@@ -99,6 +99,42 @@ def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
     )
 
 
+def _compute_baselines(
+    train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    y_train: pd.Series,
+) -> dict:
+    """Compute naive + Elo baselines for quality gate (ISO 25059)."""
+    import numpy as np  # noqa: PLC0415
+    from sklearn.metrics import log_loss as sk_log_loss  # noqa: PLC0415
+
+    from scripts.baselines import compute_elo_baseline, compute_naive_baseline  # noqa: PLC0415
+    from scripts.features.draw_priors import build_draw_rate_lookup  # noqa: PLC0415
+    from scripts.kaggle_metrics import compute_expected_score_mae, compute_rps  # noqa: PLC0415
+
+    n_test = len(y_test)
+    y_test_arr = y_test.values
+    naive_proba = compute_naive_baseline(y_train.values, n_test)
+    draw_lookup = build_draw_rate_lookup(train)
+    b_elo = X_test["blanc_elo"].values if "blanc_elo" in X_test.columns else np.full(n_test, 1500)
+    n_elo = X_test["noir_elo"].values if "noir_elo" in X_test.columns else np.full(n_test, 1500)
+    elo_proba = compute_elo_baseline(b_elo, n_elo, draw_lookup)
+    oh = np.eye(3)[y_test_arr]
+    return {
+        "naive": {
+            "log_loss": float(sk_log_loss(y_test_arr, naive_proba)),
+            "rps": float(compute_rps(y_test_arr, naive_proba)),
+            "brier": float(np.mean(np.sum((naive_proba - oh) ** 2, axis=1))),
+        },
+        "elo": {
+            "log_loss": float(sk_log_loss(y_test_arr, elo_proba)),
+            "rps": float(compute_rps(y_test_arr, elo_proba)),
+            "es_mae": float(compute_expected_score_mae(y_test_arr, elo_proba)),
+        },
+    }
+
+
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
     logger.info("ALICE Engine — Kaggle Cloud Training (cudf=%s)", _CUDF_AVAILABLE)
@@ -107,7 +143,7 @@ def main() -> None:
     from scripts.kaggle_artifacts import (  # noqa: PLC0415
         build_lineage,
         build_model_card,
-        fetch_champion_auc,
+        fetch_champion_ll,
         save_metadata_and_push,
         save_models,
         setup_hf_auth,
@@ -141,8 +177,10 @@ def main() -> None:
     results = train_all_sequential(X_train, y_train, X_valid, y_valid, config)
     evaluate_on_test(results, X_test, y_test)
 
-    champion_auc = fetch_champion_auc()
-    gate = check_quality_gates(results, champion_auc=champion_auc)
+    baseline_metrics = _compute_baselines(train, X_test, y_test, y_train)
+
+    champion_ll = fetch_champion_ll()
+    gate = check_quality_gates(results, baseline_metrics=baseline_metrics, champion_ll=champion_ll)
     logger.info("Quality gate: %s", gate)
 
     save_models(results, encoders, out_dir, model_extensions=MODEL_EXTENSIONS)
@@ -158,10 +196,10 @@ def main() -> None:
         with open(out_dir / "metadata.json", "w") as fh:
             json.dump(metadata, fh, indent=2, default=str)
     logger.info(
-        "Done. Status=%s Best=%s AUC=%.4f",
+        "Done. Status=%s Best=%s LogLoss=%.4f",
         metadata["status"],
         gate.get("best_model"),
-        gate.get("best_auc", 0),
+        gate.get("best_log_loss", 0),
     )
 
 

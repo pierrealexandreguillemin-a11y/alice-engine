@@ -215,30 +215,22 @@ def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
         from lightgbm import LGBMClassifier  # noqa: PLC0415
 
         lgb_p = {k: v for k, v in params.items() if k != "early_stopping_rounds"}
+        lgb_p["device"] = "cpu"
         es = params.get("early_stopping_rounds", 50)
         cbs = [lgb_lib.early_stopping(es), lgb_lib.log_evaluation(100)]
-        # LightGBM pip package has no GPU support (needs OpenCL build) — CPU only
-        for device in ["cpu"]:
-            lgb_p["device"] = device
-            try:
-                lgbm = LGBMClassifier(**lgb_p)
-                t0 = time.time()
-                lgbm.fit(
-                    X_train,
-                    y_train,
-                    eval_set=[(X_valid, y_valid)],
-                    eval_metric="multi_logloss",
-                    callbacks=cbs,
-                )
-                result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
-                del lgbm
-                gc.collect()
-                return result
-            except Exception:
-                if device == "gpu":
-                    logger.warning("LightGBM GPU failed — falling back to CPU")
-                else:
-                    raise
+        lgbm = LGBMClassifier(**lgb_p)
+        t0 = time.time()
+        lgbm.fit(
+            X_train,
+            y_train,
+            eval_set=[(X_valid, y_valid)],
+            eval_metric="multi_logloss",
+            callbacks=cbs,
+        )
+        result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
+        del lgbm
+        gc.collect()
+        return result
     except Exception:
         logger.exception("LightGBM training failed")
     return _fail_result()
@@ -275,24 +267,32 @@ def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
         r["metrics"]["test_log_loss"] = float(log_loss(y_test, y_proba))
         r["metrics"]["test_accuracy"] = float(accuracy_score(y_test, y_pred))
         r["metrics"]["test_f1_macro"] = float(
-            f1_score(y_test, y_pred, average="macro", zero_division=0),
+            f1_score(y_test, y_pred, average="macro", zero_division=0)
         )
 
 
-def check_quality_gates(results: dict, champion_ll: float | None = None) -> dict:
-    """ISO 42001: log-loss ceiling + relative degradation (5%) gate."""
+def check_quality_gates(
+    results: dict,
+    baseline_metrics: dict | None = None,
+    champion_ll: float | None = None,
+) -> dict:
+    """ISO 42001: 8-condition quality gate (baselines + calibration + champion)."""
+    from scripts.kaggle_metrics import check_baseline_conditions  # noqa: PLC0415
+
     candidates = [(n, r) for n, r in results.items() if r["model"] is not None]
     if not candidates:
         return {"passed": False, "reason": "All models failed to train"}
-    # Lower log_loss is better
-    best_name, best_r = min(
-        candidates,
-        key=lambda x: x[1]["metrics"].get("test_log_loss", 999.0),
-    )
-    best_ll = best_r["metrics"].get("test_log_loss", 999.0)
-    ll_ceiling = 1.10  # naive 3-class baseline ~ log(3) = 1.099
-    if best_ll > ll_ceiling:
-        return {"passed": False, "reason": f"LogLoss {best_ll:.4f} > {ll_ceiling}"}
+    best_name, best_r = min(candidates, key=lambda x: x[1]["metrics"].get("test_log_loss", 999.0))
+    m = best_r["metrics"]
+    best_ll = m.get("test_log_loss", 999.0)
+    if baseline_metrics:
+        reason = check_baseline_conditions(m, baseline_metrics)
+        if reason:
+            return {"passed": False, "reason": reason}
+    if m.get("ece_class_draw", 1.0) >= 0.05:
+        return {"passed": False, "reason": "ece_draw >= 0.05"}
+    if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
+        return {"passed": False, "reason": "draw_calibration_bias >= 0.02"}
     if champion_ll and champion_ll > 0:
         rise_pct = (best_ll - champion_ll) / champion_ll * 100
         if rise_pct > 5.0:
