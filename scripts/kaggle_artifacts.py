@@ -44,15 +44,28 @@ def build_lineage(
         "valid": _entry("valid", valid),
         "test": _entry("test", test),
         "feature_count": len(train.columns) - 1,
-        "target_distribution": {
-            "class_distribution": {
-                "loss": float((train[label_column] == 0.0).mean()),
-                "draw": float((train[label_column] == 0.5).mean()),
-                "win": float((train[label_column] == 1.0).mean()),
-            },
-            "total_samples": len(train),
-        },
+        "target_distribution": _class_distribution(train, label_column),
         "created_at": datetime.now(tz=UTC).isoformat(),
+    }
+
+
+def _class_distribution(df: pd.DataFrame, label_column: str) -> dict:
+    """Class distribution excluding forfaits (2.0) from denominator."""
+    clean = df[df[label_column] != 2.0] if label_column in df.columns else df
+    return {
+        "class_distribution": {
+            "loss": float((clean[label_column] == 0.0).mean())
+            if label_column in clean.columns
+            else 0,
+            "draw": float((clean[label_column] == 0.5).mean())
+            if label_column in clean.columns
+            else 0,
+            "win": float((clean[label_column] == 1.0).mean())
+            if label_column in clean.columns
+            else 0,
+        },
+        "total_samples": len(clean),
+        "forfaits_excluded": int(len(df) - len(clean)),
     }
 
 

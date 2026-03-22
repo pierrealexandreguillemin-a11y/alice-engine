@@ -14,7 +14,10 @@ ADVANCED_CAT_FEATURES = [
 BOOL_FEATURES = [
     "joueur_fantome_blanc", "joueur_fantome_noir", "ffe_multi_equipe_blanc",
     "ffe_multi_equipe_noir", "est_dans_noyau_blanc", "est_dans_noyau_noir",
-    "match_important", "renforce_fin_saison_dom", "renforce_fin_saison_ext"]
+    "match_important", "renforce_fin_saison_dom", "renforce_fin_saison_ext",
+    "joueur_promu_blanc", "joueur_promu_noir",      # V8 club_level (bool dtype)
+    "joueur_relegue_blanc", "joueur_relegue_noir",  # V8 club_level (bool dtype)
+    "h2h_exists"]                                    # advanced (bool dtype)
 # fmt: on
 LABEL_COLUMN = "resultat_blanc"
 LEAKY_COLUMNS = {"score_dom", "score_ext"}  # match-score leakage (ISO 5259)
