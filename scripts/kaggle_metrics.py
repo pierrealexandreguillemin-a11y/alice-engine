@@ -93,13 +93,13 @@ def check_baseline_conditions(m: dict, baseline_metrics: dict) -> str | None:
             bool(elo) and m.get("test_log_loss", 999) >= elo.get("log_loss", 999),
             "log_loss >= elo baseline",
         ),
-        (bool(naive) and m.get("rps", 999) >= naive.get("rps", 999), "rps >= naive baseline"),
-        (bool(elo) and m.get("rps", 999) >= elo.get("rps", 999), "rps >= elo baseline"),
+        (bool(naive) and m.get("test_rps", 999) >= naive.get("rps", 999), "rps >= naive baseline"),
+        (bool(elo) and m.get("test_rps", 999) >= elo.get("rps", 999), "rps >= elo baseline"),
         (
-            bool(naive) and m.get("brier_multiclass", 999) >= naive.get("brier", 999),
+            bool(naive) and m.get("test_brier", 999) >= naive.get("brier", 999),
             "brier >= naive",
         ),
-        (bool(elo) and m.get("expected_score_mae", 999) >= elo.get("es_mae", 999), "es_mae >= elo"),
+        (bool(elo) and m.get("test_es_mae", 999) >= elo.get("es_mae", 999), "es_mae >= elo"),
     ]
     for fail_cond, label in checks:
         if fail_cond:

@@ -45,7 +45,11 @@ def build_lineage(
         "test": _entry("test", test),
         "feature_count": len(train.columns) - 1,
         "target_distribution": {
-            "positive_ratio": float((train[label_column] == 1.0).mean()),
+            "class_distribution": {
+                "loss": float((train[label_column] == 0.0).mean()),
+                "draw": float((train[label_column] == 0.5).mean()),
+                "win": float((train[label_column] == 1.0).mean()),
+            },
             "total_samples": len(train),
         },
         "created_at": datetime.now(tz=UTC).isoformat(),

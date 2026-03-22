@@ -303,7 +303,7 @@ autogluon:
   # Presets: 'medium_quality', 'high_quality', 'best_quality', 'extreme'
   presets: "extreme"            # Inclut TabPFN-2.5 + tous modeles
   time_limit: 21600             # 6 HEURES (corrige de 3600)
-  eval_metric: "roc_auc"        # Coherent avec baseline
+  eval_metric: "log_loss"       # Multiclass 3-class: coherent avec pipeline
 
   # Stacking configuration
   num_bag_folds: 5              # K-Fold bagging (coherent global)

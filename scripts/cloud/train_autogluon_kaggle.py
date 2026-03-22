@@ -59,8 +59,7 @@ AG_SEED = 42
 LL_CEILING = 1.10  # Must beat naive log(3) ~ 1.099
 HF_REPO_ID = "Pierrax/alice-engine"
 AG_NUM_GPUS = 1
-# All models use ag_args_fit for GPU — AutoGluon's unified API
-AG_GPU_HYPERPARAMETERS: dict[str, Any] = {
+AG_GPU_HYPERPARAMETERS: dict[str, Any] = {  # ag_args_fit: AutoGluon's unified GPU API
     "GBM": [{"ag_args_fit": {"num_gpus": 1}}],
     "CAT": [{"ag_args_fit": {"num_gpus": 1}}],
     "XGB": [{"ag_args_fit": {"num_gpus": 1}}],
@@ -73,7 +72,6 @@ DATA_CANDIDATES = [
     Path("data/features"),
 ]
 OUTPUT_DIR = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))
-
 
 # --- Data ---
 
@@ -113,9 +111,6 @@ def build_lineage(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFrame) 
         "dedup_keys": DEDUP_KEYS,
         "created_at": datetime.now(tz=UTC).isoformat(),
     }
-
-
-# --- Training ---
 
 
 def train_autogluon(

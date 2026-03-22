@@ -60,7 +60,10 @@ def mock_lineage() -> dict:
         "valid": {"path": "/data/valid.parquet", "samples": 100, "hash": "def456"},
         "test": {"path": "/data/test.parquet", "samples": 100, "hash": "ghi789"},
         "feature_count": 10,
-        "target_distribution": {"positive_ratio": 0.5, "total_samples": 800},
+        "target_distribution": {
+            "class_distribution": {"loss": 0.33, "draw": 0.33, "win": 0.34},
+            "total_samples": 800,
+        },
         "created_at": "2026-03-18T12:00:00+00:00",
     }
 
@@ -101,7 +104,7 @@ class TestBuildLineage:
         assert "feature_count" in lineage
         assert "target_distribution" in lineage
         assert "created_at" in lineage
-        assert "positive_ratio" in lineage["target_distribution"]
+        assert "class_distribution" in lineage["target_distribution"]
 
     def test_lineage_feature_count_excludes_target(
         self, small_df: pd.DataFrame, tmp_path: Path
@@ -123,10 +126,12 @@ class TestQualityGates:
                     "test_log_loss": ll,
                     "test_accuracy": 0.7,
                     "test_f1_macro": 0.6,
-                    "rps": 0.15,
-                    "brier_multiclass": 0.30,
-                    "expected_score_mae": 0.25,
+                    "test_rps": 0.15,
+                    "test_brier": 0.30,
+                    "test_es_mae": 0.25,
+                    "ece_class_loss": 0.01,
                     "ece_class_draw": ece_draw,
+                    "ece_class_win": 0.01,
                     "draw_calibration_bias": bias,
                 },
                 "importance": {},
@@ -192,7 +197,7 @@ class TestModelCard:
 
     @pytest.fixture()
     def gate(self) -> dict:
-        return {"passed": True, "best_model": "CatBoost", "best_auc": 0.74}
+        return {"passed": True, "best_model": "CatBoost", "best_log_loss": 0.85}
 
     def test_card_has_all_required_fields(
         self, mock_results: dict, mock_lineage: dict, gate: dict

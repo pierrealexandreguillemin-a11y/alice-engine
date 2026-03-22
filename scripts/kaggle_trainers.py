@@ -259,6 +259,12 @@ def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
     import numpy as np  # noqa: PLC0415
     from sklearn.metrics import accuracy_score, f1_score, log_loss  # noqa: PLC0415
 
+    from scripts.kaggle_metrics import (  # noqa: PLC0415
+        compute_expected_score_mae,
+        compute_multiclass_brier,
+        compute_rps,
+    )
+
     for _name, r in results.items():
         if r["model"] is None:
             continue
@@ -269,6 +275,9 @@ def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
         r["metrics"]["test_f1_macro"] = float(
             f1_score(y_test, y_pred, average="macro", zero_division=0)
         )
+        r["metrics"]["test_rps"] = float(compute_rps(y_test.values, y_proba))
+        r["metrics"]["test_brier"] = float(compute_multiclass_brier(y_test.values, y_proba))
+        r["metrics"]["test_es_mae"] = float(compute_expected_score_mae(y_test.values, y_proba))
 
 
 def check_quality_gates(
@@ -289,8 +298,9 @@ def check_quality_gates(
         reason = check_baseline_conditions(m, baseline_metrics)
         if reason:
             return {"passed": False, "reason": reason}
-    if m.get("ece_class_draw", 1.0) >= 0.05:
-        return {"passed": False, "reason": "ece_draw >= 0.05"}
+    for cls in ("loss", "draw", "win"):
+        if m.get(f"ece_class_{cls}", 1.0) >= 0.05:
+            return {"passed": False, "reason": f"ece_{cls} >= 0.05"}
     if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
         return {"passed": False, "reason": "draw_calibration_bias >= 0.02"}
     if champion_ll and champion_ll > 0:
