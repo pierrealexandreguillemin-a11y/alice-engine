@@ -92,18 +92,21 @@ def _compute_baselines(
     n_elo = X_test["noir_elo"].values if "noir_elo" in X_test.columns else np.full(n_test, 1500)
     elo_proba = compute_elo_baseline(b_elo, n_elo, draw_lookup)
     oh = np.eye(3)[y_test_arr]
-    return {
-        "naive": {
-            "log_loss": float(sk_log_loss(y_test_arr, naive_proba)),
-            "rps": float(compute_rps(y_test_arr, naive_proba)),
-            "brier": float(np.mean(np.sum((naive_proba - oh) ** 2, axis=1))),
+    return (
+        {
+            "naive": {
+                "log_loss": float(sk_log_loss(y_test_arr, naive_proba)),
+                "rps": float(compute_rps(y_test_arr, naive_proba)),
+                "brier": float(np.mean(np.sum((naive_proba - oh) ** 2, axis=1))),
+            },
+            "elo": {
+                "log_loss": float(sk_log_loss(y_test_arr, elo_proba)),
+                "rps": float(compute_rps(y_test_arr, elo_proba)),
+                "es_mae": float(compute_expected_score_mae(y_test_arr, elo_proba)),
+            },
         },
-        "elo": {
-            "log_loss": float(sk_log_loss(y_test_arr, elo_proba)),
-            "rps": float(compute_rps(y_test_arr, elo_proba)),
-            "es_mae": float(compute_expected_score_mae(y_test_arr, elo_proba)),
-        },
-    }
+        draw_lookup,
+    )
 
 
 def main() -> None:
@@ -148,7 +151,9 @@ def main() -> None:
     results = train_all_sequential(X_train, y_train, X_valid, y_valid, config)
     evaluate_on_test(results, X_test, y_test)
 
-    baseline_metrics = _compute_baselines(train, X_test, y_test, y_train)
+    baseline_metrics, draw_lookup = _compute_baselines(train, X_test, y_test, y_train)
+    draw_lookup.to_parquet(out_dir / "draw_rate_lookup.parquet", index=False)
+    logger.info("Saved draw_rate_lookup.parquet (%d cells) for inference", len(draw_lookup))
 
     champion_ll = fetch_champion_ll()
     gate = check_quality_gates(results, baseline_metrics=baseline_metrics, champion_ll=champion_ll)
