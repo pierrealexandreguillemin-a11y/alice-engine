@@ -110,28 +110,32 @@ def default_hyperparameters() -> dict:
             xgb_gpu = {"tree_method": "gpu_hist"}
     # fmt: on
     # fmt: off
+    # V8v3: lower LR, shallower trees, stronger regularization
+    # V8v2 diverged: best at iter 3-39 then log_loss exploded
     return {
-        "global": {"random_seed": 42, "early_stopping_rounds": 100, "eval_metric": "multi_logloss"},
+        "global": {"random_seed": 42, "early_stopping_rounds": 200, "eval_metric": "multi_logloss"},
         "catboost": {
-            "iterations": 3000, "depth": 8, "border_count": 254,
-            "l2_leaf_reg": 3, "min_data_in_leaf": 20, "thread_count": 4,
-            "task_type": "GPU" if gpu else "CPU", "use_best_model": True,
-            "loss_function": "MultiClass",
-            "random_seed": 42, "verbose": 100, "early_stopping_rounds": 100,
+            "iterations": 5000, "depth": 6, "border_count": 254,
+            "learning_rate": 0.03, "l2_leaf_reg": 5, "min_data_in_leaf": 50,
+            "thread_count": 4, "task_type": "GPU" if gpu else "CPU",
+            "use_best_model": True, "loss_function": "MultiClass",
+            "random_seed": 42, "verbose": 200, "early_stopping_rounds": 200,
         },
         "xgboost": {
-            "n_estimators": 3000, "max_depth": 8,
+            "n_estimators": 5000, "max_depth": 6, "learning_rate": 0.03,
             "objective": "multi:softprob", "num_class": 3,
-            "reg_lambda": 1.0, "reg_alpha": 0.0, "min_child_weight": 1,
+            "reg_lambda": 3.0, "reg_alpha": 0.1, "min_child_weight": 10,
+            "subsample": 0.8, "colsample_bytree": 0.8,
             **xgb_gpu, "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 100, "verbosity": 1,
+            "early_stopping_rounds": 200, "verbosity": 1,
         },
         "lightgbm": {
-            "n_estimators": 3000, "num_leaves": 255,
-            "objective": "multiclass", "num_class": 3,
-            "max_depth": -1, "reg_lambda": 1.0, "reg_alpha": 0.0,
-            "min_child_samples": 20, "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 100, "verbose": -1,
+            "n_estimators": 5000, "num_leaves": 63, "max_depth": 6,
+            "learning_rate": 0.03, "objective": "multiclass", "num_class": 3,
+            "reg_lambda": 3.0, "reg_alpha": 0.1, "min_child_samples": 50,
+            "subsample": 0.8, "colsample_bytree": 0.8,
+            "n_jobs": 4, "random_state": 42,
+            "early_stopping_rounds": 200, "verbose": -1,
         },
     }
     # fmt: on
