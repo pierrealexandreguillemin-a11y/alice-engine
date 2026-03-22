@@ -107,8 +107,14 @@ def extract_club_level_features(df_history: pd.DataFrame) -> pd.DataFrame:
     if unified.empty:
         return pd.DataFrame()
 
+    # Pre-index by (club, saison) for O(1) prev-season lookup
+    club_saison_groups = unified.groupby(["club", "saison"])
+    prev_season_players: dict[tuple, set] = {}
+    for (club, saison), grp in club_saison_groups:
+        prev_season_players[(club, saison)] = set(grp["joueur_nom"].dropna())
+
     rows: list[dict] = []
-    for (club, saison), club_df in unified.groupby(["club", "saison"]):
+    for (club, saison), club_df in club_saison_groups:
         teams = club_df["equipe"].unique().tolist()
         avg_elo_by_team = (
             club_df.groupby("equipe")["elo"].mean().to_dict() if "elo" in club_df.columns else {}
@@ -116,7 +122,10 @@ def extract_club_level_features(df_history: pd.DataFrame) -> pd.DataFrame:
         ranks = _rank_teams_in_club(teams, avg_elo_by_team)
         nb_teams = len(teams)
 
-        prev_season_df = unified[(unified["club"] == club) & (unified["saison"] == saison - 1)]
+        prev_players = prev_season_players.get((club, saison - 1), set())
+        prev_season_df = (
+            pd.DataFrame({"joueur_nom": list(prev_players)}) if prev_players else pd.DataFrame()
+        )
 
         for team in teams:
             team_df = club_df[club_df["equipe"] == team]
@@ -170,15 +179,16 @@ def _calc_reinforcement_rate(team: str, team_df: pd.DataFrame, club_df: pd.DataF
     if len(rondes) == 0:
         return 0.0
 
-    nb_reinforced = 0
-    for ronde in rondes:
-        players_this_round = set(team_df[team_df["ronde"] == ronde]["joueur_nom"].dropna())
-        # players who played for OTHER teams of same club THIS season
-        other_team_players = set(club_df[club_df["equipe"] != team]["joueur_nom"].dropna())
-        if players_this_round & other_team_players:
-            nb_reinforced += 1
+    # Pre-compute once (invariant across rondes)
+    other_team_players = set(club_df.loc[club_df["equipe"] != team, "joueur_nom"].dropna())
+    if not other_team_players:
+        return 0.0
 
-    return round(nb_reinforced / len(rondes), 3)
+    # Vectorized: group players by ronde and check intersection
+    ronde_groups = team_df.groupby("ronde")["joueur_nom"].apply(
+        lambda x: bool(set(x.dropna()) & other_team_players)
+    )
+    return round(ronde_groups.sum() / len(rondes), 3)
 
 
 def _calc_stabilite(team_df: pd.DataFrame, prev_df: pd.DataFrame) -> float:
@@ -215,17 +225,7 @@ def _calc_elo_evolution(team_df: pd.DataFrame) -> float:
 def extract_player_team_context(df_history: pd.DataFrame) -> pd.DataFrame:
     """Compute per (joueur_nom, equipe, saison, ronde) movement flags.
 
-    Args:
-    ----
-        df_history: raw echiquiers DataFrame
-
-    Returns:
-    -------
-        DataFrame with columns:
-        - joueur_nom, equipe, saison, ronde
-        - joueur_promu: playing for a stronger team than primary team
-        - joueur_relegue: playing for a weaker team (reinforcement)
-        - player_team_elo_gap: player Elo minus team avg Elo
+    Fully vectorized — no iterrows(). Args/Returns unchanged.
     """
     if df_history.empty:
         return pd.DataFrame()
@@ -235,44 +235,48 @@ def extract_player_team_context(df_history: pd.DataFrame) -> pd.DataFrame:
     if unified.empty:
         return pd.DataFrame()
 
+    # 1. Team avg Elo per (equipe, saison)
     team_avg_elo = (
-        unified.groupby(["equipe", "saison"])["elo"].mean().to_dict()
+        unified.groupby(["equipe", "saison"])["elo"].mean()
         if "elo" in unified.columns
-        else {}
+        else pd.Series(dtype=float)
     )
 
-    rows: list[dict] = []
-    for (joueur, saison), player_df in unified.groupby(["joueur_nom", "saison"]):
-        primary = _primary_team(player_df)
-        primary_level = get_niveau_equipe(primary)
+    # 2. Primary team per (joueur_nom, saison) = mode of equipe
+    primary_teams = (
+        unified.groupby(["joueur_nom", "saison"])["equipe"]
+        .agg(lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else "")
+        .rename("primary_team")
+    )
 
-        for _, game_row in player_df.iterrows():
-            current_team = str(game_row["equipe"])
-            current_level = get_niveau_equipe(current_team)
+    # 3. Niveau for each equipe (vectorized via map)
+    unique_teams = unified["equipe"].unique()
+    niveau_map = {t: get_niveau_equipe(t) for t in unique_teams}
 
-            joueur_promu = current_level < primary_level
-            joueur_relegue = current_level > primary_level
+    # 4. Join primary team onto unified
+    result = unified[["joueur_nom", "equipe", "saison", "ronde"]].copy()
+    if "elo" in unified.columns:
+        result["elo"] = unified["elo"].values
 
-            player_elo = float(game_row.get("elo", float("nan")))
-            team_avg = team_avg_elo.get((current_team, saison), float("nan"))
-            gap = (
-                round(player_elo - team_avg, 1)
-                if not (pd.isna(player_elo) or pd.isna(team_avg))
-                else float("nan")
-            )
+    result = result.merge(primary_teams, on=["joueur_nom", "saison"], how="left")
 
-            rows.append(
-                {
-                    "joueur_nom": joueur,
-                    "equipe": current_team,
-                    "saison": saison,
-                    "ronde": game_row.get("ronde"),
-                    "joueur_promu": joueur_promu,
-                    "joueur_relegue": joueur_relegue,
-                    "player_team_elo_gap": gap,
-                }
-            )
+    # 5. Map niveaux
+    result["current_level"] = result["equipe"].map(niveau_map)
+    result["primary_level"] = result["primary_team"].map(niveau_map)
 
-    result = pd.DataFrame(rows)
+    # 6. Promu/relegue (lower level number = stronger)
+    result["joueur_promu"] = result["current_level"] < result["primary_level"]
+    result["joueur_relegue"] = result["current_level"] > result["primary_level"]
+
+    # 7. Player-team Elo gap (merge is safer than MultiIndex.map)
+    if "elo" in result.columns and not team_avg_elo.empty:
+        team_avg_df = team_avg_elo.reset_index(name="team_avg")
+        result = result.merge(team_avg_df, on=["equipe", "saison"], how="left")
+        result["player_team_elo_gap"] = (result["elo"] - result["team_avg"]).round(1)
+        result = result.drop(columns=["elo", "team_avg"])
+    else:
+        result["player_team_elo_gap"] = float("nan")
+
+    result = result.drop(columns=["primary_team", "current_level", "primary_level"])
     logger.info("  %d player-context rows computed", len(result))
     return result
