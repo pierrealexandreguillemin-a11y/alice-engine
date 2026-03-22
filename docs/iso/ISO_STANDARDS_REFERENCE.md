@@ -51,6 +51,7 @@
 | ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - V7/AutoGluon era. V8: redo post-training |
 | ISO 25059 | Quality Gate | `check_quality_gates()` dans `kaggle_trainers.py`. V8: 8 conditions (voir §Quality Gate) |
 | ISO 24029 | Calibration | Isotonic per-class (3 regressors) + renormalisation. `kaggle_diagnostics.py` |
+| ISO 42001 | AI Transparency | `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` — LLM co-authorship, traceability, QA gates |
 
 ---
 
