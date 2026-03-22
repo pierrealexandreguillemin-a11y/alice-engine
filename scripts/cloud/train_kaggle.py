@@ -73,24 +73,32 @@ def _setup_kaggle_imports() -> None:
 
 
 def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
-    """Compute features from raw parquets. Returns (train, valid, test, features_dir)."""
-    logger.info("Computing features from raw data")
+    """Compute features from raw parquets, or load cached. Returns (train, valid, test, features_dir)."""
     out = Path("/kaggle/working") if Path("/kaggle/working").exists() else Path(".")
-    data_dir = out / "code" / "data"
-    kaggle_data = Path("/kaggle/input/datasets/pguillemin/alice-code/data")
-    if (kaggle_data / "echiquiers.parquet").exists():
-        data_dir = kaggle_data
-    elif not (data_dir / "echiquiers.parquet").exists():
-        data_dir = Path("data")
-    logger.info(
-        "Raw data dir: %s, contents: %s",
-        data_dir,
-        list(data_dir.iterdir()) if data_dir.exists() else [],
-    )
-    from scripts.feature_engineering import run_feature_engineering_v2  # noqa: PLC0415
-
     features_dir = out / "data" / "features"
-    run_feature_engineering_v2(data_dir=data_dir, output_dir=features_dir, include_advanced=True)
+
+    # Checkpoint: skip FE if parquets already exist (crash recovery)
+    if all((features_dir / f"{s}.parquet").exists() for s in ("train", "valid", "test")):
+        logger.info("Feature parquets found in %s — skipping FE (checkpoint)", features_dir)
+    else:
+        logger.info("Computing features from raw data")
+        data_dir = out / "code" / "data"
+        kaggle_data = Path("/kaggle/input/datasets/pguillemin/alice-code/data")
+        if (kaggle_data / "echiquiers.parquet").exists():
+            data_dir = kaggle_data
+        elif not (data_dir / "echiquiers.parquet").exists():
+            data_dir = Path("data")
+        logger.info(
+            "Raw data dir: %s, contents: %s",
+            data_dir,
+            list(data_dir.iterdir()) if data_dir.exists() else [],
+        )
+        from scripts.feature_engineering import run_feature_engineering_v2  # noqa: PLC0415
+
+        run_feature_engineering_v2(
+            data_dir=data_dir, output_dir=features_dir, include_advanced=True
+        )
+
     return (
         pd.read_parquet(features_dir / "train.parquet"),
         pd.read_parquet(features_dir / "valid.parquet"),
