@@ -87,10 +87,58 @@ puis commence à memoriser les artefacts des features sparse.
 
 **Elo baseline ~0.92.** CatBoost à 0.006 du seuil. Le tuning manuel atteint ses limites.
 
-## Next Step
+## Root Cause révisé (post-analyse artefacts v3)
 
-**AutoGluon** — AutoML avec:
-- Grid search automatique des hyperparams
-- Stacking + bagging (ensemble de 15+ modèles)
-- Feature pruning automatique
-- Devrait combler les derniers 0.006 de log_loss
+Le problème n'est PAS les hyperparamètres. C'est plus fondamental.
+
+### Constat brutal
+
+- **166/177 features à importance 0.0** (CatBoost). Le modèle = `diff_elo` + poignée de rates
+- **Les 3 modèles ne prédisent JAMAIS draw** (recall=0% sur les 3). Classe 14% ignorée
+- **Accuracy ~55%** = equivalent à "toujours prédire le favori Elo"
+- Le modèle est un classifieur binaire loss/win déguisé en 3 classes
+
+### Pourquoi
+
+On a construit 177 features d'un coup sans validation incrémentale. Le modèle
+se noie dans le bruit des features sparse (93% NaN color_perf, 99% NaN H2H)
+et n'a pas le temps d'apprendre les patterns draw avant de diverger.
+
+L'erreur fondamentale : les features draw V8 (draw_rate_blanc, draw_rate_equipe,
+H2H_draw_rate) sont CORRECTES et NECESSAIRES, mais noyées dans un océan de bruit.
+Le modèle ne les trouve pas.
+
+### Leçon
+
+"Les modèles apprendront" n'est pas une stratégie. Avec 177 features dont 94% bruit,
+même CatBoost ne peut pas trouver le signal draw. L'approche YAGNI aurait dû être
+appliquée aux FEATURES (start small, add if gain), pas à la technique de renforcement Elo.
+
+## Next Step : Residual Learning + AutoGluon
+
+### Approche B : Residual Learning (prioritaire)
+
+Au lieu de prédire P(W/D/L) from scratch, partir de la prediction Elo baseline
+et apprendre les CORRECTIONS :
+
+```
+init_score = log(P_elo(loss)), log(P_elo(draw)), log(P_elo(win))
+modèle apprend : "quand est-ce que draw > ou < ce que l'Elo prédit ?"
+```
+
+CatBoost: `init_model` ou calcul des log-odds initiaux
+XGBoost: `base_margin` parameter
+LightGBM: `init_score` parameter
+
+**Pourquoi c'est le bon move :**
+- La baseline Elo capture déjà ~92% de log_loss
+- Le modèle n'a qu'à trouver les 8% restants
+- Les features draw V8 (draw_rate, H2H, pression) deviennent UTILES
+  car le modèle cherche spécifiquement les corrections draw
+- L'objectif ALICE = P(draw) calibrées pour CE. Residual = focalisé dessus
+
+### Approche C : AutoGluon (validation)
+
+AutoGluon sur les mêmes parquets pour comparer. S'il bat la baseline Elo
+sans residual learning → les features ont du signal, c'était notre approche.
+S'il échoue aussi → les features elles-mêmes ont un problème.
