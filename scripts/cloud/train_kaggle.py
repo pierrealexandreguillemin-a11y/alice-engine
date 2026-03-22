@@ -73,11 +73,27 @@ def _setup_kaggle_imports() -> None:
 
 
 def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
-    """Compute features from raw parquets, or load cached. Returns (train, valid, test, features_dir)."""
+    """Load feature parquets from kernel_sources (FE kernel output) or compute. Returns (train, valid, test, features_dir)."""
     out = Path("/kaggle/working") if Path("/kaggle/working").exists() else Path(".")
     features_dir = out / "data" / "features"
 
-    # Checkpoint: skip FE if parquets already exist (crash recovery)
+    # Priority 1: load from FE kernel output (kernel_sources)
+    fe_candidates = [
+        Path("/kaggle/input/alice-fe-v8/features"),
+        Path("/kaggle/input/datasets/pguillemin/alice-fe-v8/features"),
+    ]
+    for fe_dir in fe_candidates:
+        if all((fe_dir / f"{s}.parquet").exists() for s in ("train", "valid", "test")):
+            logger.info("Feature parquets found in FE kernel output: %s", fe_dir)
+            features_dir = fe_dir
+            return (
+                pd.read_parquet(fe_dir / "train.parquet"),
+                pd.read_parquet(fe_dir / "valid.parquet"),
+                pd.read_parquet(fe_dir / "test.parquet"),
+                fe_dir,
+            )
+
+    # Priority 2: local checkpoint (crash recovery)
     if all((features_dir / f"{s}.parquet").exists() for s in ("train", "valid", "test")):
         logger.info("Feature parquets found in %s — skipping FE (checkpoint)", features_dir)
     else:

@@ -256,8 +256,25 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
 **IMPORTANT Kaggle :**
 - Datasets montés à `/kaggle/input/datasets/{user}/{slug}/` (PAS `/kaggle/input/{slug}/`)
 - AutoGluon pas pré-installé — pip install au runtime dans le script
-- GPU T4x2 (sm_75) compatible CUDA 12.8 — P100 (sm_60) INCOMPATIBLE
+- GPU T4x2 (sm_75) compatible CUDA 12.8 — P100 (sm_60) INCOMPATIBLE PyTorch mais OK tree models
 - Toujours re-uploader `alice-code` dataset AVANT push kernel si fichiers modifiés
+- **cudf RALENTIT le feature engineering** (groupby-heavy) — désactivé dans fe_kaggle.py
+- **Secrets impossibles en batch push** (Kaggle API issue #582) — HF push échoue silencieusement
+- **`--accelerator NvidiaTeslaT4`** obligatoire dans la commande push (enable_gpu donne P100 par défaut)
+
+**V8 Architecture 2-kernel :**
+```
+# Kernel 1: Feature Engineering (P100 CPU, ~1h)
+cp scripts/cloud/kernel-metadata-fe.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+# → Output: features/train.parquet, valid.parquet, test.parquet
+
+# Kernel 2: Training MultiClass (T4 GPU, ~30min)
+cp scripts/cloud/kernel-metadata-train.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
+# → Input: kernel_sources pguillemin/alice-fe-v8
+# → Output: CatBoost/XGBoost/LightGBM MultiClass models + diagnostics
+```
 
 ## Documentation
 
