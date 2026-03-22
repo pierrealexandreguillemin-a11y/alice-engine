@@ -94,9 +94,10 @@ def _check_kaggle_push(cwd: Path, cmd: str) -> list[tuple[str, str]]:
                     )
                 )
 
-    # Check enable_internet for pip install at runtime
-    if not meta.get("enable_internet"):
-        errors.append(("enable_internet=false", "AutoGluon needs pip install at runtime"))
+    # Check enable_internet only for kernels that need pip install at runtime
+    needs_internet = "autogluon" in slug or "training" in slug
+    if needs_internet and not meta.get("enable_internet"):
+        errors.append(("enable_internet=false", "Training kernels need pip install at runtime"))
 
     # Warn about API limitations
     if meta.get("accelerator"):
