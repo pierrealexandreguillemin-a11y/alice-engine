@@ -94,7 +94,7 @@ def build_model_card(
         "status": "CANDIDATE", "environment": env, "data_lineage": lineage,
         "artifacts": artifacts, "metrics": metrics, "feature_importance": importance,
         "hyperparameters": config,
-        "best_model": {"name": gate.get("best_model"), "auc": gate.get("best_auc")},
+        "best_model": {"name": gate.get("best_model"), "log_loss": gate.get("best_log_loss")},
         "quality_gate_result": gate,
         "limitations": ["Trained on FFE interclub data only", "Not suitable for tournament games",
                         "LightGBM: CPU only (pip package lacks GPU/OpenCL support on Kaggle)"],
