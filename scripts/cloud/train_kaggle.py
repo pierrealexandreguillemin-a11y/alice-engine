@@ -51,12 +51,20 @@ def _setup_kaggle_imports() -> None:
 
 def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
     """Load feature parquets from FE kernel output (kernel_sources). Returns (train, valid, test, features_dir)."""
+    # kernel_sources mount under /kaggle/input/notebooks/{user}/{slug}/
+    # dataset_sources mount under /kaggle/input/datasets/{user}/{slug}/
+    # Also try direct slug mount (undocumented but sometimes works)
     fe_candidates = [
+        Path("/kaggle/input/notebooks/pguillemin/alice-fe-v8/features"),
+        Path("/kaggle/input/notebooks/pguillemin/alice-fe-v8"),
         Path("/kaggle/input/alice-fe-v8/features"),
+        Path("/kaggle/input/alice-fe-v8"),
         Path("/kaggle/input/datasets/pguillemin/alice-fe-v8/features"),
     ]
     for fe_dir in fe_candidates:
-        if all((fe_dir / f"{s}.parquet").exists() for s in ("train", "valid", "test")):
+        if fe_dir.exists() and all(
+            (fe_dir / f"{s}.parquet").exists() for s in ("train", "valid", "test")
+        ):
             logger.info("Feature parquets found in FE kernel output: %s", fe_dir)
             return (
                 pd.read_parquet(fe_dir / "train.parquet"),
@@ -65,6 +73,11 @@ def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
                 fe_dir,
             )
 
+    # Diagnostic: list what IS mounted
+    root = Path("/kaggle/input")
+    if root.exists():
+        mounted = [str(p) for p in root.rglob("*.parquet")]
+        logger.error("No FE parquets found. Parquet files in /kaggle/input/: %s", mounted[:20])
     msg = "FE kernel output not found. Run alice-fe-v8 kernel first."
     logger.error(msg)
     raise FileNotFoundError(msg)
