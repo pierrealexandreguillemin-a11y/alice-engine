@@ -255,6 +255,7 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
 
 **IMPORTANT Kaggle :**
 - Datasets montés à `/kaggle/input/datasets/{user}/{slug}/` (PAS `/kaggle/input/{slug}/`)
+- **kernel_sources montés à `/kaggle/input/notebooks/{user}/{slug}/`** (PAS `/kaggle/input/{slug}/`)
 - AutoGluon pas pré-installé — pip install au runtime dans le script
 - GPU T4x2 (sm_75) compatible CUDA 12.8 — P100 (sm_60) INCOMPATIBLE PyTorch mais OK tree models
 - Toujours re-uploader `alice-code` dataset AVANT push kernel si fichiers modifiés
@@ -278,12 +279,17 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 
 ## Documentation
 
-- `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
+- `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md` - Roadmap 5 phases → prod
+- `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md` - Plan Phase 1 residual
+- `docs/postmortem/2026-03-22-training-v8-divergence.md` - Postmortem training V8
+- `docs/architecture/ADR-002-inference-feature-construction.md` - Feature store decision
+- `docs/bilan-v8-fe-complete.md` - Bilan FE V8 (196 cols, artefacts)
+- `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` - LLM co-authorship (ISO 42001)
 - `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
+- `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md` - Spec V8 MultiClass
 - `docs/superpowers/specs/2026-03-17-data-refresh-pipeline-design.md` - Spec data refresh
 - `docs/superpowers/specs/2026-03-18-kaggle-cloud-training-design.md` - Spec Kaggle training
-- `docs/superpowers/plans/2026-03-17-data-refresh-pipeline.md` - Plan data refresh
-- `docs/superpowers/plans/2026-03-18-kaggle-cloud-training.md` - Plan Kaggle training
+- `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
 
 ## Contraintes Training
 
@@ -332,6 +338,16 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
 - Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
 
+### V8 Training Findings (2026-03-22) — CRITIQUE
+- **3 runs échoués (v1 path, v2 divergence, v3 hyperparams)** — postmortem dans `docs/postmortem/`
+- **166/177 features importance=0**, les 3 modèles **draw recall=0%** (ignorent les nulles)
+- **Root cause** : pas de residual learning. Les modèles redécouvrent l'Elo au lieu d'apprendre les corrections
+- **Solution** : `init_score` / `base_margin` depuis la baseline Elo → le modèle apprend UNIQUEMENT les divergences
+- **Quality gate** : 9 conditions (condition 9 ajoutée : `recall_draw > 1%`)
+- **Plan Phase 1** : `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md`
+- **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
+- **NE JAMAIS lancer 177 features d'un coup** — validation incrémentale obligatoire
+
 ## V9 CE multi-équipe (@TODO après V8)
 
 > Prérequis : V8 ML terminé (prédictions P(W/D/L) fiables par board dans tous contextes)
@@ -363,6 +379,18 @@ Objectif modulable par l'utilisateur
 - Max 3 mutés par équipe par saison (A02 3.7.g)
 - Joueur peut descendre (renforcer) mais pas monter sans conditions
 - Ordre Elo par équipe (100pts A02 3.6.e)
+
+## Architecture Prod (validée 2026-03-23)
+
+```
+Vercel (chess-app Next.js) → fetch() HTTPS → Oracle VM (FastAPI + ML, 24GB ARM)
+  - Modèle CatBoost chargé en RAM au startup depuis HF Hub
+  - Feature store (parquets pré-calculés) sur disque local
+  - Inference ~10ms, pas de cold start
+  - Oracle Always Free: 4 OCPUs ARM, 24 GB RAM, 200 GB disk
+```
+
+Spec complète : `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md`
 
 ## @TODO - Phase C : Pipeline CI automatisé
 
