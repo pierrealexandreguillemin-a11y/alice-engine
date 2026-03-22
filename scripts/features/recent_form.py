@@ -105,19 +105,19 @@ def _collect_stratified(
     entries: list[dict] = []
 
     for joueur, player_group in parties.groupby(nom_col):
+        has_any_stratified = False
         for type_comp, comp_group in player_group.groupby("type_competition"):
-            n_same_level = len(comp_group)
-
-            if n_same_level >= _STRATIFY_MIN_GAMES:
+            if len(comp_group) >= _STRATIFY_MIN_GAMES:
                 last_n = comp_group.tail(window)
                 entry = _build_form_entry(joueur, last_n, resultat_col, type_comp)
-            else:
-                # Fallback: tous matchs du joueur
-                if len(player_group) < _STRATIFY_MIN_GAMES:
-                    continue
-                last_n = player_group.tail(window)
-                entry = _build_form_entry(joueur, last_n, resultat_col, type_comp)
+                entries.append(entry)
+                has_any_stratified = True
+            # Skip under-represented competitions — don't fall back per-comp
 
+        # Fallback: if NO competition had enough games, use all games
+        if not has_any_stratified and len(player_group) >= _STRATIFY_MIN_GAMES:
+            last_n = player_group.tail(window)
+            entry = _build_form_entry(joueur, last_n, resultat_col, type_comp=None)
             entries.append(entry)
 
     return entries
@@ -199,17 +199,22 @@ def _trend_label(first_rate: float, second_rate: float) -> str:
 
 
 def _aggregate_form_data(forme_data: list[dict]) -> pd.DataFrame:
-    """Agrege les donnees de forme par joueur et type_competition."""
+    """Agrege les donnees de forme — UNE ligne par joueur_nom.
+
+    La stratification par type_competition sert a choisir quels matchs utiliser,
+    mais le resultat final est agrege par joueur (pas par joueur+competition).
+    On prend le type_competition avec le plus de matchs comme forme principale,
+    puis on moyenne blanc+noir.
+    """
     if not forme_data:
         return pd.DataFrame()
 
     df = pd.DataFrame(forme_data)
 
-    # Aggreger blanc+noir pour meme (joueur, type_competition)
+    # Step 1: pour chaque (joueur, type_competition), agreger blanc+noir
     group_cols = ["joueur_nom", "type_competition"]
-    agg_df = (
-        df.sort_values("nb_matchs_forme", ascending=False)
-        .groupby(group_cols, dropna=False)
+    per_comp = (
+        df.groupby(group_cols, dropna=False)
         .agg(
             win_rate_recent=("win_rate_recent", "mean"),
             draw_rate_recent=("draw_rate_recent", "mean"),
@@ -221,4 +226,8 @@ def _aggregate_form_data(forme_data: list[dict]) -> pd.DataFrame:
         .reset_index()
     )
 
-    return agg_df
+    # Step 2: pour chaque joueur, garder le type_competition avec le plus de matchs
+    idx = per_comp.groupby("joueur_nom")["nb_matchs_forme"].idxmax()
+    result = per_comp.loc[idx].drop(columns=["type_competition"]).reset_index(drop=True)
+
+    return result

@@ -193,41 +193,34 @@ class TestCompetitionStratification:
     """Tests stratification par type_competition."""
 
     def test_competition_stratification(self, games_stratified: pd.DataFrame) -> None:
-        """Form must be computed within same competition level.
+        """Form uses PRIMARY competition (most games).
 
-        Beta: 3 national (all draws) + 2 regional (all wins, < threshold).
-        National form (>=3 games): win_rate=0, draw_rate=1.0
-        Regional form (<3 games threshold): fallback to all games.
+        Beta: 3 national (all draws) + 2 regional (all wins).
+        National = primary (3 > 2). Result should reflect national form.
+        One row per joueur_nom (no duplicates).
         """
         result = calculate_recent_form(games_stratified, window=5)
 
-        beta_national = result[
-            (result["joueur_nom"] == "Beta") & (result["type_competition"] == "national")
-        ]
-        assert len(beta_national) == 1, "Beta national doit avoir une ligne"
+        assert "type_competition" not in result.columns, "type_competition must not be in output"
+        beta = result[result["joueur_nom"] == "Beta"]
+        assert len(beta) == 1, f"Beta must have exactly 1 row, got {len(beta)}"
 
-        row = beta_national.iloc[0]
+        row = beta.iloc[0]
+        # Primary = national (3 games > 2 regional). National: 3 draws → win=0, draw=1.0
         assert (
             row["win_rate_recent"] == 0.0
-        ), f"win_rate national attendu 0.0, obtenu {row['win_rate_recent']}"
+        ), f"win_rate expected 0.0 (national draws), got {row['win_rate_recent']}"
         assert (
             row["draw_rate_recent"] == 1.0
-        ), f"draw_rate national attendu 1.0, obtenu {row['draw_rate_recent']}"
+        ), f"draw_rate expected 1.0 (national draws), got {row['draw_rate_recent']}"
 
-    def test_fallback_when_few_games_at_level(self, games_stratified: pd.DataFrame) -> None:
-        """Regional (<3 games) falls back to all games for Beta."""
+    def test_no_duplicate_joueur_nom(self, games_stratified: pd.DataFrame) -> None:
+        """Result must have exactly one row per joueur_nom, even with multi-competition players."""
         result = calculate_recent_form(games_stratified, window=5)
 
-        beta_regional = result[
-            (result["joueur_nom"] == "Beta") & (result["type_competition"] == "regional")
-        ]
-        # Regional has 2 games → fallback; total 5 games (3 draws + 2 wins)
-        assert len(beta_regional) == 1
-        row = beta_regional.iloc[0]
-        # Fallback uses all 5 games: 2W + 3D
-        assert (
-            abs(row["win_rate_recent"] - 0.4) < 1e-9
-        ), f"win_rate fallback attendu 0.4, obtenu {row['win_rate_recent']}"
+        dupes = result.joueur_nom.value_counts()
+        dupes_gt1 = dupes[dupes > 1]
+        assert len(dupes_gt1) == 0, f"Duplicate joueur_nom found: {dupes_gt1.to_dict()}"
 
 
 class TestForfeitsExcluded:
