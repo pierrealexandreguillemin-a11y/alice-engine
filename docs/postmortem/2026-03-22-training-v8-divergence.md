@@ -75,4 +75,22 @@ puis commence à memoriser les artefacts des features sparse.
 |---------|--------|-----------|----------|
 | v1 | affcb73 | Premier push | ERROR (path /notebooks/ manquant) |
 | v2 | 179a027 | Fix path notebooks/ | COMPLETE — gate FAILED (divergence) |
-| v3 | 1d0289d | Hyperparams conservatifs (LR=0.03, depth=6) | EN COURS |
+| v3 | 1d0289d | Hyperparams conservatifs (LR=0.03, depth=6) | COMPLETE — gate FAILED (CatBoost 0.926 vs Elo ~0.92) |
+
+## V3 Results (2026-03-22 21:28)
+
+| Modèle | Best iter | Best log_loss | v2 → v3 |
+|--------|-----------|---------------|---------|
+| CatBoost | 42 | 0.9261 | 0.940 → 0.926 (-0.014) |
+| XGBoost | 33 | ~0.98 | Pire (GPU device mismatch?) |
+| LightGBM | 20 | 0.9349 | 0.967 → 0.935 (-0.032) |
+
+**Elo baseline ~0.92.** CatBoost à 0.006 du seuil. Le tuning manuel atteint ses limites.
+
+## Next Step
+
+**AutoGluon** — AutoML avec:
+- Grid search automatique des hyperparams
+- Stacking + bagging (ensemble de 15+ modèles)
+- Feature pruning automatique
+- Devrait combler les derniers 0.006 de log_loss
