@@ -107,14 +107,21 @@ def compute_features_for_split(
         f"{len(df_history):,}",
     )
 
+    from scripts.features.draw_priors import compute_draw_priors
+    from scripts.features.helpers import exclude_forfeits
+
     df_history_played = df_history[
         ~df_history["type_resultat"].isin(
             ["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"]
         )
     ]
+    df_history_played = exclude_forfeits(df_history_played)
 
     features = extract_all_features(df_history, df_history_played, include_advanced)
     result = merge_all_features(df_split.copy(), features, include_advanced)
+
+    # Draw priors: avg_elo, elo_proximity, draw_rate_prior (ISO 5259)
+    result = compute_draw_priors(result, df_history_played)
 
     _add_direct_features(result, data_dir=data_dir or DEFAULT_DATA_DIR)
     _add_contextual_features(result, df_history_played)

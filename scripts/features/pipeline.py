@@ -22,7 +22,9 @@ from scripts.features.advanced import (
     calculate_pressure_performance,
 )
 from scripts.features.club_behavior import extract_club_behavior
+from scripts.features.club_level import extract_club_level_features, extract_player_team_context
 from scripts.features.composition import extract_composition_strategy
+from scripts.features.draw_priors import compute_equipe_draw_rates, compute_player_draw_rates
 from scripts.features.ffe_features import extract_ffe_regulatory_features
 from scripts.features.merge_helpers import (
     merge_club_reliability,
@@ -30,6 +32,12 @@ from scripts.features.merge_helpers import (
     merge_noyau_features,
     merge_player_features,
     merge_team_enjeu,
+)
+from scripts.features.merge_v8 import (
+    merge_club_level,
+    merge_draw_rate_equipe,
+    merge_draw_rate_player,
+    merge_player_team_context,
 )
 from scripts.features.noyau import extract_noyau_features
 from scripts.features.performance import (
@@ -83,6 +91,11 @@ def extract_all_features(
         "team_enjeu": extract_team_enjeu_features(df_history_played, standings),
         "club_behavior": extract_club_behavior(df_history),
         "noyau": extract_noyau_features(df_history_played),
+        # V8 features
+        "draw_rate_player": compute_player_draw_rates(df_history_played),
+        "draw_rate_equipe": compute_equipe_draw_rates(df_history_played),
+        "club_level": extract_club_level_features(df_history),
+        "player_team_context": extract_player_team_context(df_history),
     }
 
     # ALI features (presence + patterns + absence)
@@ -203,6 +216,12 @@ def merge_all_features(
         features.get("composition", pd.DataFrame()),
         ["decalage_position", "joueur_decale_haut", "joueur_decale_bas"],
     )
+
+    # V8 features
+    result = merge_draw_rate_player(result, features.get("draw_rate_player", pd.DataFrame()))
+    result = merge_draw_rate_equipe(result, features.get("draw_rate_equipe", pd.DataFrame()))
+    result = merge_club_level(result, features.get("club_level", pd.DataFrame()))
+    result = merge_player_team_context(result, features.get("player_team_context", pd.DataFrame()))
 
     # Advanced features
     if include_advanced:
