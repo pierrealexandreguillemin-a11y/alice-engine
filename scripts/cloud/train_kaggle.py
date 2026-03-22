@@ -1,41 +1,18 @@
-"""Kaggle Cloud Training — ALICE Engine orchestration (ISO 42001/5259/5055)."""
+"""Kaggle Cloud Training — ALICE Engine V8 MultiClass (ISO 42001/5259/5055).
+
+Kernel 2 of 2: trains CatBoost/XGBoost/LightGBM on pre-computed features.
+Requires Kernel 1 (fe_kaggle.py) output via kernel_sources.
+"""
 
 from __future__ import annotations
 
-import logging  # noqa: E401
+import logging
 import os
-import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Fix cudf device detection on Kaggle T4
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
-
-# GPU-accelerate pandas via cudf.pandas — subprocess test to catch C++ aborts
-_CUDF_AVAILABLE = False
-try:
-    _r = subprocess.run(  # noqa: S603, S607
-        [
-            sys.executable,
-            "-c",
-            "import os; os.environ['CUDA_VISIBLE_DEVICES']='0'; "
-            "import cudf.pandas; cudf.pandas.install(); import pandas as pd; "
-            "pd.DataFrame({'a':['x','y','x']}).groupby('a').size(); print('OK')",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if _r.returncode == 0 and "OK" in _r.stdout:
-        import cudf.pandas  # noqa: F401, PLC0415
-
-        cudf.pandas.install()
-        _CUDF_AVAILABLE = True
-except Exception:  # noqa: BLE001, S110
-    pass  # CPU pandas fallback — logged in main()
-
-import pandas as pd  # noqa: E402
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -73,11 +50,7 @@ def _setup_kaggle_imports() -> None:
 
 
 def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
-    """Load feature parquets from kernel_sources (FE kernel output) or compute. Returns (train, valid, test, features_dir)."""
-    out = Path("/kaggle/working") if Path("/kaggle/working").exists() else Path(".")
-    features_dir = out / "data" / "features"
-
-    # Priority 1: load from FE kernel output (kernel_sources)
+    """Load feature parquets from FE kernel output (kernel_sources). Returns (train, valid, test, features_dir)."""
     fe_candidates = [
         Path("/kaggle/input/alice-fe-v8/features"),
         Path("/kaggle/input/datasets/pguillemin/alice-fe-v8/features"),
@@ -85,7 +58,6 @@ def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
     for fe_dir in fe_candidates:
         if all((fe_dir / f"{s}.parquet").exists() for s in ("train", "valid", "test")):
             logger.info("Feature parquets found in FE kernel output: %s", fe_dir)
-            features_dir = fe_dir
             return (
                 pd.read_parquet(fe_dir / "train.parquet"),
                 pd.read_parquet(fe_dir / "valid.parquet"),
@@ -93,34 +65,9 @@ def _load_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Path]:
                 fe_dir,
             )
 
-    # Priority 2: local checkpoint (crash recovery)
-    if all((features_dir / f"{s}.parquet").exists() for s in ("train", "valid", "test")):
-        logger.info("Feature parquets found in %s — skipping FE (checkpoint)", features_dir)
-    else:
-        logger.info("Computing features from raw data")
-        data_dir = out / "code" / "data"
-        kaggle_data = Path("/kaggle/input/datasets/pguillemin/alice-code/data")
-        if (kaggle_data / "echiquiers.parquet").exists():
-            data_dir = kaggle_data
-        elif not (data_dir / "echiquiers.parquet").exists():
-            data_dir = Path("data")
-        logger.info(
-            "Raw data dir: %s, contents: %s",
-            data_dir,
-            list(data_dir.iterdir()) if data_dir.exists() else [],
-        )
-        from scripts.feature_engineering import run_feature_engineering_v2  # noqa: PLC0415
-
-        run_feature_engineering_v2(
-            data_dir=data_dir, output_dir=features_dir, include_advanced=True
-        )
-
-    return (
-        pd.read_parquet(features_dir / "train.parquet"),
-        pd.read_parquet(features_dir / "valid.parquet"),
-        pd.read_parquet(features_dir / "test.parquet"),
-        features_dir,
-    )
+    msg = "FE kernel output not found. Run alice-fe-v8 kernel first."
+    logger.error(msg)
+    raise FileNotFoundError(msg)
 
 
 def _compute_baselines(
@@ -161,7 +108,7 @@ def _compute_baselines(
 
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
-    logger.info("ALICE Engine — Kaggle Cloud Training (cudf=%s)", _CUDF_AVAILABLE)
+    logger.info("ALICE Engine — V8 MultiClass Training (Kernel 2/2)")
     _setup_kaggle_imports()
 
     from scripts.kaggle_artifacts import (  # noqa: PLC0415
