@@ -790,19 +790,31 @@ git commit -m "feat(config): multiclass params + AutoGluon 3-class + test suite 
 
 ---
 
-## Task 10: Local end-to-end integration test
+## Task 10: Local end-to-end integration test (5K SAMPLE)
+
+**IMPORTANT:** Full feature parquets are NOT available locally (OOM 15GB).
+This test generates features on a SMALL SAMPLE locally, then trains on that sample.
+Full-scale execution happens on Kaggle (Plan B Task 11).
 
 **Files:** None modified — validation only.
 
-- [ ] **Step 1: Run full pipeline on 5K sample**
+- [ ] **Step 1: Generate features on 5K sample + train**
 
 ```python
 import pandas as pd
-from scripts.kaggle_trainers import prepare_features, default_hyperparameters, train_all_sequential, evaluate_on_test
+from pathlib import Path
+from scripts.feature_engineering import compute_features_for_split, temporal_split
 
-train = pd.read_parquet("data/features/train.parquet").sample(n=5000, random_state=42)
-valid = pd.read_parquet("data/features/valid.parquet").sample(n=1000, random_state=42)
-test = pd.read_parquet("data/features/test.parquet").sample(n=1000, random_state=42)
+# Generate features on small sample (fits in 15GB RAM)
+ech = pd.read_parquet("data/echiquiers.parquet")
+train_raw, valid_raw, test_raw = temporal_split(ech)
+history = ech[ech["saison"] <= train_raw["saison"].max()]
+
+train = compute_features_for_split(train_raw.head(5000), history.head(20000), "train_sample", True, Path("data"))
+valid = compute_features_for_split(valid_raw.head(1000), history.head(20000), "valid_sample", True, Path("data"))
+test = compute_features_for_split(test_raw.head(1000), history.head(20000), "test_sample", True, Path("data"))
+
+from scripts.kaggle_trainers import prepare_features, default_hyperparameters, train_all_sequential, evaluate_on_test
 
 X_train, y_train, X_valid, y_valid, X_test, y_test, encoders = prepare_features(train, valid, test)
 
@@ -872,18 +884,26 @@ git commit -m "test(v8): local end-to-end MultiClass validation passed"
 
 ---
 
-## Task 11: Kaggle pre-flight + push
+## Task 11: Kaggle pre-flight + push (feature engineering + training IN ONE KERNEL)
+
+**CRITICAL:** Kaggle kernel does BOTH:
+1. `run_feature_engineering_v2()` → generates V8 feature parquets (needs 30GB RAM)
+2. Training → CatBoost/XGBoost/LightGBM MultiClass on those features
+This is how V7 already worked (`train_kaggle.py` calls feature engineering internally).
 
 **Files:**
 - Modify: `scripts/cloud/kernel-metadata.json` (new slug)
 
 **Pre-flight checklist (skill kaggle-deployment) :**
 
-- [ ] **Step 1: Upload data + code**
+- [ ] **Step 1: Upload data + code (MUST include V8 modules)**
 
 ```bash
 python -m scripts.cloud.upload_all_data
 ```
+
+Verify the upload zip contains: `scripts/features/helpers.py`, `scripts/features/draw_priors.py`,
+`scripts/features/club_level.py`, `scripts/features/merge_v8.py`, `scripts/features/player_enrichment.py` (with FFE K-coefficient fix).
 
 - [ ] **Step 2: Version kernel slug**
 
@@ -917,13 +937,20 @@ kaggle kernels status pguillemin/alice-training-v8
 
 ## Cross-Plan Consistency: Plan A ↔ Plan B
 
+**CRITICAL: Feature parquets are generated ON KAGGLE, not locally.**
+`train_kaggle.py` calls `run_feature_engineering_v2()` → Plan A code runs on Kaggle.
+Plan B's training code runs immediately after in the same kernel.
+Local tests use small samples (5K rows) to verify logic, not full data.
+
 | Interface | Plan A produces | Plan B consumes |
 |-----------|----------------|-----------------|
-| Feature parquets | train/valid/test.parquet, ~156 cols, forfaits excluded | `prepare_features()` loads parquets |
+| Feature code | V8 modules uploaded to Kaggle dataset | `train_kaggle.py` calls `run_feature_engineering_v2()` |
+| Feature parquets | Generated ON KAGGLE (~198 cols, forfaits excluded) | `prepare_features()` loads from Kaggle working dir |
 | Target column | `resultat_blanc` ∈ {0.0, 0.5, 1.0} (no 2.0) | `_split_xy()` maps to {0, 1, 2} |
 | Column names | `win_rate_recent_blanc`, `h2h_draw_rate`, etc. | Categorical lists in `kaggle_trainers.py` must match |
-| draw_rate_prior | In parquet (computed by Plan A Task 2) | Used by baselines.py Elo baseline |
+| draw_rate_prior | In parquet (computed by Plan A draw_priors.py) | Used by baselines.py Elo baseline |
 | Forfait helper | `scripts/features/helpers.py:FORFAIT_RESULT` | Imported in `_split_xy()` |
+| RAM constraint | Local: 15GB (OOM on full data). Kaggle: 30GB (OK) | All full-scale runs on Kaggle only |
 
 **CATEGORICAL_FEATURES and ADVANCED_CAT_FEATURES lists in kaggle_trainers.py must be updated to match new column names from Plan A.** Specifically:
 - OLD: `forme_tendance_blanc/noir` → NEW: `win_trend_blanc/noir`, `draw_trend_blanc/noir`
