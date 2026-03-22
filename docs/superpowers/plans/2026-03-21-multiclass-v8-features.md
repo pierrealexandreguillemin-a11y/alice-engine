@@ -741,20 +741,15 @@ print('SMOKE TEST PASSED')
 "
 ```
 
-- [ ] **Step 2: Upload code + data to Kaggle dataset**
-
-```bash
-python -m scripts.cloud.upload_all_data
-```
-
-Verifies: all V8 modules (helpers.py, draw_priors.py, club_level.py, merge_v8.py)
-included in the upload zip.
-
-- [ ] **Step 3: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
 git commit -m "feat(v8): Plan A complete — V8 features ready for Kaggle execution"
 ```
+
+**NOTE: DO NOT upload to Kaggle yet.** Plan B (MultiClass training) must be
+implemented first. Otherwise Kaggle would run V8 features + binary training
+= incoherent and wastes GPU quota. Upload happens in Plan B Task 11.
 
 ---
 
