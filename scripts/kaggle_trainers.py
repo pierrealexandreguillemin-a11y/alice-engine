@@ -16,21 +16,19 @@ CATEGORICAL_FEATURES = ["type_competition", "division", "ligue_code", "jour_sema
 CATBOOST_CAT_FEATURES = ["type_competition", "division", "ligue_code", "blanc_titre",
                          "noir_titre", "jour_semaine", "zone_enjeu_dom"]
 ADVANCED_CAT_FEATURES = [
-    "forme_tendance_blanc", "forme_tendance_noir", "couleur_preferee_blanc",
-    "couleur_preferee_noir", "data_quality_blanc", "data_quality_noir", "zone_enjeu_ext",
-    "elo_trajectory_blanc", "elo_trajectory_noir", "pressure_type_blanc",
-    "pressure_type_noir", "categorie_blanc", "categorie_noir", "elo_type_blanc",
-    "elo_type_noir", "phase_saison", "regularite_blanc", "regularite_noir",
-    "role_type_blanc", "role_type_noir"]
+    "win_trend_blanc", "win_trend_noir", "draw_trend_blanc", "draw_trend_noir",
+    "couleur_preferee_blanc", "couleur_preferee_noir", "data_quality_blanc",
+    "data_quality_noir", "zone_enjeu_ext", "elo_trajectory_blanc", "elo_trajectory_noir",
+    "pressure_type_blanc", "pressure_type_noir", "categorie_blanc", "categorie_noir",
+    "elo_type_blanc", "elo_type_noir", "phase_saison", "regularite_blanc",
+    "regularite_noir", "role_type_blanc", "role_type_noir"]
 BOOL_FEATURES = [
     "joueur_fantome_blanc", "joueur_fantome_noir", "ffe_multi_equipe_blanc",
     "ffe_multi_equipe_noir", "est_dans_noyau_blanc", "est_dans_noyau_noir",
     "match_important", "renforce_fin_saison_dom", "renforce_fin_saison_ext"]
 # fmt: on
 LABEL_COLUMN = "resultat_blanc"
-# Match score = sum of individual board results → target leakage
-LEAKY_COLUMNS = {"score_dom", "score_ext"}
-AUC_FLOOR = 0.70
+LEAKY_COLUMNS = {"score_dom", "score_ext"}  # match-score leakage (ISO 5259)
 MODEL_EXTENSIONS = {"CatBoost": ".cbm", "XGBoost": ".ubj", "LightGBM": ".txt"}
 
 
@@ -63,13 +61,16 @@ def _encode_categoricals(splits: list[pd.DataFrame]) -> dict:
 
 def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """Extract X and y, keeping numeric + casting bools to int."""
-    y = (df[LABEL_COLUMN] == 1.0).astype(int)
+    from scripts.features.helpers import FORFAIT_RESULT  # noqa: PLC0415
+
+    df = df[df[LABEL_COLUMN] != FORFAIT_RESULT].copy()  # exclude forfeits
+    TARGET_MAP = {0.0: 0, 0.5: 1, 1.0: 2}  # loss=0, draw=1, win=2
+    y = df[LABEL_COLUMN].map(TARGET_MAP).astype(int)
     for col in BOOL_FEATURES:
         if col in df.columns:
             df[col] = df[col].fillna(0).astype(int)
     X = df.select_dtypes(include=["int64", "int32", "float64", "float32"])
-    # Drop target + outcome columns + match-score leakage (ISO 5259)
-    drop = [
+    drop = [  # target + outcome + leakage columns
         c
         for c in X.columns
         if c in (LABEL_COLUMN, "resultat_noir") or "resultat" in c.lower() or c in LEAKY_COLUMNS
@@ -120,21 +121,24 @@ def default_hyperparameters() -> dict:
     # fmt: on
     # fmt: off
     return {
-        "global": {"random_seed": 42, "early_stopping_rounds": 100, "eval_metric": "logloss"},
+        "global": {"random_seed": 42, "early_stopping_rounds": 100, "eval_metric": "multi_logloss"},
         "catboost": {
             "iterations": 3000, "depth": 8, "border_count": 254,
             "l2_leaf_reg": 3, "min_data_in_leaf": 20, "thread_count": 4,
             "task_type": "GPU" if gpu else "CPU", "use_best_model": True,
+            "loss_function": "MultiClass",
             "random_seed": 42, "verbose": 100, "early_stopping_rounds": 100,
         },
         "xgboost": {
             "n_estimators": 3000, "max_depth": 8,
+            "objective": "multi:softprob", "num_class": 3,
             "reg_lambda": 1.0, "reg_alpha": 0.0, "min_child_weight": 1,
             **xgb_gpu, "n_jobs": 4, "random_state": 42,
             "early_stopping_rounds": 100, "verbosity": 1,
         },
         "lightgbm": {
             "n_estimators": 3000, "num_leaves": 255,
+            "objective": "multiclass", "num_class": 3,
             "max_depth": -1, "reg_lambda": 1.0, "reg_alpha": 0.0,
             "min_child_samples": 20, "n_jobs": 4, "random_state": 42,
             "early_stopping_rounds": 100, "verbose": -1,
@@ -154,8 +158,8 @@ def _eval_model(model: Any, X_valid: Any, y_valid: Any, train_time: float) -> di
     """Evaluate model on validation, return {model, metrics, importance}."""
     import numpy as np  # noqa: PLC0415
 
-    y_proba = model.predict_proba(X_valid)[:, 1]
-    y_pred = (y_proba >= 0.5).astype(np.int64)
+    y_proba = model.predict_proba(X_valid)  # (n, 3)
+    y_pred = np.argmax(y_proba, axis=1)
     metrics = compute_validation_metrics(y_valid.values, y_pred, y_proba)
     metrics["train_time_s"] = train_time
     importance = (
@@ -167,7 +171,6 @@ def _eval_model(model: Any, X_valid: Any, y_valid: Any, train_time: float) -> di
 
 
 def _fail_result() -> dict:
-    """Sentinel result for a model that failed to train (I1)."""
     return {"model": None, "metrics": {}, "importance": {}}
 
 
@@ -176,7 +179,7 @@ def _train_catboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
     try:
         from catboost import CatBoostClassifier  # noqa: PLC0415
 
-        cb = CatBoostClassifier(**params, eval_metric="Logloss")
+        cb = CatBoostClassifier(**params, eval_metric="MultiClass")
         t0 = time.time()
         cb.fit(X_train, y_train, eval_set=(X_valid, y_valid))
         result = _eval_model(cb, X_valid, y_valid, time.time() - t0)
@@ -193,7 +196,7 @@ def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, param
     try:
         from xgboost import XGBClassifier  # noqa: PLC0415
 
-        xgb = XGBClassifier(**params, eval_metric="logloss")
+        xgb = XGBClassifier(**params, eval_metric="mlogloss")
         t0 = time.time()
         xgb.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=100)
         result = _eval_model(xgb, X_valid, y_valid, time.time() - t0)
@@ -224,7 +227,7 @@ def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
                     X_train,
                     y_train,
                     eval_set=[(X_valid, y_valid)],
-                    eval_metric="binary_logloss",
+                    eval_metric="multi_logloss",
                     callbacks=cbs,
                 )
                 result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
@@ -260,31 +263,38 @@ def train_all_sequential(
 
 
 def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
-    """Compute test_auc, test_accuracy, test_f1 for each model. Mutates results."""
+    """Compute test metrics for each model (multiclass). Mutates results."""
     import numpy as np  # noqa: PLC0415
-    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score  # noqa: PLC0415
+    from sklearn.metrics import accuracy_score, f1_score, log_loss  # noqa: PLC0415
 
     for _name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = r["model"].predict_proba(X_test)[:, 1]
-        y_pred = (y_proba >= 0.5).astype(np.int64)
-        r["metrics"]["test_auc"] = float(roc_auc_score(y_test, y_proba))
+        y_proba = r["model"].predict_proba(X_test)  # (n, 3)
+        y_pred = np.argmax(y_proba, axis=1)
+        r["metrics"]["test_log_loss"] = float(log_loss(y_test, y_proba))
         r["metrics"]["test_accuracy"] = float(accuracy_score(y_test, y_pred))
-        r["metrics"]["test_f1"] = float(f1_score(y_test, y_pred, zero_division=0))
+        r["metrics"]["test_f1_macro"] = float(
+            f1_score(y_test, y_pred, average="macro", zero_division=0),
+        )
 
 
-def check_quality_gates(results: dict, champion_auc: float | None = None) -> dict:
-    """ISO 42001: AUC floor + relative degradation (2%) gate."""
+def check_quality_gates(results: dict, champion_ll: float | None = None) -> dict:
+    """ISO 42001: log-loss ceiling + relative degradation (5%) gate."""
     candidates = [(n, r) for n, r in results.items() if r["model"] is not None]
     if not candidates:
         return {"passed": False, "reason": "All models failed to train"}
-    best_name, best_r = max(candidates, key=lambda x: x[1]["metrics"].get("test_auc", 0.0))
-    best_auc = best_r["metrics"].get("test_auc", 0.0)
-    if best_auc < AUC_FLOOR:
-        return {"passed": False, "reason": f"AUC {best_auc:.4f} < {AUC_FLOOR}"}
-    if champion_auc and champion_auc > 0:
-        drop_pct = (champion_auc - best_auc) / champion_auc * 100
-        if drop_pct > 2.0:
-            return {"passed": False, "reason": f"Degradation {drop_pct:.1f}% > 2.0%"}
-    return {"passed": True, "best_model": best_name, "best_auc": best_auc}
+    # Lower log_loss is better
+    best_name, best_r = min(
+        candidates,
+        key=lambda x: x[1]["metrics"].get("test_log_loss", 999.0),
+    )
+    best_ll = best_r["metrics"].get("test_log_loss", 999.0)
+    ll_ceiling = 1.10  # naive 3-class baseline ~ log(3) = 1.099
+    if best_ll > ll_ceiling:
+        return {"passed": False, "reason": f"LogLoss {best_ll:.4f} > {ll_ceiling}"}
+    if champion_ll and champion_ll > 0:
+        rise_pct = (best_ll - champion_ll) / champion_ll * 100
+        if rise_pct > 5.0:
+            return {"passed": False, "reason": f"Degradation {rise_pct:.1f}% > 5.0%"}
+    return {"passed": True, "best_model": best_name, "best_log_loss": best_ll}

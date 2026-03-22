@@ -118,49 +118,54 @@ class TestPrepareFeatures:
 
 
 class TestComputeValidationMetrics:
-    """Tests metrics computation — 2 tests."""
+    """Tests multiclass metrics computation — 2 tests."""
 
     @pytest.fixture()
-    def binary_predictions(self) -> tuple:
-        """Generate deterministic binary predictions for metrics testing."""
+    def multiclass_predictions(self) -> tuple:
+        """Generate deterministic 3-class predictions for metrics testing."""
         rng = np.random.default_rng(42)
-        y_true = rng.choice([0, 1], 200)
-        y_proba = np.where(y_true == 1, rng.uniform(0.5, 0.9, 200), rng.uniform(0.1, 0.5, 200))
-        y_pred = (y_proba >= 0.5).astype(int)
+        y_true = rng.choice([0, 1, 2], 200)  # loss=0, draw=1, win=2
+        # Build realistic probas: high prob for the true class
+        y_proba = rng.dirichlet([1, 1, 1], 200).astype(np.float64)
+        for i, c in enumerate(y_true):
+            y_proba[i, c] += 0.3
+        y_proba = y_proba / y_proba.sum(axis=1, keepdims=True)
+        y_pred = np.argmax(y_proba, axis=1)
         return y_true, y_pred, y_proba
 
-    def test_metrics_has_required_fields(self, binary_predictions: tuple) -> None:
-        """compute_validation_metrics must return all required fields."""
-        y_true, y_pred, y_proba = binary_predictions
+    def test_metrics_has_required_fields(self, multiclass_predictions: tuple) -> None:
+        """compute_validation_metrics must return all required multiclass fields."""
+        y_true, y_pred, y_proba = multiclass_predictions
         metrics = compute_validation_metrics(y_true, y_pred, y_proba)
         required_keys = {
-            "auc_roc",
-            "accuracy",
-            "precision",
-            "recall",
-            "f1_score",
             "log_loss",
             "log_loss_baseline",
             "log_loss_ratio",
-            "brier_score",
-            "mean_proba",
-            "positive_rate",
-            "true_negatives",
-            "false_positives",
-            "false_negatives",
-            "true_positives",
+            "rps",
+            "expected_score_mae",
+            "brier_multiclass",
+            "ece_class_loss",
+            "ece_class_draw",
+            "ece_class_win",
+            "mean_p_draw",
+            "observed_draw_rate",
+            "draw_calibration_bias",
+            "accuracy_3class",
+            "f1_macro",
         }
         assert required_keys.issubset(set(metrics.keys()))
 
-    def test_metrics_values_in_range(self, binary_predictions: tuple) -> None:
-        """All probability metrics must be in [0, 1], confusion counts >= 0."""
-        y_true, y_pred, y_proba = binary_predictions
+    def test_metrics_values_in_range(self, multiclass_predictions: tuple) -> None:
+        """Key metrics must be in valid ranges."""
+        y_true, y_pred, y_proba = multiclass_predictions
         metrics = compute_validation_metrics(y_true, y_pred, y_proba)
-        for key in ("auc_roc", "accuracy", "precision", "recall", "f1_score"):
-            assert 0.0 <= metrics[key] <= 1.0, f"{key}={metrics[key]} out of range"
+        assert 0.0 <= metrics["accuracy_3class"] <= 1.0
+        assert 0.0 <= metrics["f1_macro"] <= 1.0
         assert metrics["log_loss"] >= 0.0
-        for key in ("true_negatives", "false_positives", "false_negatives", "true_positives"):
-            assert metrics[key] >= 0, f"{key}={metrics[key]} negative"
+        assert 0.0 <= metrics["rps"] <= 1.0
+        assert 0.0 <= metrics["brier_multiclass"] <= 2.0
+        for key in ("ece_class_loss", "ece_class_draw", "ece_class_win"):
+            assert 0.0 <= metrics[key] <= 1.0, f"{key}={metrics[key]} out of range"
 
 
 # ---------------------------------------------------------------------------

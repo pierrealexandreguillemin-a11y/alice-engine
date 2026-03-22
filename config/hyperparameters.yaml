@@ -25,7 +25,7 @@ global:
   random_seed: 42               # Standard reproducibility seed
   n_folds: 5                    # K-Fold CV: 5 est standard (bias-variance tradeoff)
   early_stopping_rounds: 100    # 100 iterations sans amelioration = stop
-  eval_metric: "logloss"        # Logloss: optimise calibration des probas (pas juste ranking)
+  eval_metric: "multi_logloss"   # Multiclass logloss: optimise calibration 3-class
   task_type: "CPU"              # CPU par defaut, GPU si disponible
   verbose: 100                  # Log tous les 100 iterations
 
@@ -51,6 +51,9 @@ catboost:
   # Regularization
   l2_leaf_reg: 3                # Default CatBoost (L2 regularization)
   min_data_in_leaf: 20          # Min samples per leaf
+
+  # Objective (MultiClass 3-way: loss/draw/win)
+  loss_function: "MultiClass"   # CatBoost native multiclass
 
   # Model selection
   use_best_model: true          # Restore best iteration from eval_metric on valid set
@@ -93,6 +96,8 @@ xgboost:
   n_estimators: 3000
   # learning_rate: auto         # NOT SET — XGBoost default 0.3, adjusted by early stopping
   max_depth: 8                  # 6->8: aligned with CatBoost
+  objective: "multi:softprob"   # Multiclass probability output
+  num_class: 3                  # loss=0, draw=1, win=2
 
   # Regularization
   reg_lambda: 1.0               # L2 regularization (defaut)
@@ -127,6 +132,8 @@ lightgbm:
   # learning_rate: auto         # NOT SET — LightGBM default 0.1
   num_leaves: 255               # 2^depth - 1 = 2^8 - 1 (depth=8 equivalent)
   max_depth: -1                 # -1 = no limit (controle par num_leaves)
+  objective: "multiclass"       # LightGBM native multiclass
+  num_class: 3                  # loss=0, draw=1, win=2
 
   # Regularization
   reg_lambda: 1.0               # L2 regularization

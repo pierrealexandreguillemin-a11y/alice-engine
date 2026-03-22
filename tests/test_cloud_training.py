@@ -39,14 +39,14 @@ def small_df() -> pd.DataFrame:
 
 @pytest.fixture()
 def mock_results() -> dict:
-    """Fake training results dict."""
+    """Fake training results dict (multiclass 3-class)."""
     m = MagicMock()
-    m.predict_proba.return_value = np.array([[0.3, 0.7]] * 100)
+    m.predict_proba.return_value = np.array([[0.15, 0.15, 0.70]] * 100)
     # fmt: off
     return {"CatBoost": {
         "model": m,
-        "metrics": {"auc_roc": 0.75, "accuracy": 0.70, "f1_score": 0.68,
-                     "test_auc": 0.74, "test_accuracy": 0.70, "test_f1": 0.68, "train_time_s": 1.0},
+        "metrics": {"log_loss": 0.75, "accuracy_3class": 0.70, "test_log_loss": 0.74,
+                     "test_accuracy": 0.70, "test_f1_macro": 0.68, "train_time_s": 1.0},
         "importance": {"blanc_elo": 0.5, "noir_elo": 0.3},
     }}
     # fmt: on
@@ -112,39 +112,39 @@ class TestBuildLineage:
 
 
 class TestQualityGates:
-    """Tests AUC quality gates -- 4 tests."""
+    """Tests log-loss quality gates (multiclass) -- 4 tests."""
 
-    def _make_results(self, auc: float) -> dict:
+    def _make_results(self, ll: float) -> dict:
         m = MagicMock()
         return {
             "CatBoost": {
                 "model": m,
-                "metrics": {"test_auc": auc, "test_accuracy": 0.7, "test_f1": 0.6},
+                "metrics": {"test_log_loss": ll, "test_accuracy": 0.7, "test_f1_macro": 0.6},
                 "importance": {},
             }
         }
 
-    def test_auc_below_floor_fails(self) -> None:
-        """AUC 0.65 < AUC_FLOOR must fail quality gate."""
-        gate = check_quality_gates(self._make_results(0.65))
+    def test_logloss_above_ceiling_fails(self) -> None:
+        """LogLoss 1.20 > 1.10 ceiling must fail quality gate."""
+        gate = check_quality_gates(self._make_results(1.20))
         assert gate["passed"] is False
-        assert "AUC" in gate["reason"]
+        assert "LogLoss" in gate["reason"]
 
-    def test_auc_above_floor_passes(self) -> None:
-        """AUC 0.75 > AUC_FLOOR must pass quality gate."""
-        gate = check_quality_gates(self._make_results(0.75))
+    def test_logloss_below_ceiling_passes(self) -> None:
+        """LogLoss 0.85 < 1.10 ceiling must pass quality gate."""
+        gate = check_quality_gates(self._make_results(0.85))
         assert gate["passed"] is True
-        assert gate["best_auc"] == pytest.approx(0.75)
+        assert gate["best_log_loss"] == pytest.approx(0.85)
 
     def test_degradation_relative_fails(self) -> None:
-        """Champion 0.75, new 0.72 -> 4% drop > 2% threshold -> fail."""
-        gate = check_quality_gates(self._make_results(0.72), champion_auc=0.75)
+        """Champion 0.80, new 0.85 -> 6.25% rise > 5% threshold -> fail."""
+        gate = check_quality_gates(self._make_results(0.85), champion_ll=0.80)
         assert gate["passed"] is False
         assert "Degradation" in gate["reason"]
 
     def test_first_run_no_champion_passes(self) -> None:
-        """champion_auc=None must skip degradation check."""
-        gate = check_quality_gates(self._make_results(0.75), champion_auc=None)
+        """champion_ll=None must skip degradation check."""
+        gate = check_quality_gates(self._make_results(0.85), champion_ll=None)
         assert gate["passed"] is True
 
 
@@ -230,6 +230,7 @@ class TestHyperparamsSync:
             "device",
             "task_type",
             "train_dir",
+            "tree_method",
         }
         for section in ("catboost", "xgboost", "lightgbm"):
             yaml_keys = {k for k in yaml_cfg[section] if k not in skip_keys}

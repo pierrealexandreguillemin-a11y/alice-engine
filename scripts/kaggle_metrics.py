@@ -1,0 +1,75 @@
+"""Multiclass metric helpers — ISO 25059/24029.
+
+Document ID: ALICE-METRICS-MULTICLASS
+Version: 1.0.0
+
+Extracted from kaggle_diagnostics.py for ISO 5055 (<300 lines).
+Provides: RPS, expected-score MAE, multiclass Brier, ECE.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+def compute_rps(y_true: np.ndarray, y_proba: np.ndarray) -> float:
+    """Ranked Probability Score — ordinal-aware metric (loss < draw < win).
+
+    RPS penalises predictions far from the true outcome more heavily
+    than those that are merely one class away.
+    """
+    n_classes = y_proba.shape[1]
+    n = len(y_true)
+    if n == 0:
+        return 0.0
+    cum_pred = np.cumsum(y_proba, axis=1)
+    cum_true = np.zeros_like(cum_pred)
+    for c in range(n_classes):
+        cum_true[:, c] = (y_true <= c).astype(float)
+    rps_per_row = np.mean((cum_pred - cum_true) ** 2, axis=1)
+    return float(np.mean(rps_per_row))
+
+
+def compute_expected_score_mae(y_true: np.ndarray, y_proba: np.ndarray) -> float:
+    """MAE between predicted expected score and actual score.
+
+    Expected score = 0*P(loss) + 0.5*P(draw) + 1*P(win).
+    Actual score maps: class 0->0, class 1->0.5, class 2->1.
+    """
+    score_map = np.array([0.0, 0.5, 1.0])
+    pred_score = y_proba @ score_map
+    actual_score = score_map[y_true]
+    return float(np.mean(np.abs(pred_score - actual_score)))
+
+
+def compute_multiclass_brier(y_true: np.ndarray, y_proba: np.ndarray) -> float:
+    """Multiclass Brier score: mean of per-class squared errors."""
+    n_classes = y_proba.shape[1]
+    one_hot = np.zeros_like(y_proba)
+    for c in range(n_classes):
+        one_hot[:, c] = (y_true == c).astype(float)
+    return float(np.mean(np.sum((y_proba - one_hot) ** 2, axis=1)))
+
+
+def compute_ece(y_true: np.ndarray, y_proba_class: np.ndarray, n_bins: int = 10) -> float:
+    """Expected Calibration Error for a single class column.
+
+    Bins predicted probabilities, computes |mean_pred - empirical_freq|
+    weighted by bin size.
+    """
+    n = len(y_true)
+    if n == 0:
+        return 0.0
+    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    for i in range(n_bins):
+        mask = (y_proba_class >= bin_edges[i]) & (y_proba_class < bin_edges[i + 1])
+        if i == n_bins - 1:
+            mask |= y_proba_class == bin_edges[i + 1]
+        count = mask.sum()
+        if count == 0:
+            continue
+        avg_pred = float(y_proba_class[mask].mean())
+        avg_true = float(y_true[mask].mean())
+        ece += (count / n) * abs(avg_pred - avg_true)
+    return ece
