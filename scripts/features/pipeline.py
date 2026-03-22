@@ -72,7 +72,12 @@ def extract_all_features(
         "club_reliability": extract_club_reliability(df_history),
         "player_reliability": extract_player_reliability(df_history),
         "recent_form": calculate_recent_form(df_history_played),
-        "board_position": calculate_board_position(df_history_played),
+        "board_position": calculate_board_position(
+            df_history_played,
+            max_saison=int(df_history_played["saison"].max())
+            if not df_history_played.empty and "saison" in df_history_played.columns
+            else None,
+        ),
         "color_perf": calculate_color_performance(df_history_played),
         "ffe_regulatory": extract_ffe_regulatory_features(df_history_played),
         "team_enjeu": extract_team_enjeu_features(df_history_played, standings),

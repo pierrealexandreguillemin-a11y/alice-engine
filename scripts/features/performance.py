@@ -30,7 +30,10 @@ __all__ = [
 ]
 
 
-def calculate_board_position(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_board_position(
+    df: pd.DataFrame,
+    max_saison: int | None = None,
+) -> pd.DataFrame:
     """Calcule la position moyenne sur l'échiquier pour chaque joueur.
 
     Un joueur habitué à jouer sur échiquier 1 vs échiquier 8
@@ -39,6 +42,8 @@ def calculate_board_position(df: pd.DataFrame) -> pd.DataFrame:
     Args:
     ----
         df: DataFrame échiquiers
+        max_saison: si fourni, filtre sur cette saison uniquement (rolling).
+            Evite de diluer la position courante avec un historique obsolete.
 
     Returns:
     -------
@@ -49,12 +54,18 @@ def calculate_board_position(df: pd.DataFrame) -> pd.DataFrame:
         - echiquier_min: échiquier le plus fort joué
         - echiquier_max: échiquier le plus faible joué
 
-    ISO 5259: Position calculée depuis historique réel.
+    ISO 5259: Position calculée depuis historique réel (saison courante).
     """
     logger.info("Calcul position échiquier moyenne...")
 
     if df.empty or "echiquier" not in df.columns:
         return pd.DataFrame()
+
+    if max_saison is not None and "saison" in df.columns:
+        df = df[df["saison"] == max_saison]
+        logger.info("  Filtre saison=%d pour echiquier_moyen rolling", max_saison)
+        if df.empty:
+            return pd.DataFrame()
 
     board_data = []
 
