@@ -108,31 +108,34 @@ def default_hyperparameters() -> dict:
             xgb_gpu = {"tree_method": "hist", "device": "cuda"} if int(xv.split(".")[0]) >= 2 else {"tree_method": "gpu_hist"}
         except Exception:
             xgb_gpu = {"tree_method": "gpu_hist"}
-    # V8v3: lower LR, shallower trees, stronger regularization (V8v2 diverged)
+    # V8v9: residual learning hyperparams — low LR, shallow trees, strong reg
+    # Residual corrections are tiny (~0.008 log_loss), LR 0.03 overshoots in 10 iters.
+    # colsample_bytree=0.5 critical for 177 sparse features (feature bagging ignores noise).
     return {
-        "global": {"random_seed": 42, "early_stopping_rounds": 200, "eval_metric": "multi_logloss"},
+        "global": {"random_seed": 42, "early_stopping_rounds": 500, "eval_metric": "multi_logloss"},
         "catboost": {
-            "iterations": 5000, "depth": 6, "border_count": 254,
-            "learning_rate": 0.03, "l2_leaf_reg": 5, "min_data_in_leaf": 50,
+            "iterations": 20000, "depth": 4, "border_count": 128,
+            "learning_rate": 0.005, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
+            "random_strength": 2, "bagging_temperature": 1,
             "thread_count": 4, "task_type": "GPU" if gpu else "CPU",
             "use_best_model": True, "loss_function": "MultiClass",
-            "random_seed": 42, "verbose": 200, "early_stopping_rounds": 200,
+            "random_seed": 42, "verbose": 500, "early_stopping_rounds": 500,
         },
         "xgboost": {
-            "n_estimators": 5000, "max_depth": 6, "learning_rate": 0.03,
+            "n_estimators": 20000, "max_depth": 4, "learning_rate": 0.005,
             "objective": "multi:softprob", "num_class": 3,
-            "reg_lambda": 3.0, "reg_alpha": 0.1, "min_child_weight": 10,
-            "subsample": 0.8, "colsample_bytree": 0.8,
+            "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_weight": 50,
+            "subsample": 0.7, "colsample_bytree": 0.5,
             **xgb_gpu, "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 200, "verbosity": 1,
+            "early_stopping_rounds": 500, "verbosity": 1,
         },
         "lightgbm": {
-            "n_estimators": 5000, "num_leaves": 63, "max_depth": 6,
-            "learning_rate": 0.03, "objective": "multiclass", "num_class": 3,
-            "reg_lambda": 3.0, "reg_alpha": 0.1, "min_child_samples": 50,
-            "subsample": 0.8, "colsample_bytree": 0.8,
+            "n_estimators": 20000, "num_leaves": 15, "max_depth": 4,
+            "learning_rate": 0.005, "objective": "multiclass", "num_class": 3,
+            "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_samples": 200,
+            "subsample": 0.7, "colsample_bytree": 0.5,
             "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 200, "verbose": -1,
+            "early_stopping_rounds": 500, "verbose": -1,
         },
     }
     # fmt: on

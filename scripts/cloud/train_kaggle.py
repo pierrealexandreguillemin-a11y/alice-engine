@@ -182,7 +182,7 @@ def main() -> None:
     init_scores_test = _compute_init_scores(X_test, draw_lookup_train)
 
     # Feature subset AFTER init_scores (blanc_elo/noir_elo not in top11)
-    feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "domain13")  # v7: domain-driven
+    feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "all")  # v9: all features + low LR
     if feature_subset in ("top10", "domain13"):
         # Domain-driven selection for residual learning (NOT from v3 importance)
         # Focus: features that CORRECT Elo baseline, especially draw prediction
