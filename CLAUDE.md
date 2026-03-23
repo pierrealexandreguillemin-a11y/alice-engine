@@ -94,6 +94,7 @@ api.upload_file("models/model.pkl", repo_id="Pierrax/alice-engine", repo_type="m
 ### Démarche de rigueur (OBLIGATOIRE)
 - **Raisonnement profond** : comprendre le scope métier AVANT de coder (Alice = P(victoire) pour CE, pas classification)
 - **WebSearch si doute** : vérifier la doc officielle de CHAQUE API/outil avant utilisation. Ne JAMAIS assumer.
+- **Audit domaine AVANT push** : auditer features/approche contre standards ML échecs avant push Kaggle. Ne JAMAIS utiliser l'importance d'un modèle raté pour sélectionner des features.
 - **Checklist pré-déploiement** : avant tout push cloud (Kaggle, HF Hub), vérifier :
   - [ ] Dépendances dans l'env cible ?
   - [ ] Paths/montages corrects ?
@@ -101,6 +102,8 @@ api.upload_file("models/model.pkl", repo_id="Pierrax/alice-engine", repo_type="m
   - [ ] Hardware compatible (GPU/CUDA/PyTorch) ?
   - [ ] Dataset uploadé avec les bons fichiers ?
   - [ ] Kernel slug versionné ?
+  - [ ] Ordre des opérations (init_scores AVANT feature subset) ?
+  - [ ] Features justifiées par logique domaine (pas modèle raté) ?
 - **Post-mortem** : diagnostiquer CHAQUE échec avant de relancer. Documenter dans `docs/postmortem/`.
 - **Pas de mensonge** : "je ne sais pas" > affirmation fausse. Toujours.
 
@@ -148,7 +151,8 @@ Makefile                   # Commandes (make help)
 
 ```
 scripts/
-├── generate_graphs.py      # Graphs SVG architecture (pydeps)
+├── generate_graphs.py      # Graphs SVG imports/deps (pydeps)
+├── generate_ml_graphs.py   # Graphs SVG ML pipeline/inference/system (graphviz)
 ├── update_iso_docs.py      # Génère docs/iso/IMPLEMENTATION_STATUS.md
 ├── analyze_architecture.py # Score santé architecture (coupling, cycles)
 ├── autogluon/              # Pipeline AutoGluon (ISO 42001)
@@ -170,8 +174,10 @@ scripts/
 │   ├── kernel-metadata.json      # Config Kaggle CatBoost kernel
 │   └── kernel-metadata-autogluon.json # Config Kaggle AutoGluon kernel
 ├── kaggle_trainers.py      # ML training logic (CatBoost/XGBoost/LightGBM)
+├── kaggle_metrics.py       # Multiclass metrics + predict_with_init + quality gates
 ├── kaggle_artifacts.py     # Model persistence + HF Hub push
 ├── kaggle_diagnostics.py   # ISO diagnostics (ROC, calibration, learning curves)
+├── baselines.py            # Elo baseline + compute_elo_init_scores (residual learning)
 ├── sync_data/              # Sync données FFE (Phase B1)
 │   ├── freshness.py        # Vérification fraîcheur données
 │   ├── symlink.py          # Gestion symlink/junction Windows
@@ -338,15 +344,33 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
 - Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
 
-### V8 Training Findings (2026-03-22) — CRITIQUE
-- **3 runs échoués (v1 path, v2 divergence, v3 hyperparams)** — postmortem dans `docs/postmortem/`
-- **166/177 features importance=0**, les 3 modèles **draw recall=0%** (ignorent les nulles)
-- **Root cause** : pas de residual learning. Les modèles redécouvrent l'Elo au lieu d'apprendre les corrections
-- **Solution** : `init_score` / `base_margin` depuis la baseline Elo → le modèle apprend UNIQUEMENT les divergences
-- **Quality gate** : 9 conditions (condition 9 ajoutée : `recall_draw > 1%`)
+### V8 Training Findings (2026-03-22→23) — CRITIQUE
+- **v1-v3 échoués** (path, divergence, hyperparams) — postmortem dans `docs/postmortem/`
+- **v5 : PREMIÈRE VICTOIRE** — CatBoost 0.8856, LightGBM 0.8849 < Elo baseline 0.92
+- **v6 bugué** — init_scores calculés APRÈS feature subset → fallback Elo=1500
+- **v7 EN ATTENTE** — 13 features domain-driven + init_scores corrects
+- **Root cause v1-v3** : pas de residual learning → modèles redécouvrent l'Elo
+- **Root cause v5 overfit** : 177 features sparse → overfit en 9 itérations
+- **Root cause v6 pire** : features sélectionnées par importance d'un modèle raté (v3)
+- **Residual learning** : `compute_elo_init_scores()` → `Pool(baseline=)` / `base_margin` / `init_score`
+- **Eval cohérente** : `predict_with_init()` pour CatBoost/XGBoost/LightGBM (audit C2)
+- **Quality gate** : 9 conditions, condition 9 = `mean_p_draw > 1%` (pas recall_draw)
 - **Plan Phase 1** : `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md`
 - **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
 - **NE JAMAIS lancer 177 features d'un coup** — validation incrémentale obligatoire
+- **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
+- **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
+
+### Inference REQUIERT init_scores (C1 — Phase 2)
+- Les modèles entraînés avec residual learning ont besoin des init_scores à l'inférence
+- `draw_rate_lookup.parquet` sauvé comme artefact (45 cells)
+- L'inference service doit : compute_elo_baseline → compute_elo_init_scores → predict_with_init
+
+### Lacunes versioning ISO 5259/42001 (@TODO Phase 2/5)
+- Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel
+- Pas de hash du dataset uploadé (upload_all_data ne log pas le hash)
+- Artefacts training (reports/) non versionnés — local seulement
+- DVC recommandé (docs/devops/ML_MODEL_VERSIONING_STANDARDS.md) mais non implémenté
 
 ## V9 CE multi-équipe (@TODO après V8)
 
