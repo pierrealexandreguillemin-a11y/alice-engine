@@ -12,6 +12,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -122,6 +123,16 @@ def _compute_baselines(
     )
 
 
+def _compute_init_scores(X: pd.DataFrame, draw_lookup: pd.DataFrame) -> np.ndarray:
+    """Compute Elo baseline init scores from X features."""
+    from scripts.baselines import compute_elo_baseline, compute_elo_init_scores  # noqa: PLC0415
+
+    b_elo = X["blanc_elo"].values if "blanc_elo" in X.columns else np.full(len(X), 1500)
+    n_elo = X["noir_elo"].values if "noir_elo" in X.columns else np.full(len(X), 1500)
+    elo_proba = compute_elo_baseline(b_elo, n_elo, draw_lookup)
+    return compute_elo_init_scores(elo_proba)
+
+
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
     logger.info("ALICE Engine — V8 MultiClass Training (Kernel 2/2)")
@@ -161,7 +172,28 @@ def main() -> None:
     config = default_hyperparameters()
     # CatBoost: write training logs inside versioned out_dir (not cwd)
     config["catboost"]["train_dir"] = str(out_dir / "catboost_info")
-    results = train_all_sequential(X_train, y_train, X_valid, y_valid, config)
+
+    # Compute Elo baseline init scores for residual learning
+    from scripts.features.draw_priors import build_draw_rate_lookup  # noqa: PLC0415
+
+    draw_lookup_train = build_draw_rate_lookup(train)
+    init_scores_train = _compute_init_scores(X_train, draw_lookup_train)
+    init_scores_valid = _compute_init_scores(X_valid, draw_lookup_train)
+    logger.info(
+        "Elo init scores computed: train=%s valid=%s",
+        init_scores_train.shape,
+        init_scores_valid.shape,
+    )
+
+    results = train_all_sequential(
+        X_train,
+        y_train,
+        X_valid,
+        y_valid,
+        config,
+        init_scores_train=init_scores_train,
+        init_scores_valid=init_scores_valid,
+    )
     evaluate_on_test(results, X_test, y_test)
 
     baseline_metrics, draw_lookup = _compute_baselines(train, X_test, y_test, y_train)
