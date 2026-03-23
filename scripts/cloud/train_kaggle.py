@@ -182,21 +182,26 @@ def main() -> None:
     init_scores_test = _compute_init_scores(X_test, draw_lookup_train)
 
     # Feature subset AFTER init_scores (blanc_elo/noir_elo not in top11)
-    feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "top10")  # v7: top11 only
-    if feature_subset == "top10":
-        top11 = [
+    feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "domain13")  # v7: domain-driven
+    if feature_subset in ("top10", "domain13"):
+        # Domain-driven selection for residual learning (NOT from v3 importance)
+        # Focus: features that CORRECT Elo baseline, especially draw prediction
+        domain13 = [
             "diff_elo",
             "elo_proximity",
-            "win_rate_home_dom",
-            "expected_score_recent_blanc",
-            "expected_score_recent_noir",
+            "avg_elo",  # Elo curve adjustment
+            "draw_rate_prior",
             "draw_rate_blanc",
-            "draw_rate_noir",
-            "win_rate_normal_blanc",
-            "draw_rate_home_dom",
-            "win_rate_normal_noir",
-            "ffe_nb_equipes_blanc",
+            "draw_rate_noir",  # Draw correction
+            "type_competition",
+            "echiquier",
+            "est_domicile_blanc",  # Context
+            "expected_score_recent_blanc",
+            "expected_score_recent_noir",  # Form
+            "win_rate_home_dom",
+            "draw_rate_home_dom",  # Home advantage
         ]
+        top11 = domain13
         keep = [c for c in top11 if c in X_train.columns]
         logger.info("Feature subset: top11 (%d/%d available)", len(keep), len(top11))
         X_train, X_valid, X_test = X_train[keep], X_valid[keep], X_test[keep]
