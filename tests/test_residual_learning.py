@@ -1,8 +1,8 @@
 """Tests for residual learning — Elo init scores (ISO 24029).
 
 Document ID: ALICE-TEST-RESIDUAL
-Version: 1.0.0
-Tests count: 3
+Version: 1.1.0
+Tests count: 4
 """
 
 import numpy as np
@@ -56,3 +56,14 @@ def test_elo_init_scores_roundtrip():
     exp_s = np.exp(scores - scores.max(axis=1, keepdims=True))
     recovered = exp_s / exp_s.sum(axis=1, keepdims=True)
     np.testing.assert_allclose(recovered, proba, atol=0.01)
+
+
+def test_train_all_sequential_accepts_init_scores():
+    """train_all_sequential must accept optional init_scores parameter."""
+    import inspect
+
+    from scripts.kaggle_trainers import train_all_sequential
+
+    sig = inspect.signature(train_all_sequential)
+    assert "init_scores_train" in sig.parameters
+    assert "init_scores_valid" in sig.parameters

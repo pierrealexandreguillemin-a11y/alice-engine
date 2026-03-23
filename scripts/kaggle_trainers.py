@@ -108,10 +108,7 @@ def default_hyperparameters() -> dict:
             xgb_gpu = {"tree_method": "hist", "device": "cuda"} if int(xv.split(".")[0]) >= 2 else {"tree_method": "gpu_hist"}
         except Exception:
             xgb_gpu = {"tree_method": "gpu_hist"}
-    # fmt: on
-    # fmt: off
-    # V8v3: lower LR, shallower trees, stronger regularization
-    # V8v2 diverged: best at iter 3-39 then log_loss exploded
+    # V8v3: lower LR, shallower trees, stronger regularization (V8v2 diverged)
     return {
         "global": {"random_seed": 42, "early_stopping_rounds": 200, "eval_metric": "multi_logloss"},
         "catboost": {
@@ -141,20 +138,15 @@ def default_hyperparameters() -> dict:
     # fmt: on
 
 
-def compute_validation_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
-    """Delegate to kaggle_diagnostics (moved for ISO 5055 line limit)."""
-    from scripts.kaggle_diagnostics import _compute_metrics  # noqa: PLC0415
-
-    return _compute_metrics(y_true, y_pred, y_proba)
-
-
 def _eval_model(model: Any, X_valid: Any, y_valid: Any, train_time: float) -> dict:
     """Evaluate model on validation, return {model, metrics, importance}."""
     import numpy as np  # noqa: PLC0415
 
+    from scripts.kaggle_diagnostics import _compute_metrics  # noqa: PLC0415
+
     y_proba = model.predict_proba(X_valid)  # (n, 3)
     y_pred = np.argmax(y_proba, axis=1)
-    metrics = compute_validation_metrics(y_valid.values, y_pred, y_proba)
+    metrics = _compute_metrics(y_valid.values, y_pred, y_proba)
     metrics["train_time_s"] = train_time
     importance = (
         dict(zip(X_valid.columns, model.feature_importances_, strict=False))
@@ -168,14 +160,24 @@ def _fail_result() -> dict:
     return {"model": None, "metrics": {}, "importance": {}}
 
 
-def _train_catboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
-    """Train CatBoost — no cat_features since data is label-encoded (I1)."""
+def _train_catboost(
+    X_train: Any,
+    y_train: Any,
+    X_valid: Any,
+    y_valid: Any,
+    params: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
+) -> dict:
+    """Train CatBoost with residual learning via Pool baseline."""
     try:
-        from catboost import CatBoostClassifier  # noqa: PLC0415
+        from catboost import CatBoostClassifier, Pool  # noqa: PLC0415
 
         cb = CatBoostClassifier(**params, eval_metric="MultiClass")
+        train_pool = Pool(X_train, y_train, baseline=init_scores_train)
+        valid_pool = Pool(X_valid, y_valid, baseline=init_scores_valid)
         t0 = time.time()
-        cb.fit(X_train, y_train, eval_set=(X_valid, y_valid))
+        cb.fit(train_pool, eval_set=valid_pool)
         result = _eval_model(cb, X_valid, y_valid, time.time() - t0)
         del cb
         gc.collect()
@@ -185,14 +187,26 @@ def _train_catboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
         return _fail_result()
 
 
-def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
-    """Train XGBoost with partial-failure handling (I1)."""
+def _train_xgboost(
+    X_train: Any,
+    y_train: Any,
+    X_valid: Any,
+    y_valid: Any,
+    params: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
+) -> dict:
+    """Train XGBoost with residual learning via base_margin."""
     try:
         from xgboost import XGBClassifier  # noqa: PLC0415
 
         xgb = XGBClassifier(**params, eval_metric="mlogloss")
+        fit_kw: dict = {"eval_set": [(X_valid, y_valid)], "verbose": 100}
+        # XGBClassifier.fit() has no base_margin for eval_set; training still benefits
+        if init_scores_train is not None:
+            fit_kw["base_margin"] = init_scores_train.ravel()
         t0 = time.time()
-        xgb.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=100)
+        xgb.fit(X_train, y_train, **fit_kw)
         result = _eval_model(xgb, X_valid, y_valid, time.time() - t0)
         del xgb
         gc.collect()
@@ -202,8 +216,16 @@ def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, param
         return _fail_result()
 
 
-def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
-    """Train LightGBM CPU only (GPU requires special OpenCL build, not on Kaggle)."""
+def _train_lightgbm(
+    X_train: Any,
+    y_train: Any,
+    X_valid: Any,
+    y_valid: Any,
+    params: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
+) -> dict:
+    """Train LightGBM with residual learning via init_score."""
     try:
         import lightgbm as lgb_lib  # noqa: PLC0415
         from lightgbm import LGBMClassifier  # noqa: PLC0415
@@ -213,21 +235,24 @@ def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
         es = params.get("early_stopping_rounds", 50)
         cbs = [lgb_lib.early_stopping(es), lgb_lib.log_evaluation(100)]
         lgbm = LGBMClassifier(**lgb_p)
+        fit_kw: dict = {
+            "eval_set": [(X_valid, y_valid)],
+            "eval_metric": "multi_logloss",
+            "callbacks": cbs,
+        }
+        if init_scores_train is not None:
+            fit_kw["init_score"] = init_scores_train
+        if init_scores_valid is not None:
+            fit_kw["eval_init_score"] = [init_scores_valid]
         t0 = time.time()
-        lgbm.fit(
-            X_train,
-            y_train,
-            eval_set=[(X_valid, y_valid)],
-            eval_metric="multi_logloss",
-            callbacks=cbs,
-        )
+        lgbm.fit(X_train, y_train, **fit_kw)
         result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
         del lgbm
         gc.collect()
         return result
     except Exception:
         logger.exception("LightGBM training failed")
-    return _fail_result()
+        return _fail_result()
 
 
 def train_all_sequential(
@@ -236,15 +261,27 @@ def train_all_sequential(
     X_valid: Any,
     y_valid: Any,
     config: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
 ) -> dict:
     """CatBoost -> gc -> XGBoost -> gc -> LightGBM. Sequential memory management."""
+    trainers = [
+        ("CatBoost", _train_catboost),
+        ("XGBoost", _train_xgboost),
+        ("LightGBM", _train_lightgbm),
+    ]
     results: dict = {}
-    results["CatBoost"] = _train_catboost(X_train, y_train, X_valid, y_valid, config["catboost"])
-    gc.collect()
-    results["XGBoost"] = _train_xgboost(X_train, y_train, X_valid, y_valid, config["xgboost"])
-    gc.collect()
-    results["LightGBM"] = _train_lightgbm(X_train, y_train, X_valid, y_valid, config["lightgbm"])
-    gc.collect()
+    for name, fn in trainers:
+        results[name] = fn(
+            X_train,
+            y_train,
+            X_valid,
+            y_valid,
+            config[name.lower()],
+            init_scores_train,
+            init_scores_valid,
+        )
+        gc.collect()
     return results
 
 
@@ -255,42 +292,5 @@ def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
     _eval(results, X_test, y_test)
 
 
-def _check_calibration(m: dict) -> str | None:
-    """Check ECE per class, draw bias, and draw recall (conditions 7-9)."""
-    for cls in ("loss", "draw", "win"):
-        if m.get(f"ece_class_{cls}", 1.0) >= 0.05:
-            return f"ece_{cls} >= 0.05"
-    if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
-        return "draw_calibration_bias >= 0.02"
-    if m.get("recall_draw", 0.0) < 0.01:
-        return "recall_draw < 0.01 (model ignores draw class)"
-    return None
-
-
-def check_quality_gates(
-    results: dict,
-    baseline_metrics: dict | None = None,
-    champion_ll: float | None = None,
-) -> dict:
-    """ISO 42001: 9-condition quality gate (baselines + calibration + draw recall + champion)."""
-    from scripts.kaggle_metrics import check_baseline_conditions  # noqa: PLC0415
-
-    candidates = [(n, r) for n, r in results.items() if r["model"] is not None]
-    if not candidates:
-        return {"passed": False, "reason": "All models failed to train"}
-    best_name, best_r = min(candidates, key=lambda x: x[1]["metrics"].get("test_log_loss", 999.0))
-    m = best_r["metrics"]
-    best_ll = m.get("test_log_loss", 999.0)
-    if baseline_metrics:
-        reason = check_baseline_conditions(m, baseline_metrics)
-        if reason:
-            return {"passed": False, "reason": reason}
-    # Calibration + draw prediction checks (conditions 7-9)
-    cal_reason = _check_calibration(m)
-    if cal_reason:
-        return {"passed": False, "reason": cal_reason}
-    if champion_ll and champion_ll > 0:
-        rise_pct = (best_ll - champion_ll) / champion_ll * 100
-        if rise_pct > 5.0:
-            return {"passed": False, "reason": f"Degradation {rise_pct:.1f}% > 5.0%"}
-    return {"passed": True, "best_model": best_name, "best_log_loss": best_ll}
+# Re-exported from kaggle_metrics for backward compatibility
+from scripts.kaggle_metrics import check_quality_gates  # noqa: F401, E402

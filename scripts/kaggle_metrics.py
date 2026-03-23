@@ -137,3 +137,42 @@ def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
         r["metrics"]["test_rps"] = float(compute_rps(y_arr, y_proba))
         r["metrics"]["test_brier"] = float(compute_multiclass_brier(y_arr, y_proba))
         r["metrics"]["test_es_mae"] = float(compute_expected_score_mae(y_arr, y_proba))
+
+
+def _check_calibration(m: dict) -> str | None:
+    """Check ECE per class, draw bias, and draw recall (conditions 7-9)."""
+    for cls in ("loss", "draw", "win"):
+        if m.get(f"ece_class_{cls}", 1.0) >= 0.05:
+            return f"ece_{cls} >= 0.05"
+    if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
+        return "draw_calibration_bias >= 0.02"
+    if m.get("recall_draw", 0.0) < 0.01:
+        return "recall_draw < 0.01 (model ignores draw class)"
+    return None
+
+
+def check_quality_gates(
+    results: dict,
+    baseline_metrics: dict | None = None,
+    champion_ll: float | None = None,
+) -> dict:
+    """ISO 42001: 9-condition quality gate (baselines + calibration + draw recall + champion)."""
+    candidates = [(n, r) for n, r in results.items() if r["model"] is not None]
+    if not candidates:
+        return {"passed": False, "reason": "All models failed to train"}
+    best_name, best_r = min(candidates, key=lambda x: x[1]["metrics"].get("test_log_loss", 999.0))
+    m = best_r["metrics"]
+    best_ll = m.get("test_log_loss", 999.0)
+    if baseline_metrics:
+        reason = check_baseline_conditions(m, baseline_metrics)
+        if reason:
+            return {"passed": False, "reason": reason}
+    # Calibration + draw prediction checks (conditions 7-9)
+    cal_reason = _check_calibration(m)
+    if cal_reason:
+        return {"passed": False, "reason": cal_reason}
+    if champion_ll and champion_ll > 0:
+        rise_pct = (best_ll - champion_ll) / champion_ll * 100
+        if rise_pct > 5.0:
+            return {"passed": False, "reason": f"Degradation {rise_pct:.1f}% > 5.0%"}
+    return {"passed": True, "best_model": best_name, "best_log_loss": best_ll}
