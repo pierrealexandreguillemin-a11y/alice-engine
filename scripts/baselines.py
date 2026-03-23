@@ -47,6 +47,36 @@ def compute_elo_baseline(
     return np.column_stack([p_loss / total, p_draw / total, p_win / total])
 
 
+def compute_elo_init_scores(
+    elo_proba: np.ndarray,
+    clip_min: float = 1e-4,
+    clip_max: float = 1 - 1e-4,
+) -> np.ndarray:
+    """Convert Elo baseline probas to centered log-odds for residual learning.
+
+    For multiclass: init_score = log(P_k) - mean(log(P)) per sample.
+    This is the zero-sum representative of the softmax pre-image:
+    softmax(init_scores) recovers the original probas. The centering is
+    arbitrary (any constant offset gives the same softmax) but conventional
+    for CatBoost Pool(baseline=), XGBoost base_margin, LightGBM init_score.
+
+    Args:
+    ----
+        elo_proba: (n, 3) array of [P(loss), P(draw), P(win)] from Elo baseline.
+        clip_min: Floor for probabilities to avoid log(0).
+        clip_max: Ceiling for probabilities to avoid log(1).
+
+    Returns:
+    -------
+        (n, 3) array of log-odds suitable for init_score / base_margin.
+    """
+    clipped = np.clip(elo_proba, clip_min, clip_max)
+    clipped = clipped / clipped.sum(axis=1, keepdims=True)
+    log_p = np.log(clipped)
+    init_scores = log_p - log_p.mean(axis=1, keepdims=True)
+    return init_scores
+
+
 def _lookup_draw_rate(
     avg_elo: np.ndarray,
     abs_diff: np.ndarray,
