@@ -129,7 +129,7 @@ def predict_with_init(
         import xgboost as xgb  # noqa: PLC0415
 
         dm = xgb.DMatrix(X)
-        dm.set_base_margin(init_scores.reshape(-1, init_scores.shape[1]))
+        dm.set_base_margin(init_scores.ravel())  # (n*3,) flat for XGBoost DMatrix
         return np.asarray(model.get_booster().predict(dm)).reshape(-1, init_scores.shape[1])
     if cls == "LGBMClassifier":
         raw = np.asarray(model.predict(X, raw_score=True))

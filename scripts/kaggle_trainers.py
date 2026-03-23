@@ -211,7 +211,7 @@ def _train_xgboost(
         fit_kw: dict = {"eval_set": [(X_valid, y_valid)], "verbose": 100}
         # XGBClassifier.fit() has no base_margin for eval_set; training still benefits
         if init_scores_train is not None:
-            fit_kw["base_margin"] = init_scores_train  # (n, 3) for XGBoost >= 2.0
+            fit_kw["base_margin"] = init_scores_train.ravel()  # (n*3,) flat for XGBClassifier
         t0 = time.time()
         xgb.fit(X_train, y_train, **fit_kw)
         result = _eval_model(xgb, X_valid, y_valid, time.time() - t0, init_scores_valid)

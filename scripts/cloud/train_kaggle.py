@@ -165,6 +165,28 @@ def main() -> None:
     X_train, y_train, X_valid, y_valid, X_test, y_test, encoders = prepare_features(
         train, valid, test
     )
+
+    # Feature subset selection (incremental validation: top 10 → all)
+    feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "top10")  # v6: top10 only
+    if feature_subset == "top10":
+        # Top 11 from CatBoost v3 importance (all features with importance > 0)
+        top10 = [
+            "diff_elo",
+            "elo_proximity",
+            "win_rate_home_dom",
+            "expected_score_recent_blanc",
+            "expected_score_recent_noir",
+            "draw_rate_blanc",
+            "draw_rate_noir",
+            "win_rate_normal_blanc",
+            "draw_rate_home_dom",
+            "win_rate_normal_noir",
+            "ffe_nb_equipes_blanc",
+        ]
+        keep = [c for c in top10 if c in X_train.columns]
+        logger.info("Feature subset: top10 (%d/%d available)", len(keep), len(top10))
+        X_train, X_valid, X_test = X_train[keep], X_valid[keep], X_test[keep]
+
     version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
     out_dir = OUTPUT_DIR / version
     out_dir.mkdir(parents=True, exist_ok=True)
