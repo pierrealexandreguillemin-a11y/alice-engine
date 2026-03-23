@@ -138,13 +138,20 @@ def default_hyperparameters() -> dict:
     # fmt: on
 
 
-def _eval_model(model: Any, X_valid: Any, y_valid: Any, train_time: float) -> dict:
+def _eval_model(
+    model: Any,
+    X_valid: Any,
+    y_valid: Any,
+    train_time: float,
+    init_scores_valid: Any | None = None,
+) -> dict:
     """Evaluate model on validation, return {model, metrics, importance}."""
     import numpy as np  # noqa: PLC0415
 
     from scripts.kaggle_diagnostics import _compute_metrics  # noqa: PLC0415
+    from scripts.kaggle_metrics import predict_with_init  # noqa: PLC0415
 
-    y_proba = model.predict_proba(X_valid)  # (n, 3)
+    y_proba = predict_with_init(model, X_valid, init_scores_valid)
     y_pred = np.argmax(y_proba, axis=1)
     metrics = _compute_metrics(y_valid.values, y_pred, y_proba)
     metrics["train_time_s"] = train_time
@@ -178,7 +185,7 @@ def _train_catboost(
         valid_pool = Pool(X_valid, y_valid, baseline=init_scores_valid)
         t0 = time.time()
         cb.fit(train_pool, eval_set=valid_pool)
-        result = _eval_model(cb, X_valid, y_valid, time.time() - t0)
+        result = _eval_model(cb, X_valid, y_valid, time.time() - t0, init_scores_valid)
         del cb
         gc.collect()
         return result
@@ -204,10 +211,10 @@ def _train_xgboost(
         fit_kw: dict = {"eval_set": [(X_valid, y_valid)], "verbose": 100}
         # XGBClassifier.fit() has no base_margin for eval_set; training still benefits
         if init_scores_train is not None:
-            fit_kw["base_margin"] = init_scores_train.ravel()
+            fit_kw["base_margin"] = init_scores_train  # (n, 3) for XGBoost >= 2.0
         t0 = time.time()
         xgb.fit(X_train, y_train, **fit_kw)
-        result = _eval_model(xgb, X_valid, y_valid, time.time() - t0)
+        result = _eval_model(xgb, X_valid, y_valid, time.time() - t0, init_scores_valid)
         del xgb
         gc.collect()
         return result
@@ -246,7 +253,7 @@ def _train_lightgbm(
             fit_kw["eval_init_score"] = [init_scores_valid]
         t0 = time.time()
         lgbm.fit(X_train, y_train, **fit_kw)
-        result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
+        result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0, init_scores_valid)
         del lgbm
         gc.collect()
         return result
@@ -285,12 +292,5 @@ def train_all_sequential(
     return results
 
 
-def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
-    """Delegate to kaggle_metrics (moved for ISO 5055 <300 lines)."""
-    from scripts.kaggle_metrics import evaluate_on_test as _eval  # noqa: PLC0415
-
-    _eval(results, X_test, y_test)
-
-
-# Re-exported from kaggle_metrics for backward compatibility
-from scripts.kaggle_metrics import check_quality_gates  # noqa: F401, E402
+# Re-exported from kaggle_metrics for backward compatibility (ISO 5055 <300 lines)
+from scripts.kaggle_metrics import check_quality_gates, evaluate_on_test  # noqa: F401, E402

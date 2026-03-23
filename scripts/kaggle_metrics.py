@@ -109,14 +109,49 @@ def check_baseline_conditions(m: dict, baseline_metrics: dict) -> str | None:
     return None
 
 
-def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
+def predict_with_init(
+    model: Any,
+    X: Any,
+    init_scores: np.ndarray | None = None,
+) -> np.ndarray:
+    """Predict probas with init_scores for residual learning (per-library API).
+
+    CatBoost: Pool(baseline=). XGBoost: DMatrix.set_base_margin. LightGBM: raw + manual softmax.
+    """
+    if init_scores is None:
+        return np.asarray(model.predict_proba(X))
+    cls = type(model).__name__
+    if cls == "CatBoostClassifier":
+        from catboost import Pool  # noqa: PLC0415
+
+        return np.asarray(model.predict_proba(Pool(X, baseline=init_scores)))
+    if cls == "XGBClassifier":
+        import xgboost as xgb  # noqa: PLC0415
+
+        dm = xgb.DMatrix(X)
+        dm.set_base_margin(init_scores.reshape(-1, init_scores.shape[1]))
+        return np.asarray(model.get_booster().predict(dm)).reshape(-1, init_scores.shape[1])
+    if cls == "LGBMClassifier":
+        raw = np.asarray(model.predict(X, raw_score=True))
+        adjusted = raw + init_scores
+        exp_s = np.exp(adjusted - adjusted.max(axis=1, keepdims=True))
+        return exp_s / exp_s.sum(axis=1, keepdims=True)
+    return np.asarray(model.predict_proba(X))
+
+
+def evaluate_on_test(
+    results: dict,
+    X_test: Any,
+    y_test: Any,
+    init_scores_test: Any | None = None,
+) -> None:
     """Compute test metrics for each model (multiclass). Mutates results in-place."""
     from sklearn.metrics import accuracy_score, f1_score, log_loss, recall_score
 
     for _name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = r["model"].predict_proba(X_test)  # (n, 3)
+        y_proba = predict_with_init(r["model"], X_test, init_scores_test)
         y_pred = np.argmax(y_proba, axis=1)
         y_arr = y_test.values if hasattr(y_test, "values") else np.asarray(y_test)
         r["metrics"]["test_log_loss"] = float(log_loss(y_arr, y_proba))
@@ -137,6 +172,7 @@ def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
         r["metrics"]["test_rps"] = float(compute_rps(y_arr, y_proba))
         r["metrics"]["test_brier"] = float(compute_multiclass_brier(y_arr, y_proba))
         r["metrics"]["test_es_mae"] = float(compute_expected_score_mae(y_arr, y_proba))
+        r["metrics"]["mean_p_draw"] = float(y_proba[:, 1].mean()) if y_proba.shape[1] > 1 else 0.0
 
 
 def _check_calibration(m: dict) -> str | None:
@@ -146,8 +182,8 @@ def _check_calibration(m: dict) -> str | None:
             return f"ece_{cls} >= 0.05"
     if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
         return "draw_calibration_bias >= 0.02"
-    if m.get("recall_draw", 0.0) < 0.01:
-        return "recall_draw < 0.01 (model ignores draw class)"
+    if m.get("mean_p_draw", 0.0) < 0.01:
+        return "mean_p_draw < 0.01 (model produces near-zero draw probabilities)"
     return None
 
 

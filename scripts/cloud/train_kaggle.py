@@ -179,10 +179,12 @@ def main() -> None:
     draw_lookup_train = build_draw_rate_lookup(train)
     init_scores_train = _compute_init_scores(X_train, draw_lookup_train)
     init_scores_valid = _compute_init_scores(X_valid, draw_lookup_train)
+    init_scores_test = _compute_init_scores(X_test, draw_lookup_train)
     logger.info(
-        "Elo init scores computed: train=%s valid=%s",
+        "Elo init scores computed: train=%s valid=%s test=%s",
         init_scores_train.shape,
         init_scores_valid.shape,
+        init_scores_test.shape,
     )
 
     results = train_all_sequential(
@@ -194,7 +196,7 @@ def main() -> None:
         init_scores_train=init_scores_train,
         init_scores_valid=init_scores_valid,
     )
-    evaluate_on_test(results, X_test, y_test)
+    evaluate_on_test(results, X_test, y_test, init_scores_test=init_scores_test)
 
     baseline_metrics, draw_lookup = _compute_baselines(train, X_test, y_test, y_train)
     draw_lookup.to_parquet(out_dir / "draw_rate_lookup.parquet", index=False)

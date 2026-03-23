@@ -134,6 +134,7 @@ class TestQualityGates:
                     "ece_class_win": 0.01,
                     "draw_calibration_bias": bias,
                     "recall_draw": 0.05,
+                    "mean_p_draw": 0.14,
                 },
                 "importance": {},
             }
