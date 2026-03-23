@@ -166,11 +166,25 @@ def main() -> None:
         train, valid, test
     )
 
-    # Feature subset selection (incremental validation: top 10 → all)
-    feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "top10")  # v6: top10 only
+    version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
+    out_dir = OUTPUT_DIR / version
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    config = default_hyperparameters()
+    config["catboost"]["train_dir"] = str(out_dir / "catboost_info")
+
+    # Compute Elo init scores BEFORE feature subset (needs blanc_elo/noir_elo)
+    from scripts.features.draw_priors import build_draw_rate_lookup  # noqa: PLC0415
+
+    draw_lookup_train = build_draw_rate_lookup(train)
+    init_scores_train = _compute_init_scores(X_train, draw_lookup_train)
+    init_scores_valid = _compute_init_scores(X_valid, draw_lookup_train)
+    init_scores_test = _compute_init_scores(X_test, draw_lookup_train)
+
+    # Feature subset AFTER init_scores (blanc_elo/noir_elo not in top11)
+    feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "top10")  # v7: top11 only
     if feature_subset == "top10":
-        # Top 11 from CatBoost v3 importance (all features with importance > 0)
-        top10 = [
+        top11 = [
             "diff_elo",
             "elo_proximity",
             "win_rate_home_dom",
@@ -183,25 +197,9 @@ def main() -> None:
             "win_rate_normal_noir",
             "ffe_nb_equipes_blanc",
         ]
-        keep = [c for c in top10 if c in X_train.columns]
-        logger.info("Feature subset: top10 (%d/%d available)", len(keep), len(top10))
+        keep = [c for c in top11 if c in X_train.columns]
+        logger.info("Feature subset: top11 (%d/%d available)", len(keep), len(top11))
         X_train, X_valid, X_test = X_train[keep], X_valid[keep], X_test[keep]
-
-    version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
-    out_dir = OUTPUT_DIR / version
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    config = default_hyperparameters()
-    # CatBoost: write training logs inside versioned out_dir (not cwd)
-    config["catboost"]["train_dir"] = str(out_dir / "catboost_info")
-
-    # Compute Elo baseline init scores for residual learning
-    from scripts.features.draw_priors import build_draw_rate_lookup  # noqa: PLC0415
-
-    draw_lookup_train = build_draw_rate_lookup(train)
-    init_scores_train = _compute_init_scores(X_train, draw_lookup_train)
-    init_scores_valid = _compute_init_scores(X_valid, draw_lookup_train)
-    init_scores_test = _compute_init_scores(X_test, draw_lookup_train)
     logger.info(
         "Elo init scores computed: train=%s valid=%s test=%s",
         init_scores_train.shape,
