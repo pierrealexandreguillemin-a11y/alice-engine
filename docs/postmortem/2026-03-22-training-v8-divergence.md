@@ -194,6 +194,20 @@ Source : https://github.com/microsoft/LightGBM/issues/1978
 | XGBoost | `DMatrix.set_base_margin()` | `DMatrix.set_base_margin() + bst.predict()` |
 | LightGBM | `fit(init_score=)` | `predict(raw_score=True) + init + softmax` |
 
+### Pipeline reordering (v10, commit 6e1fb00)
+
+Quality gate évaluait les probas RAW. Niculescu-Mizil & Caruana (Cornell) :
+GBM raw probas sont structurellement mal calibrées, surtout pour la minorité (14% draw).
+Isotonic regression coupe ECE de ~50%. Le gate doit évaluer le produit fini.
+
+Pipeline corrigé :
+```
+train → calibrate(isotonic, valid) → evaluate(calibré, test) → gate(calibré) → save
+```
+
+Wilkens 2026 (Bundesliga) : même pipeline exact, isotonic rolling 2 saisons.
+scikit-learn docs : "evaluate on held-out test data AFTER applying calibration method."
+
 ## Next Step : Residual Learning + AutoGluon
 
 ### Approche B : Residual Learning (prioritaire)
