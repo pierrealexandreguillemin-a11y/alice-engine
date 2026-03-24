@@ -221,15 +221,28 @@ def main() -> None:
         init_scores_train=init_scores_train,
         init_scores_valid=init_scores_valid,
     )
-    evaluate_on_test(results, X_test, y_test, init_scores_test=init_scores_test)
+    # Step 1: Calibrate on valid set (Niculescu-Mizil & Caruana — isotonic per class)
+    from scripts.kaggle_diagnostics import calibrate_models  # noqa: PLC0415
 
+    calibrators = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)
+
+    # Step 2: Evaluate on test with CALIBRATED probabilities (production output)
+    evaluate_on_test(
+        results,
+        X_test,
+        y_test,
+        init_scores_test=init_scores_test,
+        calibrators=calibrators,
+    )
+
+    # Step 3: Quality gate on calibrated metrics
     baseline_metrics, draw_lookup = _compute_baselines(train, X_test, y_test, y_train)
     draw_lookup.to_parquet(out_dir / "draw_rate_lookup.parquet", index=False)
     logger.info("Saved draw_rate_lookup.parquet (%d cells) for inference", len(draw_lookup))
 
     champion_ll = fetch_champion_ll()
     gate = check_quality_gates(results, baseline_metrics=baseline_metrics, champion_ll=champion_ll)
-    logger.info("Quality gate: %s", gate)
+    logger.info("Quality gate (post-calibration): %s", gate)
 
     save_models(results, encoders, out_dir, model_extensions=MODEL_EXTENSIONS)
     save_diagnostics(
@@ -242,6 +255,7 @@ def main() -> None:
         out_dir,
         init_scores_valid=init_scores_valid,
         init_scores_test=init_scores_test,
+        calibrators=calibrators,
     )
     metadata = build_model_card(results, lineage, gate, config, MODEL_EXTENSIONS, out_dir=out_dir)
     metadata["version"] = version

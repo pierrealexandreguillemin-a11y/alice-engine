@@ -33,10 +33,12 @@ def save_diagnostics(
     out_dir: Path,
     init_scores_valid: Any = None,
     init_scores_test: Any = None,
+    calibrators: dict | None = None,
 ) -> None:
     """Save all diagnostic artifacts for ISO 42001/25059/24029/5259 compliance."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    calibrators = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)
+    if calibrators is None:
+        calibrators = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)
     _save_predictions(results, X_test, y_test, "test", out_dir, calibrators, init_scores_test)
     _save_predictions(results, X_valid, y_valid, "valid", out_dir, calibrators, init_scores_valid)
     _save_feature_importance(results, out_dir)

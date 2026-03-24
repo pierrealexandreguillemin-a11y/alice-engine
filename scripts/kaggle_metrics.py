@@ -172,19 +172,34 @@ def predict_with_init(
     return np.asarray(model.predict_proba(X))
 
 
+def _apply_isotonic(y_proba: np.ndarray, class_calibrators: list) -> np.ndarray:
+    """Apply per-class isotonic calibrators and renormalise to sum=1."""
+    cal = np.column_stack([iso.predict(y_proba[:, c]) for c, iso in enumerate(class_calibrators)])
+    row_sums = cal.sum(axis=1, keepdims=True)
+    row_sums = np.where(row_sums == 0, 1.0, row_sums)
+    return cal / row_sums
+
+
 def evaluate_on_test(
     results: dict,
     X_test: Any,
     y_test: Any,
     init_scores_test: Any | None = None,
+    calibrators: dict | None = None,
 ) -> None:
-    """Compute test metrics for each model (multiclass). Mutates results in-place."""
+    """Compute test metrics for each model (multiclass). Mutates results in-place.
+
+    If calibrators provided (Niculescu-Mizil & Caruana), metrics are computed on
+    calibrated probabilities — the actual production output, not raw GBM scores.
+    """
     from sklearn.metrics import accuracy_score, f1_score, log_loss, recall_score
 
-    for _name, r in results.items():
+    for name, r in results.items():
         if r["model"] is None:
             continue
         y_proba = predict_with_init(r["model"], X_test, init_scores_test)
+        if calibrators and name in calibrators:
+            y_proba = _apply_isotonic(y_proba, calibrators[name])
         y_pred = np.argmax(y_proba, axis=1)
         y_arr = y_test.values if hasattr(y_test, "values") else np.asarray(y_test)
         r["metrics"]["test_log_loss"] = float(log_loss(y_arr, y_proba))
