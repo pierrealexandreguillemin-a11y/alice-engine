@@ -7,6 +7,7 @@ import logging
 import time
 from typing import Any
 
+import numpy as np
 import pandas as pd  # noqa: TCH002 — used at runtime, not just type-checking
 
 logger = logging.getLogger(__name__)
@@ -147,8 +148,6 @@ def _eval_model(
     init_scores_valid: Any | None = None,
 ) -> dict:
     """Evaluate model on validation, return {model, metrics, importance}."""
-    import numpy as np  # noqa: PLC0415
-
     from scripts.kaggle_diagnostics import _compute_metrics  # noqa: PLC0415
     from scripts.kaggle_metrics import predict_with_init  # noqa: PLC0415
 
@@ -220,7 +219,11 @@ def _train_xgboost(
         bst = xgb.train(
             p, dtrain, n_rounds, evals=[(dvalid, "val")], early_stopping_rounds=es, verbose_eval=100
         )
-        result = _eval_model(bst, X_valid, y_valid, time.time() - t0, init_scores_valid)
+        # Wrap Booster for sklearn-compatible pipeline (predict_proba, feature_importances_)
+        from scripts.kaggle_metrics import XGBWrapper  # noqa: PLC0415
+
+        wrapper = XGBWrapper(bst, X_train.columns, p.get("num_class", 3))
+        result = _eval_model(wrapper, X_valid, y_valid, time.time() - t0, init_scores_valid)
         del bst
         gc.collect()
         return result

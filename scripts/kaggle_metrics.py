@@ -109,6 +109,31 @@ def check_baseline_conditions(m: dict, baseline_metrics: dict) -> str | None:
     return None
 
 
+class XGBWrapper:
+    """Wrap xgb.Booster for sklearn-compatible pipeline (predict_proba, save_model)."""
+
+    def __init__(self, booster: Any, feature_names: Any, n_classes: int = 3) -> None:
+        """Init wrapper with Booster, feature names, and class count."""
+        self._booster = booster
+        self._n_classes = n_classes
+        scores = booster.get_score(importance_type="gain")
+        self.feature_importances_ = np.array([scores.get(f, 0.0) for f in feature_names])
+
+    def predict_proba(self, X: Any) -> Any:
+        """Return (n, n_classes) probability matrix via DMatrix predict."""
+        import xgboost as xgb  # noqa: PLC0415, F811
+
+        return self._booster.predict(xgb.DMatrix(X)).reshape(-1, self._n_classes)
+
+    def save_model(self, path: str) -> None:
+        """Delegate to Booster.save_model."""
+        self._booster.save_model(path)
+
+    def get_booster(self) -> Any:
+        """Return underlying xgb.Booster for DMatrix predictions with base_margin."""
+        return self._booster
+
+
 def predict_with_init(
     model: Any,
     X: Any,
@@ -124,12 +149,12 @@ def predict_with_init(
             import xgboost as xgb  # noqa: PLC0415
 
             return np.asarray(model.predict(xgb.DMatrix(X))).reshape(-1, 3)
-        return np.asarray(model.predict_proba(X))
+        return np.asarray(model.predict_proba(X))  # works for _XGBWrapper too
     if cls == "CatBoostClassifier":
         from catboost import Pool  # noqa: PLC0415
 
         return np.asarray(model.predict_proba(Pool(X, baseline=init_scores)))
-    if cls in ("XGBClassifier", "Booster"):
+    if cls in ("XGBClassifier", "Booster", "XGBWrapper"):
         import xgboost as xgb  # noqa: PLC0415
 
         dm = xgb.DMatrix(X)
