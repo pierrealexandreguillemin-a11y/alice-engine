@@ -11,17 +11,25 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
+from sklearn.calibration import calibration_curve
+from sklearn.metrics import accuracy_score, classification_report, f1_score, log_loss, roc_curve
 
-from scripts.kaggle_metrics import _apply_isotonic
+from scripts.kaggle_metrics import (
+    _apply_isotonic,
+    compute_ece,
+    compute_expected_score_mae,
+    compute_multiclass_brier,
+    compute_rps,
+    predict_with_init,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _predict(model: Any, X: Any, init_scores: Any = None) -> Any:
     """Predict probas using predict_with_init (residual learning aware)."""
-    from scripts.kaggle_metrics import predict_with_init  # noqa: PLC0415
-
     return predict_with_init(model, X, init_scores)
 
 
@@ -61,7 +69,6 @@ def calibrate_models(
 ) -> dict:
     """Fit per-class isotonic calibration (3 regressors per model). Save calibrators."""
     import joblib  # noqa: PLC0415
-    import numpy as np  # noqa: PLC0415
     from sklearn.isotonic import IsotonicRegression  # noqa: PLC0415
 
     calibrators: dict = {}
@@ -93,8 +100,6 @@ def _save_predictions(
     init_scores: Any = None,
 ) -> None:
     """Save per-model multiclass predictions as parquet (raw + calibrated)."""
-    import numpy as np  # noqa: PLC0415
-
     for name, r in results.items():
         if r["model"] is None:
             continue
@@ -141,9 +146,6 @@ def _save_classification_reports(
     init_scores: Any = None,
 ) -> None:
     """Save 3-class classification report per model (ISO 25059)."""
-    import numpy as np  # noqa: PLC0415
-    from sklearn.metrics import classification_report  # noqa: PLC0415
-
     reports = {}
     for name, r in results.items():
         if r["model"] is None:
@@ -204,9 +206,6 @@ def _save_roc_curves(
     init_scores: Any = None,
 ) -> None:
     """Save per-class ROC curve data (one-vs-rest) per model (ISO 25059)."""
-    import numpy as np  # noqa: PLC0415
-    from sklearn.metrics import roc_curve  # noqa: PLC0415
-
     class_names = ["loss", "draw", "win"]
     count = 0
     for name, r in results.items():
@@ -231,9 +230,6 @@ def _save_calibration_curves(
     init_scores: Any = None,
 ) -> None:
     """Save per-class calibration curves per model (ISO 24029 robustness)."""
-    import numpy as np  # noqa: PLC0415
-    from sklearn.calibration import calibration_curve  # noqa: PLC0415
-
     class_names = ["loss", "draw", "win"]
     for name, r in results.items():
         if r["model"] is None:
@@ -266,16 +262,6 @@ def _save_feature_distributions(X_train: Any, out_dir: Path) -> None:
 
 def _compute_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
     """Multiclass (3-class) validation metrics (ISO 25059)."""
-    import numpy as np  # noqa: PLC0415
-    from sklearn.metrics import accuracy_score, f1_score, log_loss  # noqa: PLC0415
-
-    from scripts.kaggle_metrics import (  # noqa: PLC0415
-        compute_ece,
-        compute_expected_score_mae,
-        compute_multiclass_brier,
-        compute_rps,
-    )
-
     y_true_arr = np.asarray(y_true)
     y_proba_arr = np.asarray(y_proba)  # (n, 3)
 

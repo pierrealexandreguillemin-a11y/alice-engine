@@ -21,14 +21,13 @@ from scripts.kaggle_constants import (  # noqa: E402
     LEAKY_COLUMNS,
     MODEL_EXTENSIONS,  # noqa: F401 — re-exported for train_kaggle.py
 )
-from scripts.kaggle_metrics import check_quality_gates  # noqa: F401,E402 — re-exported for tests
 
 
 def _encode_categoricals(splits: list[pd.DataFrame]) -> dict:
     """Label-encode all categorical columns. Adds UNKNOWN class for inference safety."""
-    import numpy as np  # noqa: PLC0415
+    # fmt: off
     from sklearn.preprocessing import LabelEncoder  # noqa: PLC0415
-
+    # fmt: on
     all_cat_cols = sorted(
         set(CATEGORICAL_FEATURES) | set(CATBOOST_CAT_FEATURES) | set(ADVANCED_CAT_FEATURES)
     )
@@ -284,11 +283,7 @@ def train_all_sequential(
     init_scores_valid: Any | None = None,
 ) -> dict:
     """CatBoost -> gc -> XGBoost -> gc -> LightGBM. Sequential memory management."""
-    trainers = [
-        ("CatBoost", _train_catboost),
-        ("XGBoost", _train_xgboost),
-        ("LightGBM", _train_lightgbm),
-    ]
+    trainers = [("CatBoost", _train_catboost), ("XGBoost", _train_xgboost), ("LightGBM", _train_lightgbm)]  # fmt: skip
     results: dict = {}
     for name, fn in trainers:
         results[name] = fn(
