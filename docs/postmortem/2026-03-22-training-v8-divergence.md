@@ -169,6 +169,31 @@ pour features sparse. CatBoost docs : "if overfitting early, decrease LR or incr
 **Soccer multiclass** (Springer 2024) : le draw est toujours la classe la plus dure à prédire.
 La calibration (pas l'accuracy) est la métrique pertinente pour les systèmes de recommandation.
 
+### Bugs API constructeurs (vérifiés 2026-03-24)
+
+**CatBoost `predict_proba(Pool(baseline=))` non-normalisé** (issue #1554, #1550) :
+predict_proba avec un Pool contenant un baseline produit des sorties qui ne somment PAS à 1.
+Fix : utiliser `predict(type='RawFormulaVal') + init_scores + softmax` manuelle.
+Source : https://github.com/catboost/catboost/issues/1554
+
+**XGBoost `base_margin` sklearn API cassé pour multiclass** (issues #5288, #3505, #11872, #4190) :
+XGBClassifier.fit(base_margin=) n'applique pas correctement le base_margin en multiclass.
+Fix : utiliser l'API native `xgb.train()` + `DMatrix.set_base_margin()`.
+Source : https://github.com/dmlc/xgboost/issues/5288
+
+**LightGBM `predict()` ne supporte PAS init_score** (issues #1978, #1778) :
+Feature request ouverte depuis 2019, non implémentée.
+Fix : `predict(raw_score=True) + init_scores + softmax` manuelle.
+Source : https://github.com/microsoft/LightGBM/issues/1978
+
+### predict_with_init — approche unifiée (commit fe61e60)
+
+| Library | Training | Inference avec init_scores |
+|---------|----------|---------------------------|
+| CatBoost | `Pool(baseline=)` | `predict(RawFormulaVal) + init + softmax` |
+| XGBoost | `DMatrix.set_base_margin()` | `DMatrix.set_base_margin() + bst.predict()` |
+| LightGBM | `fit(init_score=)` | `predict(raw_score=True) + init + softmax` |
+
 ## Next Step : Residual Learning + AutoGluon
 
 ### Approche B : Residual Learning (prioritaire)
