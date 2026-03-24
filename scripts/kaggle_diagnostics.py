@@ -13,6 +13,8 @@ from typing import Any
 
 import pandas as pd
 
+from scripts.kaggle_metrics import _apply_isotonic
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,7 +108,7 @@ def _save_predictions(
             "y_pred": y_pred,
         }
         if calibrators and name in calibrators:
-            y_cal = _apply_calibration(y_proba, calibrators[name])
+            y_cal = _apply_isotonic(y_proba, calibrators[name])
             data["y_proba_cal_loss"] = y_cal[:, 0]
             data["y_proba_cal_draw"] = y_cal[:, 1]
             data["y_proba_cal_win"] = y_cal[:, 2]
@@ -118,16 +120,6 @@ def _save_predictions(
         split,
         sum(1 for r in results.values() if r["model"] is not None),
     )
-
-
-def _apply_calibration(y_proba: Any, class_calibrators: list) -> Any:
-    """Apply per-class isotonic calibrators and renormalise to sum=1."""
-    import numpy as np  # noqa: PLC0415
-
-    cal = np.column_stack([iso.predict(y_proba[:, c]) for c, iso in enumerate(class_calibrators)])
-    row_sums = cal.sum(axis=1, keepdims=True)
-    row_sums = np.where(row_sums == 0, 1.0, row_sums)
-    return cal / row_sums
 
 
 def _save_feature_importance(results: dict, out_dir: Path) -> None:
@@ -190,9 +182,9 @@ def _extract_curve(name: str, model: Any) -> pd.DataFrame | None:
                 key = next(iter(metrics))
                 return pd.DataFrame({"iteration": range(len(metrics[key])), key: metrics[key]})
     if name == "XGBoost":
-        evals = model.evals_result() if callable(getattr(model, "evals_result", None)) else {}
-        if "validation_0" in evals:
-            metrics = evals["validation_0"]
+        evals = getattr(model, "evals_result_", None) or {}
+        if "val" in evals:
+            metrics = evals["val"]
             key = next(iter(metrics))
             return pd.DataFrame({"iteration": range(len(metrics[key])), key: metrics[key]})
     if name == "LightGBM" and hasattr(model, "evals_result_"):

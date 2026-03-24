@@ -91,7 +91,6 @@ def _compute_baselines(
     y_train: pd.Series,
 ) -> dict:
     """Compute naive + Elo baselines for quality gate (ISO 25059)."""
-    import numpy as np  # noqa: PLC0415
     from sklearn.metrics import log_loss as sk_log_loss  # noqa: PLC0415
 
     from scripts.baselines import compute_elo_baseline, compute_naive_baseline  # noqa: PLC0415
@@ -123,16 +122,6 @@ def _compute_baselines(
     )
 
 
-def _compute_init_scores(X: pd.DataFrame, draw_lookup: pd.DataFrame) -> np.ndarray:
-    """Compute Elo baseline init scores from X features."""
-    from scripts.baselines import compute_elo_baseline, compute_elo_init_scores  # noqa: PLC0415
-
-    b_elo = X["blanc_elo"].values if "blanc_elo" in X.columns else np.full(len(X), 1500)
-    n_elo = X["noir_elo"].values if "noir_elo" in X.columns else np.full(len(X), 1500)
-    elo_proba = compute_elo_baseline(b_elo, n_elo, draw_lookup)
-    return compute_elo_init_scores(elo_proba)
-
-
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
     logger.info("ALICE Engine — V8 MultiClass Training (Kernel 2/2)")
@@ -147,12 +136,11 @@ def main() -> None:
         setup_hf_auth,
     )
     from scripts.kaggle_diagnostics import save_diagnostics  # noqa: PLC0415
+    from scripts.kaggle_metrics import check_quality_gates, evaluate_on_test  # noqa: PLC0415
     from scripts.kaggle_trainers import (  # noqa: PLC0415
         LABEL_COLUMN,
         MODEL_EXTENSIONS,
-        check_quality_gates,
         default_hyperparameters,
-        evaluate_on_test,
         prepare_features,
         train_all_sequential,
     )
@@ -174,12 +162,25 @@ def main() -> None:
     config["catboost"]["train_dir"] = str(out_dir / "catboost_info")
 
     # Compute Elo init scores BEFORE feature subset (needs blanc_elo/noir_elo)
+    from scripts.baselines import compute_init_scores_from_features  # noqa: PLC0415
     from scripts.features.draw_priors import build_draw_rate_lookup  # noqa: PLC0415
 
     draw_lookup_train = build_draw_rate_lookup(train)
-    init_scores_train = _compute_init_scores(X_train, draw_lookup_train)
-    init_scores_valid = _compute_init_scores(X_valid, draw_lookup_train)
-    init_scores_test = _compute_init_scores(X_test, draw_lookup_train)
+    init_scores_train = compute_init_scores_from_features(X_train, draw_lookup_train)
+    init_scores_valid = compute_init_scores_from_features(X_valid, draw_lookup_train)
+    init_scores_test = compute_init_scores_from_features(X_test, draw_lookup_train)
+    for _name, _scores in [
+        ("train", init_scores_train),
+        ("valid", init_scores_valid),
+        ("test", init_scores_test),
+    ]:
+        logger.info(
+            "  %s init_scores: min=%.3f max=%.3f mean=[%.3f, %.3f, %.3f]",
+            _name,
+            _scores.min(),
+            _scores.max(),
+            *_scores.mean(axis=0),
+        )
 
     # Feature subset AFTER init_scores (blanc_elo/noir_elo not in top11)
     feature_subset = os.environ.get("ALICE_FEATURE_SUBSET", "all")  # v9: all features + low LR

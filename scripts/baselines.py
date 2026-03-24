@@ -77,6 +77,18 @@ def compute_elo_init_scores(
     return init_scores
 
 
+def compute_init_scores_from_features(X: pd.DataFrame, draw_lookup: pd.DataFrame) -> np.ndarray:
+    """Compute Elo baseline init scores from X features (needs blanc_elo/noir_elo columns).
+
+    Convenience wrapper for train_kaggle.py and inference (Phase 2).
+    Falls back to 1500 Elo when columns are missing.
+    """
+    b_elo = X["blanc_elo"].values if "blanc_elo" in X.columns else np.full(len(X), 1500)
+    n_elo = X["noir_elo"].values if "noir_elo" in X.columns else np.full(len(X), 1500)
+    elo_proba = compute_elo_baseline(b_elo, n_elo, draw_lookup)
+    return compute_elo_init_scores(elo_proba)
+
+
 def _lookup_draw_rate(
     avg_elo: np.ndarray,
     abs_diff: np.ndarray,

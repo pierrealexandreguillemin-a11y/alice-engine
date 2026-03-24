@@ -21,6 +21,7 @@ from scripts.kaggle_constants import (  # noqa: E402
     LEAKY_COLUMNS,
     MODEL_EXTENSIONS,  # noqa: F401 — re-exported for train_kaggle.py
 )
+from scripts.kaggle_metrics import check_quality_gates  # noqa: F401,E402 — re-exported for tests
 
 
 def _encode_categoricals(splits: list[pd.DataFrame]) -> dict:
@@ -216,13 +217,15 @@ def _train_xgboost(
         if init_scores_valid is not None:
             dvalid.set_base_margin(init_scores_valid.ravel())
         t0 = time.time()
-        bst = xgb.train(
-            p, dtrain, n_rounds, evals=[(dvalid, "val")], early_stopping_rounds=es, verbose_eval=100
-        )
+        evals_log: dict = {}
+        # fmt: off
+        bst = xgb.train(p, dtrain, n_rounds, evals=[(dvalid, "val")],
+                        early_stopping_rounds=es, verbose_eval=100, evals_result=evals_log)
+        # fmt: on
         # Wrap Booster for sklearn-compatible pipeline (predict_proba, feature_importances_)
         from scripts.kaggle_metrics import XGBWrapper  # noqa: PLC0415
 
-        wrapper = XGBWrapper(bst, X_train.columns, p.get("num_class", 3))
+        wrapper = XGBWrapper(bst, X_train.columns, p.get("num_class", 3), evals_result=evals_log)
         result = _eval_model(wrapper, X_valid, y_valid, time.time() - t0, init_scores_valid)
         del bst
         gc.collect()
@@ -299,7 +302,3 @@ def train_all_sequential(
         )
         gc.collect()
     return results
-
-
-# Re-exported from kaggle_metrics for backward compatibility (ISO 5055 <300 lines)
-from scripts.kaggle_metrics import check_quality_gates, evaluate_on_test  # noqa: F401, E402

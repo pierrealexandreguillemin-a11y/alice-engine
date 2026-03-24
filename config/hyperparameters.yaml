@@ -1,6 +1,7 @@
+# V9 residual-tuned hyperparameters (2026-03-24)
 # Hyperparameters Configuration - Alice-Engine ML Pipeline
-# Version: 3.0.0
-# Date: 21 Mars 2026
+# Version: 4.0.0
+# Date: 24 Mars 2026
 # Conformite: ISO/IEC 42001 (AI Management), ISO/IEC 5259 (Data Quality)
 #
 # Usage:
@@ -10,8 +11,9 @@
 # JUSTIFICATIONS TECHNIQUES:
 # Toutes les valeurs sont justifiees par:
 # - Documentation officielle CatBoost/XGBoost/LightGBM
-# - Caracteristiques dataset ALICE (1.1M echiquiers, ~156 features V8)
+# - Caracteristiques dataset ALICE (1.1M echiquiers, ~177 features V8)
 # - Best practices industrie (Kaggle, papers, benchmarks)
+# - Residual learning (init_score/base_margin depuis baseline Elo)
 #
 # Sources:
 # - https://catboost.ai/docs/concepts/parameter-tuning.html
@@ -24,43 +26,49 @@
 global:
   random_seed: 42               # Standard reproducibility seed
   n_folds: 5                    # K-Fold CV: 5 est standard (bias-variance tradeoff)
-  early_stopping_rounds: 100    # 100 iterations sans amelioration = stop
-  eval_metric: "multi_logloss"   # Multiclass logloss: optimise calibration 3-class
+  early_stopping_rounds: 500    # 500 iterations sans amelioration = stop
+  eval_metric: "multi_logloss"  # Multiclass logloss: optimise calibration 3-class
   task_type: "CPU"              # CPU par defaut, GPU si disponible
-  verbose: 100                  # Log tous les 100 iterations
+  verbose: 500                  # Log tous les 500 iterations
 
 # =============================================================================
 # CATBOOST - Model principal (categories natives)
 # Documentation: https://catboost.ai/docs/concepts/parameter-tuning.html
 #
-# JUSTIFICATIONS CATBOOST:
-# - depth=8: Recommended 6-10 (catboost.ai/docs), 147 features need more splits
-# - learning_rate: NOT SET — auto-calculated by CatBoost for Logloss (doc recommended)
-# - iterations=3000 + early_stopping=100: let model converge probabilities, not just ranking
-# - border_count=254: CPU default, GPU default is 128 (quality over speed)
-# - l2_leaf_reg=3: Default CatBoost, moderate regularization
-# - min_data_in_leaf=20: Prevents overfitting on small groups
+# JUSTIFICATIONS CATBOOST V9 residual-tuned:
+# - depth=4: Arbres peu profonds — le modele apprend UNIQUEMENT les corrections Elo
+# - learning_rate=0.005: Tres faible pour residual learning (20000 iterations)
+# - border_count=128: GPU-compatible (defaut GPU)
+# - l2_leaf_reg=10: Regularisation forte sur features sparse (177 cols)
+# - min_data_in_leaf=200: Previent overfitting sur petits groupes
+# - random_strength=3, bagging_temperature=1: Regularisation stochastique
+# - model_size_reg=0.5: Compression modele (ISO 23894 risk)
 # =============================================================================
 catboost:
   # Boosting parameters
-  iterations: 3000              # 3000 with early_stopping=100 — converge calibration
-  # learning_rate: auto         # NOT SET — CatBoost auto-calculates for Logloss
-  depth: 8                      # 6->8: 147 features need deeper trees (doc: 6-10)
-  border_count: 254             # Max splits per feature (GPU default 128 is too low)
+  iterations: 20000             # 20000 avec early_stopping=500 — residual learning
+  depth: 4                      # Peu profond: apprend corrections Elo, pas l'Elo
+  border_count: 128             # GPU default, compatible T4/P100
 
   # Regularization
-  l2_leaf_reg: 3                # Default CatBoost (L2 regularization)
-  min_data_in_leaf: 20          # Min samples per leaf
+  l2_leaf_reg: 10               # Regularisation forte sur 177 features sparse
+  min_data_in_leaf: 200         # Min samples par feuille (large dataset)
+  random_strength: 3            # Regularisation stochastique
+  bagging_temperature: 1        # Bayesian bootstrap
+  model_size_reg: 0.5           # Compression modele
+
+  # Learning rate
+  learning_rate: 0.005          # Tres faible pour residual learning
 
   # Objective (MultiClass 3-way: loss/draw/win)
   loss_function: "MultiClass"   # CatBoost native multiclass
 
   # Model selection
-  use_best_model: true          # Restore best iteration from eval_metric on valid set
+  use_best_model: true          # Restore best iteration depuis eval_metric sur valid set
 
   # Performance
-  thread_count: -1              # All CPU cores
-  task_type: "CPU"              # Auto-set GPU by kaggle_trainers.py if GPU detected
+  thread_count: 4               # Auto-set par kaggle_trainers.py
+  task_type: "CPU"              # Auto-set GPU par kaggle_trainers.py si GPU detecte
 
   # Categorical features (ALICE dataset)
   cat_features:
@@ -73,46 +81,53 @@ catboost:
     - zone_enjeu_dom            # montee, danger, mi_tableau
 
   # Early stopping
-  early_stopping_rounds: 100    # 100 iterations, coherent with global + kaggle_trainers.py
+  early_stopping_rounds: 500    # 500 iterations sans amelioration
 
   # Reproducibility
   random_seed: 42
 
   # Output
-  verbose: 100
+  verbose: 500
 
 # =============================================================================
 # XGBOOST - Model secondaire (rapide, bien documente)
 # Documentation: https://xgboost.readthedocs.io/en/stable/parameter.html
+# XGBoost uses native API params (eta, lambda, alpha) not sklearn aliases
 #
-# JUSTIFICATIONS XGBOOST:
-# - max_depth=8: Aligned with CatBoost depth, 147 features
-# - learning_rate: NOT SET — let XGBoost use default 0.3 or tune
-# - tree_method="hist": Histogram-based, 10x faster
-# - reg_lambda=1.0: L2 regularization default
+# JUSTIFICATIONS XGBOOST V9 residual-tuned:
+# - max_depth=4: Aligned with CatBoost residual depth
+# - eta=0.005: Alias learning_rate, tres faible pour residual learning
+# - lambda=10.0: L2 regularisation forte (native API name)
+# - alpha=0.5: L1 regularisation (native API name)
+# - min_child_weight=50: Min sum poids instances (equivalent min_data_in_leaf)
+# - subsample=0.7, colsample_bytree=0.5: Subsampling pour 177 features sparse
 # =============================================================================
 xgboost:
   # Boosting parameters
-  n_estimators: 3000
-  # learning_rate: auto         # NOT SET — XGBoost default 0.3, adjusted by early stopping
-  max_depth: 8                  # 6->8: aligned with CatBoost
+  n_estimators: 20000
+  max_depth: 4                  # Peu profond: aligned with CatBoost residual
+  eta: 0.005                    # Native API alias for learning_rate
   objective: "multi:softprob"   # Multiclass probability output
   num_class: 3                  # loss=0, draw=1, win=2
 
-  # Regularization
-  reg_lambda: 1.0               # L2 regularization (defaut)
-  reg_alpha: 0.0                # L1 regularization (off par defaut)
-  min_child_weight: 1           # Min sum of instance weight
+  # Regularization (native API names)
+  lambda: 10.0                  # L2 regularization (native API, alias reg_lambda)
+  alpha: 0.5                    # L1 regularization (native API, alias reg_alpha)
+  min_child_weight: 50          # Min sum instance weight
+
+  # Subsampling
+  subsample: 0.7                # Row subsampling
+  colsample_bytree: 0.5         # Feature subsampling pour 177 sparse features
 
   # Performance
   tree_method: "hist"           # Histogram-based; device auto-set cuda par kaggle_trainers.py
-  n_jobs: -1                    # Tous les cores
+  nthread: 4                    # Nombre threads natif XGBoost
 
   # Early stopping
-  early_stopping_rounds: 100   # Coherent with global + kaggle_trainers.py
+  early_stopping_rounds: 500    # 500 iterations sans amelioration
 
   # Reproducibility
-  random_state: 42
+  seed: 42                      # Native XGBoost seed
 
   # Output
   verbosity: 1
@@ -121,33 +136,42 @@ xgboost:
 # LIGHTGBM - Model secondaire (tres rapide, memoire efficiente)
 # Documentation: https://lightgbm.readthedocs.io/en/latest/Parameters.html
 #
-# JUSTIFICATIONS LIGHTGBM:
-# - num_leaves=255: 2^8-1 (equivalent depth=8, aligned with CatBoost)
-# - max_depth=-1: Controlled by num_leaves, not depth
-# - min_child_samples=20: Consistent with CatBoost min_data_in_leaf
+# JUSTIFICATIONS LIGHTGBM V9 residual-tuned:
+# - num_leaves=15: 2^4-1 (equivalent depth=4, aligned residual)
+# - max_depth=4: Controle par depth explicite (residual learning)
+# - learning_rate=0.003: Plus faible que CatBoost/XGBoost (LightGBM converge plus vite)
+# - reg_lambda=10.0, reg_alpha=0.5: Regularisation forte sur 177 features sparse
+# - min_child_samples=200: Coherent avec CatBoost min_data_in_leaf
+# - min_gain_to_split=0.01: Previent splits non-informatifs
+# - subsample=0.7, colsample_bytree=0.5: Subsampling features sparse
 # =============================================================================
 lightgbm:
   # Boosting parameters
-  n_estimators: 3000
-  # learning_rate: auto         # NOT SET — LightGBM default 0.1
-  num_leaves: 255               # 2^depth - 1 = 2^8 - 1 (depth=8 equivalent)
-  max_depth: -1                 # -1 = no limit (controle par num_leaves)
+  n_estimators: 20000
+  num_leaves: 15                # 2^4-1 = 15 (depth=4 equivalent)
+  max_depth: 4                  # Depth explicite: residual learning
+  learning_rate: 0.003          # Tres faible (LightGBM converge plus vite)
   objective: "multiclass"       # LightGBM native multiclass
   num_class: 3                  # loss=0, draw=1, win=2
 
   # Regularization
-  reg_lambda: 1.0               # L2 regularization
-  reg_alpha: 0.0                # L1 regularization
-  min_child_samples: 20         # Coherent avec CatBoost
+  reg_lambda: 10.0              # L2 regularization forte
+  reg_alpha: 0.5                # L1 regularization
+  min_child_samples: 200        # Coherent avec CatBoost min_data_in_leaf
+  min_gain_to_split: 0.01       # Previent splits non-informatifs
+
+  # Subsampling
+  subsample: 0.7                # Row subsampling
+  colsample_bytree: 0.5         # Feature subsampling pour 177 sparse features
 
   # Categorical features
   categorical_feature: "auto"   # Auto-detect from pandas categorical
 
-  # Performance — device auto-set gpu par kaggle_trainers.py si GPU disponible
-  n_jobs: -1
+  # Performance
+  n_jobs: 4                     # Nombre threads
 
   # Early stopping
-  early_stopping_rounds: 100   # Coherent with global + kaggle_trainers.py
+  early_stopping_rounds: 500    # 500 iterations sans amelioration
 
   # Reproducibility
   random_state: 42

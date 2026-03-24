@@ -112,10 +112,17 @@ def check_baseline_conditions(m: dict, baseline_metrics: dict) -> str | None:
 class XGBWrapper:
     """Wrap xgb.Booster for sklearn-compatible pipeline (predict_proba, save_model)."""
 
-    def __init__(self, booster: Any, feature_names: Any, n_classes: int = 3) -> None:
-        """Init wrapper with Booster, feature names, and class count."""
+    def __init__(
+        self,
+        booster: Any,
+        feature_names: Any,
+        n_classes: int = 3,
+        evals_result: dict | None = None,
+    ) -> None:
+        """Init wrapper with Booster, feature names, class count, and eval history."""
         self._booster = booster
         self._n_classes = n_classes
+        self.evals_result_ = evals_result if evals_result is not None else {}
         scores = booster.get_score(importance_type="gain")
         self.feature_importances_ = np.array([scores.get(f, 0.0) for f in feature_names])
 
