@@ -228,6 +228,15 @@ def evaluate_on_test(
         r["metrics"]["test_brier"] = float(compute_multiclass_brier(y_arr, y_proba))
         r["metrics"]["test_es_mae"] = float(compute_expected_score_mae(y_arr, y_proba))
         r["metrics"]["mean_p_draw"] = float(y_proba[:, 1].mean()) if y_proba.shape[1] > 1 else 0.0
+        # ECE + draw bias on calibrated test probas (not raw valid — Niculescu-Mizil)
+        for c, cls in enumerate(["loss", "draw", "win"]):
+            r["metrics"][f"ece_class_{cls}"] = float(
+                compute_ece((y_arr == c).astype(float), y_proba[:, c])
+            )
+        observed_draw = float((y_arr == 1).mean())
+        r["metrics"]["draw_calibration_bias"] = round(
+            float(y_proba[:, 1].mean()) - observed_draw, 6
+        )
 
 
 def _check_calibration(m: dict) -> str | None:

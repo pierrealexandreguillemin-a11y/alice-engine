@@ -246,7 +246,6 @@ def generate_system_architecture() -> bool:
         ("api2", "ce2"),
         ("ce2", "out"),
         ("api2", "oracle"),
-        ("ce2", "out"),
     ]:
         g.edge(src, dst)
     g.edge("qg", "hf_model", label="PASS")
