@@ -108,32 +108,30 @@ def default_hyperparameters() -> dict:
             xgb_gpu = {"tree_method": "hist", "device": "cuda"} if int(xv.split(".")[0]) >= 2 else {"tree_method": "gpu_hist"}
         except Exception:
             xgb_gpu = {"tree_method": "gpu_hist"}
-    # V8v9: residual learning hyperparams — low LR, shallow trees, strong reg
-    # Residual corrections are tiny (~0.008 log_loss), LR 0.03 overshoots in 10 iters.
-    # colsample_bytree=0.5 critical for 177 sparse features (feature bagging ignores noise).
+    # V9: residual-tuned (LR=0.005, depth=4, colsample=0.5 for 177 sparse features)
     return {
         "global": {"random_seed": 42, "early_stopping_rounds": 500, "eval_metric": "multi_logloss"},
         "catboost": {
             "iterations": 20000, "depth": 4, "border_count": 128,
             "learning_rate": 0.005, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
-            "random_strength": 2, "bagging_temperature": 1,
+            "random_strength": 3, "bagging_temperature": 1, "model_size_reg": 0.5,
             "thread_count": 4, "task_type": "GPU" if gpu else "CPU",
             "use_best_model": True, "loss_function": "MultiClass",
             "random_seed": 42, "verbose": 500, "early_stopping_rounds": 500,
         },
         "xgboost": {
-            "n_estimators": 20000, "max_depth": 4, "learning_rate": 0.005,
+            "n_estimators": 20000, "max_depth": 4, "eta": 0.005,
             "objective": "multi:softprob", "num_class": 3,
-            "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_weight": 50,
+            "lambda": 10.0, "alpha": 0.5, "min_child_weight": 50,
             "subsample": 0.7, "colsample_bytree": 0.5,
-            **xgb_gpu, "n_jobs": 4, "random_state": 42,
+            **xgb_gpu, "nthread": 4, "seed": 42,
             "early_stopping_rounds": 500, "verbosity": 1,
         },
         "lightgbm": {
             "n_estimators": 20000, "num_leaves": 15, "max_depth": 4,
-            "learning_rate": 0.005, "objective": "multiclass", "num_class": 3,
+            "learning_rate": 0.003, "objective": "multiclass", "num_class": 3,
             "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_samples": 200,
-            "subsample": 0.7, "colsample_bytree": 0.5,
+            "min_gain_to_split": 0.01, "subsample": 0.7, "colsample_bytree": 0.5,
             "n_jobs": 4, "random_state": 42,
             "early_stopping_rounds": 500, "verbose": -1,
         },
@@ -158,11 +156,10 @@ def _eval_model(
     y_pred = np.argmax(y_proba, axis=1)
     metrics = _compute_metrics(y_valid.values, y_pred, y_proba)
     metrics["train_time_s"] = train_time
-    importance = (
-        dict(zip(X_valid.columns, model.feature_importances_, strict=False))
-        if hasattr(model, "feature_importances_")
-        else {}
-    )
+    if hasattr(model, "feature_importances_"):  # CatBoost, LightGBM
+        importance = dict(zip(X_valid.columns, model.feature_importances_, strict=False))
+    else:  # xgb.Booster
+        importance = model.get_score(importance_type="gain") if hasattr(model, "get_score") else {}
     return {"model": model, "metrics": metrics, "importance": importance}
 
 
@@ -206,19 +203,25 @@ def _train_xgboost(
     init_scores_train: Any | None = None,
     init_scores_valid: Any | None = None,
 ) -> dict:
-    """Train XGBoost with residual learning via base_margin."""
+    """Train XGBoost via native xgb.train + DMatrix (sklearn API base_margin broken #5288)."""
     try:
-        from xgboost import XGBClassifier  # noqa: PLC0415
+        import xgboost as xgb  # noqa: PLC0415
 
-        xgb = XGBClassifier(**params, eval_metric="mlogloss")
-        fit_kw: dict = {"eval_set": [(X_valid, y_valid)], "verbose": 100}
-        # XGBClassifier.fit() has no base_margin for eval_set; training still benefits
+        p = {k: v for k, v in params.items() if k not in ("n_estimators", "early_stopping_rounds")}
+        n_rounds = params.get("n_estimators", 5000)
+        es = params.get("early_stopping_rounds", 500)
+        dtrain = xgb.DMatrix(X_train, label=y_train)
+        dvalid = xgb.DMatrix(X_valid, label=y_valid)
         if init_scores_train is not None:
-            fit_kw["base_margin"] = init_scores_train.ravel()  # (n*3,) flat for XGBClassifier
+            dtrain.set_base_margin(init_scores_train.ravel())
+        if init_scores_valid is not None:
+            dvalid.set_base_margin(init_scores_valid.ravel())
         t0 = time.time()
-        xgb.fit(X_train, y_train, **fit_kw)
-        result = _eval_model(xgb, X_valid, y_valid, time.time() - t0, init_scores_valid)
-        del xgb
+        bst = xgb.train(
+            p, dtrain, n_rounds, evals=[(dvalid, "val")], early_stopping_rounds=es, verbose_eval=100
+        )
+        result = _eval_model(bst, X_valid, y_valid, time.time() - t0, init_scores_valid)
+        del bst
         gc.collect()
         return result
     except Exception:

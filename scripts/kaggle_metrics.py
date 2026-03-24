@@ -118,19 +118,24 @@ def predict_with_init(
 
     CatBoost: Pool(baseline=). XGBoost: DMatrix.set_base_margin. LightGBM: raw + manual softmax.
     """
-    if init_scores is None:
-        return np.asarray(model.predict_proba(X))
     cls = type(model).__name__
+    if init_scores is None:
+        if cls == "Booster":
+            import xgboost as xgb  # noqa: PLC0415
+
+            return np.asarray(model.predict(xgb.DMatrix(X))).reshape(-1, 3)
+        return np.asarray(model.predict_proba(X))
     if cls == "CatBoostClassifier":
         from catboost import Pool  # noqa: PLC0415
 
         return np.asarray(model.predict_proba(Pool(X, baseline=init_scores)))
-    if cls == "XGBClassifier":
+    if cls in ("XGBClassifier", "Booster"):
         import xgboost as xgb  # noqa: PLC0415
 
         dm = xgb.DMatrix(X)
-        dm.set_base_margin(init_scores.ravel())  # (n*3,) flat for XGBoost DMatrix
-        return np.asarray(model.get_booster().predict(dm)).reshape(-1, init_scores.shape[1])
+        dm.set_base_margin(init_scores.ravel())
+        bst = model.get_booster() if hasattr(model, "get_booster") else model
+        return np.asarray(bst.predict(dm)).reshape(-1, init_scores.shape[1])
     if cls == "LGBMClassifier":
         raw = np.asarray(model.predict(X, raw_score=True))
         adjusted = raw + init_scores

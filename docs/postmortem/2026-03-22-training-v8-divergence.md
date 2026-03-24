@@ -76,6 +76,12 @@ puis commence à memoriser les artefacts des features sparse.
 | v1 | affcb73 | Premier push | ERROR (path /notebooks/ manquant) |
 | v2 | 179a027 | Fix path notebooks/ | COMPLETE — gate FAILED (divergence) |
 | v3 | 1d0289d | Hyperparams conservatifs (LR=0.03, depth=6) | COMPLETE — gate FAILED (CatBoost 0.926 vs Elo ~0.92) |
+| v4 | b114d1c | Residual learning + 177 features | ERROR — ImportError (dataset cache stale) |
+| v5 | b114d1c | Same code, re-upload dataset | COMPLETE — gate FAILED (draw_calibration_bias). **CatBoost 0.8856 BEATS Elo** |
+| v6 | bf0392e | Top 11 features (v3 importance) | COMPLETE — gate FAILED (ece_loss). Bug: init_scores AFTER subset → Elo=1500 |
+| v7 | — | Stoppé manuellement | — |
+| v8 | 574e0d1 | 13 features domaine + init fix + T4 | COMPLETE — gate FAILED (draw_calibration_bias). CatBoost 0.8863 |
+| v9 | 0fbfd1f | All 177 features + residual-tuned hyperparams | EN ATTENTE |
 
 ## V3 Results (2026-03-22 21:28)
 
@@ -113,6 +119,55 @@ Le modèle ne les trouve pas.
 "Les modèles apprendront" n'est pas une stratégie. Avec 177 features dont 94% bruit,
 même CatBoost ne peut pas trouver le signal draw. L'approche YAGNI aurait dû être
 appliquée aux FEATURES (start small, add if gain), pas à la technique de renforcement Elo.
+
+## V5-V8 Results (2026-03-23) — Residual Learning
+
+### V5: First Elo beat (177 features, init_scores, LR=0.03)
+
+| Modèle | Best iter | Best log_loss | vs Elo (0.894) |
+|--------|-----------|---------------|----------------|
+| CatBoost | 9 | **0.8856** | -0.009 BEATS |
+| XGBoost | ~1 | 0.984 | CASSÉ (base_margin bug) |
+| LightGBM | 9 | **0.8849** | -0.009 BEATS |
+
+Gate FAILED: `draw_calibration_bias >= 0.02`. Baselines 1-6 PASSÉES.
+Overfit en 9 itérations — LR=0.03 trop agressif pour residual corrections (~0.008).
+
+### V6: Feature selection bugué
+
+Init_scores calculés APRÈS feature subset → blanc_elo/noir_elo absents → fallback Elo=1500.
+Résultats sans valeur. **Bug d'ordre des opérations.**
+
+### V8: 13 features domaine (init fix, T4 explicite)
+
+| Modèle | Best iter | Best log_loss | vs Elo |
+|--------|-----------|---------------|--------|
+| CatBoost | 12 | 0.8863 | -0.008 |
+| XGBoost | ~1 | 0.986 | CASSÉ |
+| LightGBM | 6 | 0.8879 | -0.006 |
+
+Même overfit, même résultat que v5. Confirme : les 13 features domaine ≈ les 11 features utiles dans 177.
+
+### Root Cause révisé (v5-v8)
+
+1. **LR=0.03 trop haut pour residual** : corrections ~0.008, chaque arbre shift ~0.03 → overshot
+2. **XGBoost base_margin CASSÉ** : GitHub issues #5288, #3505, #11872 confirment bug sklearn API multiclass
+3. **Features sélectionnées par modèle raté** (v6) : importance d'un modèle recall_draw=0% → circulaire
+4. **Init_scores APRÈS feature subset** (v6) : fallback Elo=1500
+
+### Research findings (2026-03-24)
+
+**Pawnalyze** (5M+ OTB games, LightGBM) : Elo + ML bat Elo pur. Le ML corrige les non-linéarités
+de la courbe Elo, surtout pour les draw rates par niveau. Architecture identique à ALICE.
+
+**XGBoost base_margin** : bug confirmé pour multiclass sklearn API (issues #5288, #11872).
+Fix : utiliser l'API native `xgb.train()` avec `DMatrix.set_base_margin()`.
+
+**Hyperparams pour residual** : littérature recommande LR 0.001-0.01, depth 3-4, colsample 0.3-0.5
+pour features sparse. CatBoost docs : "if overfitting early, decrease LR or increase regularization."
+
+**Soccer multiclass** (Springer 2024) : le draw est toujours la classe la plus dure à prédire.
+La calibration (pas l'accuracy) est la métrique pertinente pour les systèmes de recommandation.
 
 ## Next Step : Residual Learning + AutoGluon
 
