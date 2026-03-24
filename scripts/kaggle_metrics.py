@@ -151,9 +151,12 @@ def predict_with_init(
             return np.asarray(model.predict(xgb.DMatrix(X))).reshape(-1, 3)
         return np.asarray(model.predict_proba(X))  # works for _XGBWrapper too
     if cls == "CatBoostClassifier":
-        from catboost import Pool  # noqa: PLC0415
-
-        return np.asarray(model.predict_proba(Pool(X, baseline=init_scores)))
+        # predict_proba with Pool(baseline=) doesn't normalize (catboost #1554)
+        # Use raw predictions + init_scores + softmax instead
+        raw = np.asarray(model.predict(X, prediction_type="RawFormulaVal"))
+        adjusted = raw + init_scores
+        exp_s = np.exp(adjusted - adjusted.max(axis=1, keepdims=True))
+        return exp_s / exp_s.sum(axis=1, keepdims=True)
     if cls in ("XGBClassifier", "Booster", "XGBWrapper"):
         import xgboost as xgb  # noqa: PLC0415
 
