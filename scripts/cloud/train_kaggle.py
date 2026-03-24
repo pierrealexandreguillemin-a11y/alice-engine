@@ -232,7 +232,17 @@ def main() -> None:
     logger.info("Quality gate: %s", gate)
 
     save_models(results, encoders, out_dir, model_extensions=MODEL_EXTENSIONS)
-    save_diagnostics(results, X_test, y_test, X_valid, y_valid, X_train, out_dir)
+    save_diagnostics(
+        results,
+        X_test,
+        y_test,
+        X_valid,
+        y_valid,
+        X_train,
+        out_dir,
+        init_scores_valid=init_scores_valid,
+        init_scores_test=init_scores_test,
+    )
     metadata = build_model_card(results, lineage, gate, config, MODEL_EXTENSIONS, out_dir=out_dir)
     metadata["version"] = version
     if gate.get("passed"):

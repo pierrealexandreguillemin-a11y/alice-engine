@@ -16,6 +16,13 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def _predict(model: Any, X: Any, init_scores: Any = None) -> Any:
+    """Predict probas using predict_with_init (residual learning aware)."""
+    from scripts.kaggle_metrics import predict_with_init  # noqa: PLC0415
+
+    return predict_with_init(model, X, init_scores)
+
+
 def save_diagnostics(
     results: dict,
     X_test: Any,
@@ -24,17 +31,19 @@ def save_diagnostics(
     y_valid: Any,
     X_train: Any,
     out_dir: Path,
+    init_scores_valid: Any = None,
+    init_scores_test: Any = None,
 ) -> None:
     """Save all diagnostic artifacts for ISO 42001/25059/24029/5259 compliance."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    calibrators = calibrate_models(results, X_valid, y_valid, out_dir)
-    _save_predictions(results, X_test, y_test, "test", out_dir, calibrators)
-    _save_predictions(results, X_valid, y_valid, "valid", out_dir, calibrators)
+    calibrators = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)
+    _save_predictions(results, X_test, y_test, "test", out_dir, calibrators, init_scores_test)
+    _save_predictions(results, X_valid, y_valid, "valid", out_dir, calibrators, init_scores_valid)
     _save_feature_importance(results, out_dir)
-    _save_classification_reports(results, X_test, y_test, out_dir)
+    _save_classification_reports(results, X_test, y_test, out_dir, init_scores_test)
     _save_learning_curves(results, out_dir)
-    _save_roc_curves(results, X_test, y_test, out_dir)
-    _save_calibration_curves(results, X_test, y_test, out_dir)
+    _save_roc_curves(results, X_test, y_test, out_dir, init_scores_test)
+    _save_calibration_curves(results, X_test, y_test, out_dir, init_scores_test)
     _save_feature_distributions(X_train, out_dir)
     logger.info("Diagnostics saved to %s", out_dir)
 
@@ -44,6 +53,7 @@ def calibrate_models(
     X_valid: Any,
     y_valid: Any,
     out_dir: Path,
+    init_scores_valid: Any = None,
 ) -> dict:
     """Fit per-class isotonic calibration (3 regressors per model). Save calibrators."""
     import joblib  # noqa: PLC0415
@@ -54,7 +64,7 @@ def calibrate_models(
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = r["model"].predict_proba(X_valid)  # (n, 3)
+        y_proba = _predict(r["model"], X_valid, init_scores_valid)
         y_true = y_valid.values if hasattr(y_valid, "values") else np.asarray(y_valid)
         class_calibrators = []
         for c in range(3):
@@ -76,6 +86,7 @@ def _save_predictions(
     split: str,
     out_dir: Path,
     calibrators: dict | None = None,
+    init_scores: Any = None,
 ) -> None:
     """Save per-model multiclass predictions as parquet (raw + calibrated)."""
     import numpy as np  # noqa: PLC0415
@@ -83,7 +94,7 @@ def _save_predictions(
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = r["model"].predict_proba(X)  # (n, 3)
+        y_proba = _predict(r["model"], X, init_scores)
         y_pred = np.argmax(y_proba, axis=1)
         data: dict = {
             "y_true": y.values if hasattr(y, "values") else y,
@@ -133,6 +144,7 @@ def _save_classification_reports(
     X_test: Any,
     y_test: Any,
     out_dir: Path,
+    init_scores: Any = None,
 ) -> None:
     """Save 3-class classification report per model (ISO 25059)."""
     import numpy as np  # noqa: PLC0415
@@ -142,7 +154,7 @@ def _save_classification_reports(
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = r["model"].predict_proba(X_test)  # (n, 3)
+        y_proba = _predict(r["model"], X_test, init_scores)
         y_pred = np.argmax(y_proba, axis=1)
         reports[name] = classification_report(
             y_test,
@@ -190,7 +202,13 @@ def _extract_curve(name: str, model: Any) -> pd.DataFrame | None:
     return None
 
 
-def _save_roc_curves(results: dict, X_test: Any, y_test: Any, out_dir: Path) -> None:
+def _save_roc_curves(
+    results: dict,
+    X_test: Any,
+    y_test: Any,
+    out_dir: Path,
+    init_scores: Any = None,
+) -> None:
     """Save per-class ROC curve data (one-vs-rest) per model (ISO 25059)."""
     import numpy as np  # noqa: PLC0415
     from sklearn.metrics import roc_curve  # noqa: PLC0415
@@ -200,7 +218,7 @@ def _save_roc_curves(results: dict, X_test: Any, y_test: Any, out_dir: Path) -> 
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = r["model"].predict_proba(X_test)  # (n, 3)
+        y_proba = _predict(r["model"], X_test, init_scores)
         y_arr = np.asarray(y_test)
         for c, cname in enumerate(class_names):
             binary_true = (y_arr == c).astype(int)
@@ -211,7 +229,13 @@ def _save_roc_curves(results: dict, X_test: Any, y_test: Any, out_dir: Path) -> 
     logger.info("  ROC curves saved (%d models, 3 classes each)", count)
 
 
-def _save_calibration_curves(results: dict, X_test: Any, y_test: Any, out_dir: Path) -> None:
+def _save_calibration_curves(
+    results: dict,
+    X_test: Any,
+    y_test: Any,
+    out_dir: Path,
+    init_scores: Any = None,
+) -> None:
     """Save per-class calibration curves per model (ISO 24029 robustness)."""
     import numpy as np  # noqa: PLC0415
     from sklearn.calibration import calibration_curve  # noqa: PLC0415
@@ -220,7 +244,7 @@ def _save_calibration_curves(results: dict, X_test: Any, y_test: Any, out_dir: P
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = r["model"].predict_proba(X_test)  # (n, 3)
+        y_proba = _predict(r["model"], X_test, init_scores)
         y_arr = np.asarray(y_test)
         for c, cname in enumerate(class_names):
             binary_true = (y_arr == c).astype(int)
