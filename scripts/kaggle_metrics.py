@@ -179,9 +179,19 @@ def predict_with_init(
     return np.asarray(model.predict_proba(X))
 
 
-def _apply_isotonic(y_proba: np.ndarray, class_calibrators: list) -> np.ndarray:
-    """Apply per-class isotonic calibrators and renormalise to sum=1."""
-    cal = np.column_stack([iso.predict(y_proba[:, c]) for c, iso in enumerate(class_calibrators)])
+def _apply_isotonic(y_proba: np.ndarray, calibrator: Any) -> np.ndarray:
+    """Apply calibration to probabilities. Supports temperature scaling (float T) or isotonic (list).
+
+    Temperature scaling (Guo et al. 2017): softmax(log(P)/T). Preserves rankings and E[score] ratios.
+    """
+    if isinstance(calibrator, int | float):  # Temperature scaling
+        logits = np.log(np.clip(y_proba, 1e-7, 1.0))
+        scaled = logits / calibrator
+        scaled -= scaled.max(axis=1, keepdims=True)
+        probs = np.exp(scaled) / np.exp(scaled).sum(axis=1, keepdims=True)
+        return probs
+    # Legacy: per-class isotonic (list of regressors)
+    cal = np.column_stack([iso.predict(y_proba[:, c]) for c, iso in enumerate(calibrator)])
     row_sums = cal.sum(axis=1, keepdims=True)
     row_sums = np.where(row_sums == 0, 1.0, row_sums)
     return cal / row_sums

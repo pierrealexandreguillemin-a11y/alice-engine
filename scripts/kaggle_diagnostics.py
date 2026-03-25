@@ -28,11 +28,6 @@ from scripts.kaggle_metrics import (
 logger = logging.getLogger(__name__)
 
 
-def _predict(model: Any, X: Any, init_scores: Any = None) -> Any:
-    """Predict probas using predict_with_init (residual learning aware)."""
-    return predict_with_init(model, X, init_scores)
-
-
 def save_diagnostics(
     results: dict,
     X_test: Any,
@@ -67,23 +62,28 @@ def calibrate_models(
     out_dir: Path,
     init_scores_valid: Any = None,
 ) -> dict:
-    """Fit per-class isotonic calibration (3 regressors per model). Save calibrators."""
+    """Fit temperature scaling per model (Guo 2017, preserves E[score] — arXiv:2512.09054)."""
     import joblib  # noqa: PLC0415
-    from sklearn.isotonic import IsotonicRegression  # noqa: PLC0415
+    from scipy.optimize import minimize_scalar  # noqa: PLC0415
 
     calibrators: dict = {}
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = _predict(r["model"], X_valid, init_scores_valid)
+        y_proba = predict_with_init(r["model"], X_valid, init_scores_valid)
         y_true = y_valid.values if hasattr(y_valid, "values") else np.asarray(y_valid)
-        class_calibrators = []
-        for c in range(3):
-            iso = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
-            iso.fit(y_proba[:, c], (y_true == c).astype(float))
-            class_calibrators.append(iso)
-        calibrators[name] = class_calibrators
-        logger.info("  %s 3-class isotonic calibration fitted (valid set)", name)
+        logits = np.log(np.clip(y_proba, 1e-7, 1.0))
+        idx = np.arange(len(y_true))
+
+        def nll(T: float, _l: Any = logits, _i: Any = idx, _y: Any = y_true) -> float:
+            s = _l / T
+            s = s - s.max(axis=1, keepdims=True)
+            p = np.exp(s) / np.exp(s).sum(axis=1, keepdims=True)
+            return -np.mean(np.log(np.clip(p[_i, _y], 1e-7, 1.0)))
+
+        res = minimize_scalar(nll, bounds=(0.1, 10.0), method="bounded")
+        calibrators[name] = float(res.x)
+        logger.info("  %s temperature T=%.4f (NLL=%.4f)", name, res.x, res.fun)
     if calibrators:
         joblib.dump(calibrators, out_dir / "calibrators.joblib")
         logger.info("  Calibrators saved to %s", out_dir / "calibrators.joblib")
@@ -103,7 +103,7 @@ def _save_predictions(
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = _predict(r["model"], X, init_scores)
+        y_proba = predict_with_init(r["model"], X, init_scores)
         y_pred = np.argmax(y_proba, axis=1)
         data: dict = {
             "y_true": y.values if hasattr(y, "values") else y,
@@ -150,7 +150,7 @@ def _save_classification_reports(
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = _predict(r["model"], X_test, init_scores)
+        y_proba = predict_with_init(r["model"], X_test, init_scores)
         y_pred = np.argmax(y_proba, axis=1)
         reports[name] = classification_report(
             y_test,
@@ -211,7 +211,7 @@ def _save_roc_curves(
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = _predict(r["model"], X_test, init_scores)
+        y_proba = predict_with_init(r["model"], X_test, init_scores)
         y_arr = np.asarray(y_test)
         for c, cname in enumerate(class_names):
             binary_true = (y_arr == c).astype(int)
@@ -234,7 +234,7 @@ def _save_calibration_curves(
     for name, r in results.items():
         if r["model"] is None:
             continue
-        y_proba = _predict(r["model"], X_test, init_scores)
+        y_proba = predict_with_init(r["model"], X_test, init_scores)
         y_arr = np.asarray(y_test)
         for c, cname in enumerate(class_names):
             binary_true = (y_arr == c).astype(int)
