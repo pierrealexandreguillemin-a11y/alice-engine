@@ -24,12 +24,16 @@ Ce document trace chaque phase, son statut, et les artefacts produits.
 |-------|-------------|--------|--------------|-----------|
 | 0 | Preparation | ✅ Complete | - | requirements.txt |
 | 1 | Parsing HTML | ✅ Complete | 48 min | echiquiers.parquet, joueurs.parquet |
-| 2 | Feature Engineering | ✅ Complete | 2 min | 8 fichiers features/*.parquet |
+| 2 | Feature Engineering V7 | ✅ Complete | 2 min | 8 fichiers features/*.parquet |
 | 3 | Split temporel | ✅ Complete | inclus Phase 2 | train/valid/test.parquet |
-| 4 | Evaluation ML | ✅ Complete | 5 min | ml_evaluation_results.csv |
-| 5 | Hyperparameter Tuning | 🔄 A faire | - | - |
-| 6 | Entrainement final | 🔄 A faire | - | models/*.cbm |
-| 7 | Deploiement | 🔄 A faire | - | API FastAPI |
+| 4 | Evaluation ML V7 | ✅ Complete (OBSOLÈTE V8) | 5 min | AUC 0.75 (binaire, leakage) |
+| 5 | **V8 Feature Engineering** | ✅ Complete | 74 min | **196 cols, Kaggle FE kernel** |
+| 6 | **V8 Residual Learning** | ⚠️ BLOQUÉ (calibration) | 11 versions | **Bat Elo (0.887) mais gate 8/9** |
+| 7 | Calibration conforme | 🔄 EN COURS | - | Temperature scaling à valider |
+| 8 | Feature Store + API | 🔄 A faire | - | Wiring model→CE |
+| 9 | ALI (Adversarial Lineup) | 🔄 A faire | - | generate_scenarios() |
+| 10 | CE V9 Multi-équipe | 🔄 A faire | - | OR-Tools solver |
+| 11 | Deploy (Oracle VM) | 🔄 A faire | - | HTTPS + monitoring |
 
 ---
 
@@ -392,6 +396,120 @@ Un renforcement d'une equipe = affaiblissement d'une autre.
 | 1.1.0 | 2026-01-08 | Claude Code | Ajout interpretation Phase 4, limites performances |
 | 1.2.0 | 2026-01-08 | Claude Code | Ajout section 4 "Integration regles FFE dans ML" |
 | 1.3.0 | 2026-01-08 | Claude Code | Ajout section 2bis "Gaps Critiques", lien methodologie |
+| 2.0.0 | 2026-03-25 | Claude Code | V8 MultiClass complet — résultats v3→v11, residual learning |
+
+---
+
+## 9. V8 MultiClass 3-way — Residual Learning (mars 2026)
+
+### 9.1 Contexte
+
+V7 (janvier) était binaire avec 4 bugs critiques (leakage, target, calibration, architecture).
+V8 remplace par multiclass W/D/L (loss=0, draw=1, win=2) + residual learning sur Elo.
+
+**Spec** : `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
+**Postmortem** : `docs/postmortem/2026-03-22-training-v8-divergence.md`
+**Roadmap** : `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md`
+
+### 9.2 Feature Engineering V8 — COMPLET
+
+**Kernel** : `pguillemin/alice-fe-v8` (Kaggle, COMPLETE)
+**Date** : 2026-03-21
+
+| Métrique | Valeur |
+|----------|--------|
+| Colonnes | 196 (177 numériques après encodage) |
+| Train rows | 1,090,150 (après exclusion forfaits 2.0) |
+| Valid rows | 67,824 |
+| Test rows | 221,807 |
+| Durée FE | 74 min (P100 CPU) |
+
+Catégories : match context (12), player strength (10), player form W/D/L (20),
+draw priors (8), presence (16), pressure (6), H2H (4), standings (16),
+club behavior (16), vases communiquants (16), FFE regulatory (20),
+Elo trajectory (4), composition strategy (8).
+
+**166/177 features ont importance 0** dans v3 (sans residual). Signal concentré dans
+~11 features : diff_elo, elo_proximity, win/draw rates, expected_score_recent, home advantage.
+
+### 9.3 Training — Residual Learning
+
+**Principe** : compute_elo_init_scores() → log-odds centrés → Pool(baseline=) / DMatrix.set_base_margin() / fit(init_score=). Les modèles apprennent les CORRECTIONS à l'Elo, pas la prédiction from-scratch.
+
+**API bugs contournés (vérifiés contre GitHub issues) :**
+- CatBoost #1554 : predict_proba(Pool(baseline=)) non-normalisé → raw+softmax
+- XGBoost #5288 : XGBClassifier.fit(base_margin=) cassé multiclass → native xgb.train()+DMatrix
+- LightGBM #1978 : predict() ne supporte pas init_score → raw_score+softmax
+
+### 9.4 Résultats Kaggle (11 versions)
+
+| Version | Date | Features | Init | LR | CB best | XGB best | LGB best | Gate | Commit |
+|---------|------|----------|------|----|---------|----------|----------|------|--------|
+| v1 | 03-22 | 177 | Non | 0.03 | — | — | — | ERROR (path) | affcb73 |
+| v2 | 03-22 | 177 | Non | 0.03 | 0.940 | diverge | 0.967 | FAIL (ll) | 179a027 |
+| v3 | 03-22 | 177 | Non | 0.03 | 0.926 | ~0.98 | 0.935 | FAIL (ll) | 1d0289d |
+| v4 | 03-23 | 177 | Oui | 0.03 | — | — | — | ERROR (cache) | b114d1c |
+| v5 | 03-23 | 177 | Oui | 0.03 | **0.886** | cassé | **0.885** | FAIL (draw_bias) | b114d1c |
+| v6 | 03-23 | 11 | Bugué | 0.03 | 0.906 | cassé | 0.934 | FAIL (ece) | bf0392e |
+| v7 | 03-23 | — | — | — | — | — | — | Stoppé | — |
+| v8 | 03-23 | 13 | Oui | 0.03 | 0.886 | cassé | 0.888 | FAIL (draw_bias) | 574e0d1 |
+| v9 | 03-24 | 177 | Oui | 0.005 | 0.888 | **0.889** | 0.887 | FAIL (draw_bias) | 0fbfd1f |
+| v10 | 03-24 | 177 | Oui | 0.005 | 0.888 | 0.889 | 0.887 | FAIL (es_mae) RÉGRESSION | 6e1fb00 |
+| v11 | 03-25 | 177 | Oui | 0.005 | — | — | — | Annulé | 39e4d75 |
+
+### 9.5 Quality Gate 9 conditions — état par version
+
+| Cond | Description | v9 (raw) | v10 (isotonic) |
+|------|-------------|----------|----------------|
+| 1 | log_loss < naive | PASS | PASS |
+| 2 | log_loss < Elo | PASS | PASS |
+| 3 | RPS < naive | PASS | PASS |
+| 4 | RPS < Elo | PASS | PASS |
+| 5 | Brier < naive | PASS | PASS |
+| 6 | E[score] MAE < Elo | PASS | **FAIL** (régression) |
+| 7 | ECE < 0.05 per class | Non évalué sur test calibré | PASS |
+| 8 | draw_calibration_bias < 2% | **FAIL** | PASS |
+| 9 | mean_p_draw > 1% | PASS | PASS |
+
+### 9.6 Problème ouvert : calibration
+
+**Isotonic per-class + renormalization** (v10) corrige draw_bias mais dégrade E[score].
+Confirmé par ICML 2025 (arXiv:2512.09054) : "re-normalization to sum to one might compromise calibration."
+
+**Temperature scaling** (v11, annulé) : 1 paramètre T, softmax(logits/T), préserve ratios.
+Non vérifié sur données ALICE.
+
+**Littérature :**
+- Walsh & Joshi 2024 : calibration > accuracy pour decision-making (ROI +34.69%)
+- Ramezani & Dinh 2025 (arXiv:2505.02170) : FPL predict-then-optimize = architecture ALICE
+- Guo et al. 2017 : temperature scaling pour GBMs
+- ICML 2025 : NA-FIR (normalization-aware isotonic) = state-of-the-art multiclass
+
+**Statut** : BLOQUÉ. Le modèle bat l'Elo mais la calibration qui préserve E[score]
+et corrige draw_bias n'est pas encore validée.
+
+### 9.7 Acquis techniques (réutilisables)
+
+| Acquis | Fichier | Tests |
+|--------|---------|-------|
+| compute_elo_init_scores() | scripts/baselines.py | 3 tests |
+| compute_init_scores_from_features() | scripts/baselines.py | — |
+| predict_with_init() per-library | scripts/kaggle_metrics.py | 4 tests |
+| XGBWrapper (Booster→sklearn) | scripts/kaggle_metrics.py | — |
+| Temperature scaling + isotonic | scripts/kaggle_diagnostics.py | — |
+| Quality gate 9 conditions | scripts/kaggle_metrics.py | 7 tests |
+| ML architecture SVGs (3) | scripts/generate_ml_graphs.py | — |
+| Hyperparams YAML synced | config/hyperparameters.yaml | 2 tests |
+
+### 9.8 Lacunes identifiées
+
+| Lacune | Sévérité | Action |
+|--------|----------|--------|
+| Pas de tracking commit↔dataset↔kernel | HAUTE | Implémenter dans upload_all_data |
+| Artefacts training non versionnés (local) | HAUTE | DVC ou HF Hub systématique |
+| IMPLEMENTATION_STATUS.md obsolète (jan 2026) | MOYENNE | Mettre à jour |
+| ISO_COMPLIANCE_TODOS.md dit 100% (faux pour V8) | HAUTE | Corriger |
+| Outputs Kaggle v9/v10 perdus (pas sauvés) | CRITIQUE | Sauver systématiquement |
 
 ---
 

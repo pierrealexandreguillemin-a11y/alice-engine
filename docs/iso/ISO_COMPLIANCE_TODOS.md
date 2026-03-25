@@ -1,21 +1,24 @@
 # ISO Compliance TODOs - Plan de reprise
 
-> Session: 2026-02-10 (mise a jour)
-> Status: Pipeline ISO complet + P2 100% (9/9)
+> Session: 2026-03-25 (mise a jour V8 MultiClass)
+> Status: V7 binaire ISO complet. **V8 MultiClass EN COURS — quality gate 8/9.**
 
 ## Scores actuels
 
-| Norme | Score | Status |
-|-------|-------|--------|
-| ISO 5055 (Code Quality) | 100% | ✅ Complete |
-| ISO 27001 (Security) | 100% | ✅ Complete (audit log) |
-| ISO 42001 (AI Management) | 100% | ✅ Complete |
-| ISO 5259 (Data Quality ML) | 100% | ✅ Complete |
-| ISO 23894 (AI Risk) | 100% | ✅ Complete + Rollback |
-| ISO 24029 (Robustness) | 100% | ✅ Complete + Enhanced |
-| ISO 24027 (Bias) | 100% | ✅ Complete + Protected + Fairness Report |
-| ISO 42005 (Impact) | 100% | ✅ Complete + Enhanced |
-| ISO 25059 (AI Quality) | 100% | ✅ Report Generated |
+| Norme | V7 (jan 2026) | V8 (mars 2026) | Bloquant |
+|-------|---------------|-----------------|----------|
+| ISO 5055 (Code Quality) | 100% | 100% (< 300 lignes, 29 tests) | Non |
+| ISO 27001 (Security) | 100% | 100% (gitleaks, bandit) | Non |
+| ISO 42001 (AI Management) | 100% | **70%** — model card V8 pas pushé HF | **Oui** |
+| ISO 5259 (Data Quality ML) | 100% | **80%** — lineage OK, versioning dataset manquant | **Oui** |
+| ISO 23894 (AI Risk) | 100% | 90% — rollback existe, drift monitor existe | Non |
+| ISO 24029 (Robustness) | 100% | **85%** — ROC/calibration curves générées, gate 8/9 | **Oui** |
+| ISO 24027 (Bias) | 100% | 90% — per-class metrics OK, fairness report à regénérer V8 | Non |
+| ISO 42005 (Impact) | 100% | 90% — impact assessment existe, à mettre à jour V8 | Non |
+| ISO 25059 (AI Quality) | 100% | **75%** — baselines OK, calibration non conforme | **Oui** |
+
+**Note** : les scores V7 (100%) sont basés sur le modèle binaire avec leakage.
+Le V8 MultiClass est un rewrite complet — les scores repartent de la conformité réelle.
 
 ---
 
