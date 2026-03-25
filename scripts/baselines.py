@@ -24,19 +24,44 @@ def compute_naive_baseline(y_train: np.ndarray, n_test: int) -> np.ndarray:
     return np.tile(probs, (n_test, 1))
 
 
+# White advantage varies by Elo level (verified on 1.44M FFE games, 2026-03-25).
+# Gilgamath confirms: P(win) depends on avg_elo, not just diff.
+# Literature +35 is for elite OTB; FFE interclubs range from +8.5 to +32.4.
+WHITE_ADV_LOOKUP: dict[tuple[int, int], float] = {
+    (0, 1200): 8.5,
+    (1200, 1400): 11.2,
+    (1400, 1600): 14.3,
+    (1600, 1800): 16.5,
+    (1800, 2000): 21.0,
+    (2000, 2200): 24.6,
+    (2200, 2400): 30.6,
+    (2400, 3500): 32.4,
+}
+
+
+def _lookup_white_advantage(avg_elo: np.ndarray) -> np.ndarray:
+    """Dynamic white advantage by Elo level (FFE data, Gilgamath-aligned)."""
+    result = np.full(len(avg_elo), 14.0)  # fallback = FFE global average
+    for (lo, hi), adv in WHITE_ADV_LOOKUP.items():
+        mask = (avg_elo >= lo) & (avg_elo < hi)
+        result[mask] = adv
+    return result
+
+
 def compute_elo_baseline(
     blanc_elo: np.ndarray,
     noir_elo: np.ndarray,
     draw_rate_lookup: pd.DataFrame,
 ) -> np.ndarray:
-    """Elo formula + draw rate lookup. Returns (n, 3) = [P(loss), P(draw), P(win)].
+    """Elo formula + dynamic white advantage + draw rate lookup.
 
-    White advantage of +35 Elo points is a standard correction
-    for first-move advantage in chess.
+    Returns (n, 3) = [P(loss), P(draw), P(win)].
+    White advantage is Elo-level dependent (FFE data: +8.5 to +32.4).
     """
     diff = noir_elo - blanc_elo
-    expected = 1 / (1 + 10 ** ((diff - 35) / 400))  # +35 white advantage
     avg = (blanc_elo + noir_elo) / 2
+    white_adv = _lookup_white_advantage(avg)
+    expected = 1 / (1 + 10 ** ((diff - white_adv) / 400))
     abs_diff = np.abs(blanc_elo - noir_elo)
     draw_rate = _lookup_draw_rate(avg, abs_diff, draw_rate_lookup)
     p_win = np.clip(expected - 0.5 * draw_rate, 0, 1)
