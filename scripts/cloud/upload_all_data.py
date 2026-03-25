@@ -43,8 +43,35 @@ def _git_version_notes() -> str:
     return "manual upload"
 
 
+def _compute_content_hash(tmp_path: Path) -> str:
+    """SHA-256 hash of all files in the package (ISO 5259 lineage)."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for f in sorted(tmp_path.rglob("*")):
+        if f.is_file() and f.name != "dataset-metadata.json":
+            h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def _save_upload_record(notes: str, content_hash: str) -> None:
+    """Append upload record to tracking log (ISO 5259 commit↔dataset↔kernel)."""
+    record_path = PROJECT_ROOT / "reports" / "kaggle_upload_log.jsonl"
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp": __import__("datetime").datetime.now().isoformat(),
+        "git_commit": _git_version_notes().split(" ")[0],
+        "dataset_slug": DATASET_SLUG,
+        "content_hash": content_hash,
+        "version_notes": notes,
+    }
+    with open(record_path, "a") as f:
+        f.write(json.dumps(record) + "\n")
+    logger.info("Upload record saved: commit=%s hash=%s", record["git_commit"], content_hash)
+
+
 def upload(version_notes: str | None = None) -> None:
-    """Package everything and upload to Kaggle."""
+    """Package everything and upload to Kaggle (ISO 5259 tracked)."""
     from kaggle.api.kaggle_api_extended import KaggleApi
 
     api = KaggleApi()
@@ -55,6 +82,9 @@ def upload(version_notes: str | None = None) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         _package_all(tmp_path)
+        content_hash = _compute_content_hash(tmp_path)
+        logger.info("Content hash: %s", content_hash)
+
         meta = {
             "title": "alice-code",
             "id": DATASET_SLUG,
@@ -74,6 +104,8 @@ def upload(version_notes: str | None = None) -> None:
         except Exception:
             api.dataset_create_new(folder=str(tmp_path), dir_mode="zip", public=False)
             logger.info("Created: %s", DATASET_SLUG)
+
+        _save_upload_record(notes, content_hash)
 
 
 def _package_all(tmp_path: Path) -> None:
