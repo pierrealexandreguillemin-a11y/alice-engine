@@ -308,7 +308,7 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
   - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
   - Test : entraîner sur 2012+ d'abord, comparer AUC vs modèle actuel (2002+)
 - **Training cloud Kaggle CatBoost V7** (OBSOLÈTE, 2026-03-19) : GPU P100, 29 GB RAM
-  - AUC=0.8276 INVALIDE (leakage score_dom/ext + target bug forfaits 2.0)
+  - AUC=0.8276 INVALIDE (leakage score_dom/ext + target bug: 2.0=victoire jeunes traitée comme forfait)
   - Corrigé localement (commit 05b19a7) : leakage fixé, eval_metric=Logloss, hyperparams améliorés
   - **Remplacé par V8 MultiClass** (en cours)
 - **Training cloud Kaggle AutoGluon** (EN COURS, 2026-03-20) : T4x2 GPU, AutoGluon 1.5.0
@@ -322,7 +322,8 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 **Remplace V7 binaire** (4 bugs critiques + 8 bugs logique features)
 
 ### Décisions validées
-- **Target** : loss=0, draw=1, win=2. Forfaits (2.0) exclus de TOUT (target + features)
+- **Target** : loss=0, draw=1, win=2. TARGET_MAP = {0.0:0, 0.5:1, 1.0:2, 2.0:2}. resultat_blanc=2.0 = victoire jeunes FFE (J02 §4.1: 2pts éch. non-U10, 62K parties), mapped to win
+- **Forfeits** : identifiés par `type_resultat` (forfait_blanc 43K, forfait_noir 42K, double_forfait 3K, non_joue 209K), PAS par resultat_blanc. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 - **Loss** : CatBoost `MultiClass`, XGBoost `multi:softprob`, LightGBM `multiclass`
 - **Eval** : MultiClass log loss + RPS (Ranked Probability Score, standard ordinal)
 - **Sortie** : P(win), P(draw), P(loss) → CE calcule E[score] = P(win) + 0.5×P(draw)
@@ -334,7 +335,7 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 2. `score_blancs/noirs` : séparer home/away (color confondant avec domicile)
 3. Features joueur : stratifier par type_competition (national 20.9% draws ≠ régional 9.6%)
 4. Features joueur : rolling 3 saisons au lieu de global career
-5. Forfaits (2.0) : exclure de TOUS les calculs de rates
+5. Forfaits : filter by `type_resultat` (not resultat_blanc). resultat_blanc=2.0 = victoire jeunes, recode as win
 
 ### Nouvelles features (draw + club-level)
 - **8 draw features** (8 cols) : avg_elo, elo_proximity, draw_rate_prior, draw_rate_joueur×2, draw_rate_h2h, draw_rate_equipe×2
@@ -363,6 +364,7 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
 - **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
 - **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
+- **CONTAMINATION DATA (2026-03-25)** : resultat_blanc=2.0 (62K victoires jeunes) exclu à tort + 295K vrais forfeits inclus. Tous v1-v13 entraînés sur données contaminées. Fix: filter `type_resultat`, recode 2.0→win. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 
 ### Inference REQUIERT init_scores (C1 — Phase 2)
 - Les modèles entraînés avec residual learning ont besoin des init_scores à l'inférence

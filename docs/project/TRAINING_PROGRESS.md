@@ -419,7 +419,7 @@ V8 remplace par multiclass W/D/L (loss=0, draw=1, win=2) + residual learning sur
 | Métrique | Valeur |
 |----------|--------|
 | Colonnes | 196 (177 numériques après encodage) |
-| Train rows | 1,090,150 (après exclusion forfaits 2.0) |
+| Train rows | 1,090,150 (⚠️ excluait 2.0=victoires jeunes à tort, voir §9.11) |
 | Valid rows | 67,824 |
 | Test rows | 221,807 |
 | Durée FE | 74 min (P100 CPU) |
@@ -523,6 +523,28 @@ Plan : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md`
 3. CatBoost `rsm=0.3` fix + retrain
 4. Temperature scaling (Guo 2017) remplace isotonic renorm
 5. Quality gate 9/9 → push HF Hub
+
+### 9.11 Data Contamination Finding (2026-03-25)
+
+**Découverte** : `resultat_blanc=2.0` était traité comme "forfait" et exclu de tout (target + features) depuis la spec V8. En réalité :
+
+- **2.0 = victoire jeunes FFE** (62K parties réelles) — J02 §4.1 : victoire = 2 pts de partie sur éch. non-U10
+- Les vrais forfeits sont dans la colonne `type_resultat` : forfait_blanc (43K), forfait_noir (42K), double_forfait (3K), non_joue (209K) — tous ont resultat_blanc=0.0 ou 1.0, PAS 2.0
+- **295K forfeits sont INCLUS** dans le training comme résultats réels (resultat_blanc 0.0/1.0)
+- Le parser est correct (echiquiers.parquet fidèle au HTML). Le problème est l'interprétation downstream
+
+**Impact** :
+- Tous les modèles v1-v13 sont entraînés sur données contaminées (62K wins exclus + 295K forfeits inclus)
+- Les résultats SHAP de v13 ne sont PAS fiables
+- Les métriques draw_rate, win_rate, etc. dans les features sont biaisées
+- Le FE kernel + training kernel doivent être re-run après le fix
+
+**Fix requis** :
+- `scripts/features/helpers.py` : filter par `type_resultat` au lieu de `resultat_blanc==2.0`
+- `scripts/kaggle_trainers.py` : TARGET_MAP = {0.0:0, 0.5:1, 1.0:2, 2.0:2}
+- Re-run FE kernel puis training kernel
+
+**Postmortem** : `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 
 ### 9.10 Lacunes identifiées
 

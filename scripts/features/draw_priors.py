@@ -19,7 +19,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from scripts.features.helpers import exclude_forfeits
+from scripts.features.helpers import filter_played_games
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def build_draw_rate_lookup(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with columns: elo_band, diff_band, draw_rate_prior.
         Only cells with >= _MIN_CELL_ROWS observations are kept.
     """
-    clean = exclude_forfeits(df)
+    clean = filter_played_games(df)
 
     clean = _fill_elo_medians(clean)
     clean = _add_elo_bands(clean)
@@ -134,7 +134,7 @@ def compute_player_draw_rates(
     -------
         DataFrame with columns: joueur_nom, draw_rate, n_games.
     """
-    clean = exclude_forfeits(df)
+    clean = filter_played_games(df)
 
     clean["_is_draw"] = (clean["resultat_blanc"] == 0.5).astype(int)
 
@@ -186,7 +186,7 @@ def compute_equipe_draw_rates(
     -------
         DataFrame with columns: equipe, draw_rate, n_games.
     """
-    clean = exclude_forfeits(df)
+    clean = filter_played_games(df)
 
     is_draw = (clean["resultat_blanc"] == 0.5).astype(int)
     clean = clean.copy()
@@ -260,7 +260,7 @@ def _add_elo_bands(df: pd.DataFrame) -> pd.DataFrame:
 
 def _global_draw_rate(df: pd.DataFrame) -> float:
     """Compute global draw rate from df (forfeits excluded) as fallback."""
-    clean = exclude_forfeits(df)
+    clean = filter_played_games(df)
     if clean.empty:
         return 0.15
     return float((clean["resultat_blanc"] == 0.5).mean())

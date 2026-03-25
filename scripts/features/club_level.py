@@ -15,7 +15,7 @@ import re
 
 import pandas as pd
 
-from scripts.features.helpers import exclude_forfeits
+from scripts.features.helpers import filter_played_games
 from scripts.ffe_rules_features import get_niveau_equipe
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ def extract_club_level_features(df_history: pd.DataFrame) -> pd.DataFrame:
     if df_history.empty:
         return pd.DataFrame()
 
-    df = exclude_forfeits(df_history)
+    df = filter_played_games(df_history)
     unified = _build_unified(df)
     if unified.empty:
         return pd.DataFrame()
@@ -230,7 +230,7 @@ def extract_player_team_context(df_history: pd.DataFrame) -> pd.DataFrame:
     if df_history.empty:
         return pd.DataFrame()
 
-    df = exclude_forfeits(df_history)
+    df = filter_played_games(df_history)
     unified = _build_unified(df)
     if unified.empty:
         return pd.DataFrame()

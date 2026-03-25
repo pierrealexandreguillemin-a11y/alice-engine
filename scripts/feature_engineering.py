@@ -108,14 +108,9 @@ def compute_features_for_split(
     )
 
     from scripts.features.draw_priors import compute_draw_priors
-    from scripts.features.helpers import exclude_forfeits
+    from scripts.features.helpers import filter_played_games
 
-    df_history_played = df_history[
-        ~df_history["type_resultat"].isin(
-            ["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"]
-        )
-    ]
-    df_history_played = exclude_forfeits(df_history_played)
+    df_history_played = filter_played_games(df_history)
 
     features = extract_all_features(df_history, df_history_played, include_advanced)
     result = merge_all_features(df_split.copy(), features, include_advanced)

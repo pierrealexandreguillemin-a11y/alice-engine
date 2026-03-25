@@ -50,8 +50,16 @@ def build_lineage(
 
 
 def _class_distribution(df: pd.DataFrame, label_column: str) -> dict:
-    """Class distribution excluding forfaits (2.0) from denominator."""
-    clean = df[df[label_column] != 2.0] if label_column in df.columns else df
+    """Class distribution excluding non-played games (via type_resultat)."""
+    clean = (
+        df[
+            ~df["type_resultat"].isin(
+                {"non_joue", "forfait_blanc", "forfait_noir", "double_forfait"}
+            )
+        ]
+        if "type_resultat" in df.columns
+        else df
+    )
     return {
         "class_distribution": {
             "loss": float((clean[label_column] == 0.0).mean())

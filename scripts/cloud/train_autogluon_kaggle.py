@@ -91,8 +91,13 @@ def load_and_clean(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame
     for name, df in [("train", train), ("valid", valid), ("test", test)]:
         before = len(df)
         df = df.drop_duplicates(subset=DEDUP_KEYS).copy()
-        df = df[df[LABEL_SOURCE] != 2.0]  # exclude forfeits (2.0 = forfait)
-        df[LABEL] = df[LABEL_SOURCE].map({0.0: 0, 0.5: 1, 1.0: 2}).astype(int)
+        if "type_resultat" in df.columns:
+            df = df[
+                ~df["type_resultat"].isin(
+                    {"non_joue", "forfait_blanc", "forfait_noir", "double_forfait"}
+                )
+            ]
+        df[LABEL] = df[LABEL_SOURCE].map({0.0: 0, 0.5: 1, 1.0: 2, 2.0: 2}).astype(int)
         drop = [c for c in METADATA_COLS if c in df.columns]
         df = df.drop(columns=drop)
         logger.info("%s: %d -> %d rows, %d features", name, before, len(df), len(df.columns) - 1)

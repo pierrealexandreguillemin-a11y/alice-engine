@@ -31,6 +31,25 @@
 
 ---
 
+## Task 0: Data Quality Fix (BLOQUANT)
+
+**Découverte 2026-03-25** : `resultat_blanc=2.0` = victoire jeunes FFE (62K parties réelles, J02 §4.1: 2pts éch. non-U10), PAS forfait.
+Les vrais forfaits sont dans `type_resultat` (forfait_blanc 43K, forfait_noir 42K, double_forfait 3K, non_joue 209K) — tous ont resultat_blanc=0.0 ou 1.0.
+295K forfeits sont INCLUS dans le training comme résultats réels. 62K victoires jeunes sont EXCLUES.
+
+**Postmortem** : `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
+
+- [ ] Fix `scripts/features/helpers.py`: remove FORFAIT_RESULT=2.0, fix filter_played_games to use type_resultat, fix compute_wdl_rates to count 2.0 as win
+- [ ] Fix `scripts/kaggle_trainers.py`: TARGET_MAP = {0.0:0, 0.5:1, 1.0:2, 2.0:2}
+- [ ] Fix all callers of exclude_forfeits() → use type_resultat filter
+- [ ] Commit + re-upload alice-code
+- [ ] Re-run alice-fe-v8 kernel (CPU, ~1h)
+- [ ] Then proceed to Tasks 1-6 on corrected data
+
+---
+
+> **WARNING** : Tasks 1-6 results from v13 are **INVALIDATED** by this data contamination (62K wins excluded + 295K forfeits included). All SHAP/importance results are unreliable. Tasks 1-6 must be re-run AFTER Task 0.
+
 ## Task 1: SHAP + Permutation Importance Kernel (Kaggle)
 
 **Files:** `scripts/cloud/shap_analysis_kaggle.py`, `scripts/cloud/kernel-metadata-shap.json`

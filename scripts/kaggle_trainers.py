@@ -52,10 +52,12 @@ def _encode_categoricals(splits: list[pd.DataFrame]) -> dict:
 
 def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """Extract X and y, keeping numeric + casting bools to int."""
-    from scripts.features.helpers import FORFAIT_RESULT  # noqa: PLC0415
+    from scripts.features.helpers import NON_PLAYED  # noqa: PLC0415
 
-    df = df[df[LABEL_COLUMN] != FORFAIT_RESULT].copy()  # exclude forfeits
-    TARGET_MAP = {0.0: 0, 0.5: 1, 1.0: 2}  # loss=0, draw=1, win=2
+    # Exclude non-played games via type_resultat (NOT resultat_blanc)
+    if "type_resultat" in df.columns:
+        df = df[~df["type_resultat"].isin(NON_PLAYED)].copy()
+    TARGET_MAP = {0.0: 0, 0.5: 1, 1.0: 2, 2.0: 2}  # 2.0=victoire jeunes FFE (J02 §4.1)
     y = df[LABEL_COLUMN].map(TARGET_MAP).astype(int)
     for col in BOOL_FEATURES:
         if col in df.columns:
