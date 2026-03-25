@@ -222,7 +222,12 @@ def main() -> None:
         init_scores_train=init_scores_train,
         init_scores_valid=init_scores_valid,
     )
-    # Step 1: Calibrate on valid set (Niculescu-Mizil & Caruana — isotonic per class)
+    # Step 0.5: SHAP + permutation importance on freshly trained models (ISO 25059)
+    from scripts.kaggle_shap import compute_shap_importance  # noqa: PLC0415
+
+    compute_shap_importance(results, X_test, y_test, init_scores_test, out_dir)
+
+    # Step 1: Calibrate on valid set (Guo 2017 temperature scaling)
     from scripts.kaggle_diagnostics import calibrate_models  # noqa: PLC0415
 
     calibrators = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)

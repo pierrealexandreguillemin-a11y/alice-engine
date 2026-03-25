@@ -1,10 +1,19 @@
 # Phase 1: Residual Learning Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **STATUS: PARTIALLY SUPERSEDED (2026-03-25)**
+> Tasks 1-3: ✅ DONE — residual learning implemented, 11 Kaggle versions run.
+> Tasks 4-6: ❌ SUPERSEDED — incremental feature validation replaced by SHAP-based approach.
+> **Reason:** Analysis of v10 outputs (2026-03-25) revealed 166/177 features at importance=0
+> was a CatBoost PredictionValuesChange artifact, not a signal problem. XGBoost uses 109 features,
+> LightGBM 50. Incremental addition is not industry standard — SHAP + permutation importance is.
+> **Successor plan:** `docs/superpowers/plans/2026-03-25-shap-feature-validation.md`
+
+> **For agentic workers:** This plan is partially superseded. Tasks 1-3 are complete and in production.
+> For Tasks 4+, follow the successor plan instead.
 
 **Goal:** Make ML models learn corrections to Elo baseline (not predictions from scratch) so they beat the Elo quality gate and produce calibrated P(draw).
 
-**Architecture:** `baselines.py` computes Elo init scores → `kaggle_trainers.py` passes them as `init_score`/`base_margin` → models learn residuals only. Incremental validation: 0 features → top 10 → all 177.
+**Architecture:** `baselines.py` computes Elo init scores → `kaggle_trainers.py` passes them as `init_score`/`base_margin` → models learn residuals only. ~~Incremental validation: 0 features → top 10 → all 177.~~ → SHAP-based validation (see successor plan).
 
 **Tech Stack:** CatBoost (init_model via Pool), XGBoost (base_margin), LightGBM (init_score), numpy.
 
@@ -393,7 +402,10 @@ git commit -m "feat(kaggle): compute Elo init scores and pass to train_all_seque
 
 ---
 
-## Task 4: Sanity check — Step 0 (0 features, init only)
+## Task 4: ❌ SUPERSEDED — Sanity check — Step 0 (0 features, init only)
+
+> **SUPERSEDED (2026-03-25):** v5-v10 ran successfully with residual learning.
+> Init scores work, models beat Elo. This step was completed implicitly across 7 versions.
 
 This is NOT a code task. It's a **validation step** to run after Tasks 1-3.
 
@@ -442,7 +454,11 @@ git commit -m "docs(postmortem): v4 residual learning results"
 
 ---
 
-## Task 5: Incremental validation — Step 1 (top 10 features only)
+## Task 5: ❌ SUPERSEDED — Incremental validation — Step 1 (top 10 features only)
+
+> **SUPERSEDED (2026-03-25):** Incremental feature addition is not industry standard (order-dependent,
+> ignores interactions). Replaced by SHAP + permutation importance in successor plan.
+> v10 analysis showed XGBoost uses 109/177 features — the signal exists, CatBoost's metric hid it.
 
 **Only if v4 (Task 4) shows init scores work but model still doesn't beat Elo.**
 
@@ -470,7 +486,10 @@ If v4 > v5 → full features add value. Keep all.
 
 ---
 
-## Task 6: ISO documentation update
+## Task 6: ❌ SUPERSEDED — ISO documentation update
+
+> **SUPERSEDED (2026-03-25):** ISO docs partially updated during v10 analysis session.
+> Remaining ISO updates moved to successor plan Task 6.
 
 - [ ] **Step 1: Update model card template for residual approach**
 

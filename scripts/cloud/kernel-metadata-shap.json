@@ -1,0 +1,11 @@
+{
+  "id": "pguillemin/alice-shap-v8",
+  "title": "alice-shap-v8",
+  "code_file": "shap_analysis_kaggle.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "dataset_sources": ["pguillemin/alice-code", "pguillemin/alice-models-v10"],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}

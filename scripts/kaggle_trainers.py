@@ -116,7 +116,8 @@ def default_hyperparameters() -> dict:
             "iterations": 20000, "depth": 4, "border_count": 128,
             "learning_rate": 0.005, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
             "random_strength": 3, "bagging_temperature": 1, "model_size_reg": 0.5,
-            "thread_count": 4, "task_type": "GPU" if gpu else "CPU",
+            "rsm": 0.3,  # Feature subsampling — MANDATORY >50 features (v10 bug: 11/177 sans rsm)
+            "thread_count": 4, "task_type": "CPU",  # rsm incompatible GPU (CatBoost: pairwise only)
             "use_best_model": True, "loss_function": "MultiClass",
             "random_seed": 42, "verbose": 500, "early_stopping_rounds": 500,
         },

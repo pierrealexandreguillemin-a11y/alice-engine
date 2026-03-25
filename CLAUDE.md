@@ -286,7 +286,8 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 ## Documentation
 
 - `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md` - Roadmap 5 phases → prod
-- `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md` - Plan Phase 1 residual
+- `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md` - Plan Phase 1 residual (Tasks 1-3 DONE, 4-6 SUPERSEDED)
+- `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` - Plan Phase 1b SHAP + calibration (ACTIF)
 - `docs/postmortem/2026-03-22-training-v8-divergence.md` - Postmortem training V8
 - `docs/architecture/ADR-002-inference-feature-construction.md` - Feature store decision
 - `docs/bilan-v8-fe-complete.md` - Bilan FE V8 (196 cols, artefacts)
@@ -344,22 +345,24 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
 - Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
 
-### V8 Training Findings (2026-03-22→23) — CRITIQUE
+### V8 Training Findings (2026-03-22→25) — CRITIQUE
 - **v1-v3 échoués** (path, divergence, hyperparams) — postmortem dans `docs/postmortem/`
-- **v5 : PREMIÈRE VICTOIRE** — CatBoost 0.8856, LightGBM 0.8849 < Elo baseline 0.92
-- **v6 bugué** — init_scores calculés APRÈS feature subset → fallback Elo=1500
-- **v7 EN ATTENTE** — 13 features domain-driven + init_scores corrects
-- **Root cause v1-v3** : pas de residual learning → modèles redécouvrent l'Elo
-- **Root cause v5 overfit** : 177 features sparse → overfit en 9 itérations
-- **Root cause v6 pire** : features sélectionnées par importance d'un modèle raté (v3)
+- **v5 : PREMIÈRE VICTOIRE** — CatBoost 0.886, LightGBM 0.885 < Elo baseline 0.92
+- **v10 : MEILLEUR** — LightGBM 0.877 (test), gate 8/9 (E[score] régression isotonic)
+- **v11 : ANNULÉ** — temperature scaling non vérifié
+- **DÉCOUVERTE v10** : 166/177 features à importance 0 = **artefact CatBoost PredictionValuesChange**
+  - XGBoost utilise **109 features**, LightGBM **50 features** (même données)
+  - Root cause : CatBoost manque `rsm` (feature subsampling) — oblivious trees depth=4
+  - CatBoost SHAP natif (`type='ShapValues'`) résout le problème
 - **Residual learning** : `compute_elo_init_scores()` → `Pool(baseline=)` / `base_margin` / `init_score`
 - **Eval cohérente** : `predict_with_init()` pour CatBoost/XGBoost/LightGBM (audit C2)
 - **Quality gate** : 9 conditions, condition 9 = `mean_p_draw > 1%` (pas recall_draw)
-- **Plan Phase 1** : `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md`
+- **Plan actuel** : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md`
 - **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
-- **NE JAMAIS lancer 177 features d'un coup** — validation incrémentale obligatoire
+- **NE JAMAIS utiliser PredictionValuesChange seul** — comparer importance cross-modèles + SHAP
 - **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
 - **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
+- **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
 
 ### Inference REQUIERT init_scores (C1 — Phase 2)
 - Les modèles entraînés avec residual learning ont besoin des init_scores à l'inférence

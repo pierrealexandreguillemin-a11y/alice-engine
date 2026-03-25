@@ -501,15 +501,41 @@ et corrige draw_bias n'est pas encore validée.
 | ML architecture SVGs (3) | scripts/generate_ml_graphs.py | — |
 | Hyperparams YAML synced | config/hyperparameters.yaml | 2 tests |
 
-### 9.8 Lacunes identifiées
+### 9.8 Découverte v10 : feature importance artifact (2026-03-25)
+
+**166/177 features à importance 0 = artefact CatBoost `PredictionValuesChange`.**
+
+| Modèle | Méthode importance | Features non-zero | Biaisée ? |
+|--------|-------------------|-------------------|-----------|
+| CatBoost | PredictionValuesChange | **11** | OUI — oblivious trees + residual |
+| XGBoost | Gain | **109** | Partiel — mais bien plus fiable |
+| LightGBM | Split count | **50** | Partiel — conservateur |
+
+Root cause CatBoost : pas de `rsm` (feature subsampling). Oblivious trees depth=4 =
+4 splits/arbre, toujours les mêmes features. Fix : `rsm=0.3` + SHAP natif.
+
+### 9.9 Plan Phase 1b : SHAP + Calibration
+
+Plan : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md`
+
+1. SHAP natif CatBoost + permutation importance sur les 3 modèles v10
+2. Feature validation par concordance cross-modèles
+3. CatBoost `rsm=0.3` fix + retrain
+4. Temperature scaling (Guo 2017) remplace isotonic renorm
+5. Quality gate 9/9 → push HF Hub
+
+### 9.10 Lacunes identifiées
 
 | Lacune | Sévérité | Action |
 |--------|----------|--------|
 | Pas de tracking commit↔dataset↔kernel | ~~HAUTE~~ | ✅ FAIT (commit f691e04) — SHA-256 + JSONL log |
 | Artefacts training non versionnés (local) | HAUTE | DVC ou HF Hub systématique |
 | IMPLEMENTATION_STATUS.md obsolète (jan 2026) | MOYENNE | Mettre à jour |
-| ISO_COMPLIANCE_TODOS.md dit 100% (faux pour V8) | HAUTE | Corriger |
-| Outputs Kaggle v9/v10 perdus (pas sauvés) | CRITIQUE | Sauver systématiquement |
+| ISO_COMPLIANCE_TODOS.md dit 100% (faux pour V8) | ~~HAUTE~~ | ✅ CORRIGÉ (2026-03-25) |
+| Outputs Kaggle v9/v10 perdus (pas sauvés) | ~~CRITIQUE~~ | ✅ v10 récupéré via web UI (42 MB) |
+| Feature importance SHAP manquante | HAUTE | Task 1 plan SHAP |
+| CatBoost `rsm` manquant | HAUTE | Task 3 plan SHAP |
+| Calibration (temperature scaling) | HAUTE | Task 4 plan SHAP |
 
 ---
 
