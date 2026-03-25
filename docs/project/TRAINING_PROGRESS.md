@@ -505,7 +505,7 @@ et corrige draw_bias n'est pas encore validée.
 
 | Lacune | Sévérité | Action |
 |--------|----------|--------|
-| Pas de tracking commit↔dataset↔kernel | HAUTE | Implémenter dans upload_all_data |
+| Pas de tracking commit↔dataset↔kernel | ~~HAUTE~~ | ✅ FAIT (commit f691e04) — SHA-256 + JSONL log |
 | Artefacts training non versionnés (local) | HAUTE | DVC ou HF Hub systématique |
 | IMPLEMENTATION_STATUS.md obsolète (jan 2026) | MOYENNE | Mettre à jour |
 | ISO_COMPLIANCE_TODOS.md dit 100% (faux pour V8) | HAUTE | Corriger |

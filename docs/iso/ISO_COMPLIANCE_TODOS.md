@@ -10,7 +10,7 @@
 | ISO 5055 (Code Quality) | 100% | 100% (< 300 lignes, 29 tests) | Non |
 | ISO 27001 (Security) | 100% | 100% (gitleaks, bandit) | Non |
 | ISO 42001 (AI Management) | 100% | **70%** — model card V8 pas pushé HF | **Oui** |
-| ISO 5259 (Data Quality ML) | 100% | **80%** — lineage OK, versioning dataset manquant | **Oui** |
+| ISO 5259 (Data Quality ML) | 100% | **90%** — lineage OK, commit↔dataset tracking FAIT (f691e04) | Non |
 | ISO 23894 (AI Risk) | 100% | 90% — rollback existe, drift monitor existe | Non |
 | ISO 24029 (Robustness) | 100% | **85%** — ROC/calibration curves générées, gate 8/9 | **Oui** |
 | ISO 24027 (Bias) | 100% | 90% — per-class metrics OK, fairness report à regénérer V8 | Non |
