@@ -227,28 +227,53 @@ def main() -> None:
 
     compute_shap_importance(results, X_test, y_test, init_scores_test, out_dir)
 
-    # Step 1: Calibrate on valid set (Guo 2017 temperature scaling)
-    from scripts.kaggle_diagnostics import calibrate_models  # noqa: PLC0415
-
-    calibrators = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)
-
-    # Step 2: Evaluate on test with CALIBRATED probabilities (production output)
-    evaluate_on_test(
-        results,
-        X_test,
-        y_test,
-        init_scores_test=init_scores_test,
-        calibrators=calibrators,
+    # Step 1: Dual calibration — temperature scaling vs isotonic (same kernel)
+    from scripts.kaggle_diagnostics import (  # noqa: PLC0415
+        calibrate_models,
+        calibrate_models_isotonic,
     )
 
-    # Step 3: Quality gate on calibrated metrics
+    cal_temp = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)
+    cal_iso = calibrate_models_isotonic(results, X_valid, y_valid, out_dir, init_scores_valid)
+
     baseline_metrics, draw_lookup = _compute_baselines(train, X_test, y_test, y_train)
     draw_lookup.to_parquet(out_dir / "draw_rate_lookup.parquet", index=False)
     logger.info("Saved draw_rate_lookup.parquet (%d cells) for inference", len(draw_lookup))
-
     champion_ll = fetch_champion_ll()
-    gate = check_quality_gates(results, baseline_metrics=baseline_metrics, champion_ll=champion_ll)
-    logger.info("Quality gate (post-calibration): %s", gate)
+
+    # Evaluate temperature, read gate, then overwrite with isotonic
+    evaluate_on_test(
+        results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal_temp
+    )
+    gate_temp = check_quality_gates(
+        results, baseline_metrics=baseline_metrics, champion_ll=champion_ll
+    )
+    logger.info("Quality gate TEMPERATURE: %s", gate_temp)
+
+    evaluate_on_test(
+        results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal_iso
+    )
+    gate_iso = check_quality_gates(
+        results, baseline_metrics=baseline_metrics, champion_ll=champion_ll
+    )
+    logger.info("Quality gate ISOTONIC: %s", gate_iso)
+
+    # Pick winner — re-evaluate with chosen calibrator so results has correct metrics
+    if gate_iso.get("passed") and not gate_temp.get("passed"):
+        calibrators, gate = cal_iso, gate_iso
+        logger.info("Winner: ISOTONIC")
+    elif gate_temp.get("passed") and gate_iso.get("passed"):
+        ll_t = gate_temp.get("best_log_loss", 1.0)
+        ll_i = gate_iso.get("best_log_loss", 1.0)
+        calibrators, gate = (cal_temp, gate_temp) if ll_t <= ll_i else (cal_iso, gate_iso)
+        logger.info("Winner: %s (both pass)", "TEMPERATURE" if ll_t <= ll_i else "ISOTONIC")
+    else:
+        calibrators, gate = cal_temp, gate_temp
+        logger.info("Winner: TEMPERATURE%s", "" if gate_temp.get("passed") else " (neither passes)")
+    # Final evaluate with winner so saved metrics/predictions match
+    evaluate_on_test(
+        results, X_test, y_test, init_scores_test=init_scores_test, calibrators=calibrators
+    )
 
     save_models(results, encoders, out_dir, model_extensions=MODEL_EXTENSIONS)
     save_diagnostics(

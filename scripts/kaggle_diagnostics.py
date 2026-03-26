@@ -1,17 +1,13 @@
-"""ML training diagnostics — ISO 42001/25059 compliance artifacts.
-
-Saves predictions, feature importance, learning curves, and
-classification reports alongside trained models.
-"""
+"""ML training diagnostics — ISO 42001/25059 compliance artifacts."""
 
 from __future__ import annotations
 
-import json
+import json  # noqa: E401
 import logging
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+import numpy as np  # noqa: E401
 import pandas as pd
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import accuracy_score, classification_report, f1_score, log_loss, roc_curve
@@ -87,6 +83,31 @@ def calibrate_models(
     if calibrators:
         joblib.dump(calibrators, out_dir / "calibrators.joblib")
         logger.info("  Calibrators saved to %s", out_dir / "calibrators.joblib")
+    return calibrators
+
+
+def calibrate_models_isotonic(
+    results: dict,
+    X_valid: Any,
+    y_valid: Any,
+    out_dir: Path,
+    init_scores_valid: Any = None,
+) -> dict:
+    """Fit isotonic regression per class (Niculescu-Mizil & Caruana 2005)."""
+    from sklearn.isotonic import IsotonicRegression  # noqa: PLC0415
+
+    calibrators: dict = {}
+    for name, r in results.items():
+        if r["model"] is None:
+            continue
+        y_proba = predict_with_init(r["model"], X_valid, init_scores_valid)
+        y_true = y_valid.values if hasattr(y_valid, "values") else np.asarray(y_valid)
+        isos = [
+            IsotonicRegression(out_of_bounds="clip").fit(y_proba[:, c], (y_true == c).astype(float))
+            for c in range(3)
+        ]
+        calibrators[name] = isos
+        logger.info("  %s isotonic fitted (3 classes)", name)
     return calibrators
 
 
