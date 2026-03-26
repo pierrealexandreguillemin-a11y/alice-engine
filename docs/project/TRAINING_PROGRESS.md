@@ -546,6 +546,34 @@ Plan : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md`
 
 **Postmortem** : `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 
+### 9.12 v15: First Clean Data Training (2026-03-26)
+
+**Date** : 2026-03-26
+**Status** : Running on Kaggle T4
+
+First training on clean data after fixing the resultat_blanc=2.0 contamination.
+All previous versions (v1-v13) trained on contaminated data (295K forfeits included, 62K wins excluded).
+
+**Fixes combined in v15 :**
+
+| Fix | Commit | Impact |
+|-----|--------|--------|
+| Data contamination (2.0 bug) | 56a58e7 | 295K forfeits removed, 62K wins restored. FE v2 verified |
+| Dynamic white advantage | cc8f2db | +35 replaced by Elo-level lookup (+8.5 to +32.4), verified 1.44M FFE games |
+| CatBoost rsm=0.3 | 378b97a | Feature subsampling mandatory >50 features. rsm incompatible GPU → CPU forced |
+| SHAP integrated | — | CatBoost native SHAP + manual permutation in training kernel (no separate SHAP kernel) |
+| Dual calibration | 37ad4ec | Temperature scaling vs isotonic compared in same kernel, winner picked by quality gate |
+
+**FE v2 verification (post data fix) :**
+- 49K resultat_blanc=2.0 included (victoires jeunes)
+- 0 forfeits in training data
+- Feature changes: echiquier_moyen -0.42, k_coefficient +0.33
+
+**Residual tuning options for v16+ (if needed) :**
+- Shrink init_scores (multiply by 0.5-0.8)
+- Increase lr/depth to compensate
+- Partial init (Elo init for W/L only, flat prior for D)
+
 ### 9.10 Lacunes identifiées
 
 | Lacune | Sévérité | Action |

@@ -346,15 +346,19 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
 - Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
 
-### V8 Training Findings (2026-03-22→25) — CRITIQUE
+### V8 Training Findings (2026-03-22→26) — CRITIQUE
 - **v1-v3 échoués** (path, divergence, hyperparams) — postmortem dans `docs/postmortem/`
 - **v5 : PREMIÈRE VICTOIRE** — CatBoost 0.886, LightGBM 0.885 < Elo baseline 0.92
 - **v10 : MEILLEUR** — LightGBM 0.877 (test), gate 8/9 (E[score] régression isotonic)
-- **v11 : ANNULÉ** — temperature scaling non vérifié
+- **v15 : FIRST CLEAN DATA** — data fix + dynamic white advantage + rsm + SHAP + dual calibration (running)
 - **DÉCOUVERTE v10** : 166/177 features à importance 0 = **artefact CatBoost PredictionValuesChange**
   - XGBoost utilise **109 features**, LightGBM **50 features** (même données)
   - Root cause : CatBoost manque `rsm` (feature subsampling) — oblivious trees depth=4
   - CatBoost SHAP natif (`type='ShapValues'`) résout le problème
+- **CONTAMINATION DATA (2026-03-25, CORRIGÉ)** : resultat_blanc=2.0 (62K victoires jeunes) exclu à tort + 295K vrais forfeits inclus. Tous v1-v13 entraînés sur données contaminées. Fix: filter `type_resultat`, recode 2.0→win (commit 56a58e7). FE v2 vérifié. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
+- **Dynamic white advantage (2026-03-25)** : +35 fixe remplacé par lookup Elo-level (+8.5 à +32.4), vérifié sur 1.44M parties FFE (commit cc8f2db)
+- **CatBoost rsm=0.3 (2026-03-25)** : rsm incompatible GPU (`pairwise only`) → CPU forcé. ~60s vs 12s GPU, négligeable (commit 378b97a)
+- **Dual calibration (2026-03-26)** : temperature scaling vs isotonic comparés dans le même kernel, winner par quality gate (commit 37ad4ec)
 - **Residual learning** : `compute_elo_init_scores()` → `Pool(baseline=)` / `base_margin` / `init_score`
 - **Eval cohérente** : `predict_with_init()` pour CatBoost/XGBoost/LightGBM (audit C2)
 - **Quality gate** : 9 conditions, condition 9 = `mean_p_draw > 1%` (pas recall_draw)
@@ -364,7 +368,6 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
 - **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
 - **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
-- **CONTAMINATION DATA (2026-03-25)** : resultat_blanc=2.0 (62K victoires jeunes) exclu à tort + 295K vrais forfeits inclus. Tous v1-v13 entraînés sur données contaminées. Fix: filter `type_resultat`, recode 2.0→win. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 
 ### Inference REQUIERT init_scores (C1 — Phase 2)
 - Les modèles entraînés avec residual learning ont besoin des init_scores à l'inférence

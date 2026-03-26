@@ -39,12 +39,18 @@ Les vrais forfaits sont dans `type_resultat` (forfait_blanc 43K, forfait_noir 42
 
 **Postmortem** : `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 
-- [ ] Fix `scripts/features/helpers.py`: remove FORFAIT_RESULT=2.0, fix filter_played_games to use type_resultat, fix compute_wdl_rates to count 2.0 as win
-- [ ] Fix `scripts/kaggle_trainers.py`: TARGET_MAP = {0.0:0, 0.5:1, 1.0:2, 2.0:2}
-- [ ] Fix all callers of exclude_forfeits() → use type_resultat filter
-- [ ] Commit + re-upload alice-code
-- [ ] Re-run alice-fe-v8 kernel (CPU, ~1h)
-- [ ] Then proceed to Tasks 1-6 on corrected data
+- [x] Fix `scripts/features/helpers.py`: remove FORFAIT_RESULT=2.0, fix filter_played_games to use type_resultat, fix compute_wdl_rates to count 2.0 as win (commit 56a58e7)
+- [x] Fix `scripts/kaggle_trainers.py`: TARGET_MAP = {0.0:0, 0.5:1, 1.0:2, 2.0:2} (commit 56a58e7)
+- [x] Fix all callers of exclude_forfeits() → use type_resultat filter (commit 56a58e7)
+- [x] Commit + re-upload alice-code (commit 56a58e7)
+- [x] Re-run alice-fe-v8 kernel (CPU, ~1h) — FE v2 verified: 49K resultat_blanc=2.0 included, 0 forfeits, features changed (echiquier_moyen -0.42, k_coefficient +0.33)
+- [x] Training v15 pushed with all fixes (data fix + dynamic white advantage + rsm + SHAP + dual calibration)
+
+**Additional fixes integrated in v15 (not in original plan):**
+- Dynamic white advantage: +35 replaced by Elo-level lookup (+8.5 to +32.4), verified on 1.44M FFE games (commit cc8f2db)
+- CatBoost rsm=0.3: mandatory for >50 features, rsm incompatible GPU → CPU forced (commit 378b97a)
+- SHAP integrated: CatBoost native SHAP + manual permutation in training kernel (no separate SHAP kernel)
+- Dual calibration: temperature scaling vs isotonic compared in same kernel, winner picked by quality gate (commit 37ad4ec)
 
 ---
 

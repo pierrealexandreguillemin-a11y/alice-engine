@@ -10,7 +10,7 @@
 | ISO 5055 (Code Quality) | 100% | 100% (< 300 lignes, 29 tests) | Non | — |
 | ISO 27001 (Security) | 100% | 100% (gitleaks, bandit) | Non | — |
 | ISO 42001 (AI Management) | 100% | **70%** — model card V8 pas pushé HF | **Oui** | Task 6 plan SHAP |
-| ISO 5259 (Data Quality ML) | 100% | **60%** — 295K forfeits in training + 62K wins excluded (2.0 bug), lineage OK, tracking FAIT | **Oui** | Task 0 data fix |
+| ISO 5259 (Data Quality ML) | 100% | **90%** — data fix implemented and verified (commit 56a58e7), FE v2 outputs checked (49K 2.0 included, 0 forfeits), lineage OK, tracking FAIT | Non | Task 0 DONE, v15 running |
 | ISO 23894 (AI Risk) | 100% | 90% — rollback + drift monitor existent | Non | — |
 | ISO 24029 (Robustness) | 100% | **85%** — gate 8/9 (E[score] MAE régression isotonic) | **Oui** | Task 4 temperature scaling |
 | ISO 24027 (Bias) | 100% | 90% — per-class metrics OK, fairness à regénérer | Non | Task 6 plan SHAP |
@@ -23,7 +23,7 @@ Le V8 MultiClass est un rewrite complet — les scores repartent de la conformit
 **Découverte 2026-03-25 (importance)** : 166/177 features à importance 0 = artefact CatBoost PredictionValuesChange.
 XGBoost utilise 109 features, LightGBM 50. SHAP natif CatBoost nécessaire pour résoudre.
 
-**Découverte 2026-03-25 (data contamination — CRITIQUE)** : `resultat_blanc=2.0` = victoire jeunes FFE (62K parties), PAS forfait. 295K vrais forfeits (identifiés par `type_resultat`) sont INCLUS dans le training. ISO 5259 score rétrogradé de 90% à 60%. Tous v1-v13 entraînés sur données contaminées. Fix bloquant : Task 0 dans plan SHAP. Postmortem : `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
+**Découverte 2026-03-25 (data contamination — CORRIGÉ)** : `resultat_blanc=2.0` = victoire jeunes FFE (62K parties), PAS forfait. 295K vrais forfeits (identifiés par `type_resultat`) étaient INCLUS dans le training. Fix appliqué (commit 56a58e7), FE v2 vérifié (49K 2.0 inclus, 0 forfeits). ISO 5259 score remonté à 90%. Training v15 en cours sur données propres. Postmortem : `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 
 Plan actif : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` (supersède Phase 1 Tasks 4-6)
 
