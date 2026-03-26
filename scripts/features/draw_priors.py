@@ -47,10 +47,10 @@ def build_draw_rate_lookup(df: pd.DataFrame) -> pd.DataFrame:
         Only cells with >= _MIN_CELL_ROWS observations are kept.
     """
     clean = filter_played_games(df)
-
+    if clean.empty or "resultat_blanc" not in clean.columns:
+        return pd.DataFrame(columns=["elo_band", "diff_band", "draw_rate_prior"])
     clean = _fill_elo_medians(clean)
     clean = _add_elo_bands(clean)
-
     clean["_is_draw"] = (clean["resultat_blanc"] == 0.5).astype(int)
     agg = (
         clean.groupby(["elo_band", "diff_band"])
@@ -135,7 +135,8 @@ def compute_player_draw_rates(
         DataFrame with columns: joueur_nom, draw_rate, n_games.
     """
     clean = filter_played_games(df)
-
+    if clean.empty or "resultat_blanc" not in clean.columns:
+        return pd.DataFrame(columns=["joueur_nom", "draw_rate", "n_games"])
     clean["_is_draw"] = (clean["resultat_blanc"] == 0.5).astype(int)
 
     blanc_draws = (
@@ -187,7 +188,8 @@ def compute_equipe_draw_rates(
         DataFrame with columns: equipe, draw_rate, n_games.
     """
     clean = filter_played_games(df)
-
+    if clean.empty or "resultat_blanc" not in clean.columns:
+        return pd.DataFrame(columns=["equipe", "draw_rate", "n_games"])
     is_draw = (clean["resultat_blanc"] == 0.5).astype(int)
     clean = clean.copy()
     clean["_is_draw"] = is_draw
@@ -261,6 +263,6 @@ def _add_elo_bands(df: pd.DataFrame) -> pd.DataFrame:
 def _global_draw_rate(df: pd.DataFrame) -> float:
     """Compute global draw rate from df (forfeits excluded) as fallback."""
     clean = filter_played_games(df)
-    if clean.empty:
+    if clean.empty or "resultat_blanc" not in clean.columns:
         return 0.15
     return float((clean["resultat_blanc"] == 0.5).mean())
