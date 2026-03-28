@@ -9,7 +9,10 @@ ADVANCED_CAT_FEATURES = [
     "couleur_preferee_blanc", "couleur_preferee_noir", "zone_enjeu_ext",
     "elo_trajectory_blanc", "elo_trajectory_noir",
     "pressure_type_blanc", "pressure_type_noir", "phase_saison", "regularite_blanc",
-    "regularite_noir", "role_type_blanc", "role_type_noir"]
+    "regularite_noir", "role_type_blanc", "role_type_noir",
+    "data_quality_blanc", "data_quality_noir",  # computed by enrich_from_joueurs
+    "elo_type_blanc", "elo_type_noir",          # computed by enrich_from_joueurs
+    "categorie_blanc", "categorie_noir"]        # computed by enrich_from_joueurs
 BOOL_FEATURES = [
     "joueur_fantome_blanc", "joueur_fantome_noir", "ffe_multi_equipe_blanc",
     "ffe_multi_equipe_noir", "est_dans_noyau_blanc", "est_dans_noyau_noir",
