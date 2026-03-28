@@ -158,3 +158,58 @@ class TestTeamDifferentials:
         ]
         for col in expected:
             assert col in result.columns, f"Missing: {col}"
+
+
+class TestInteractions:
+    """6 board x match interaction features."""
+
+    @pytest.fixture()
+    def sample_df(self):
+        return pd.DataFrame(
+            {
+                "diff_form": [0.4, -0.2],
+                "zone_enjeu_dom": ["danger", "mi_tableau"],
+                "echiquier": [1, 2],
+                "est_domicile_blanc": [1, 0],
+                "couleur_preferee_blanc": ["blanc", "noir"],
+                "decalage_position_blanc": [2.0, -1.0],
+                "match_important": [1, 0],
+                "club_utilise_marge_100_dom": [0.3, 0.0],
+                "flexibilite_echiquier_blanc": [0.8, 0.2],
+                "joueur_promu_blanc": [1, 0],
+                "diff_elo": [-150, 50],
+            }
+        )
+
+    def test_form_in_danger(self, sample_df):
+        from scripts.features.differentials import _board_match_interactions
+
+        result = _board_match_interactions(sample_df.copy())
+        assert result["form_in_danger"].iloc[0] == pytest.approx(0.4)
+        assert result["form_in_danger"].iloc[1] == pytest.approx(0.0)
+
+    def test_color_match_dom_odd_pref_blanc(self, sample_df):
+        from scripts.features.differentials import _board_match_interactions
+
+        result = _board_match_interactions(sample_df.copy())
+        assert result["color_match"].iloc[0] == 1
+
+    def test_color_match_ext_even_pref_noir(self, sample_df):
+        from scripts.features.differentials import _board_match_interactions
+
+        result = _board_match_interactions(sample_df.copy())
+        assert result["color_match"].iloc[1] == 0
+
+    def test_promu_vs_strong(self, sample_df):
+        from scripts.features.differentials import _board_match_interactions
+
+        result = _board_match_interactions(sample_df.copy())
+        assert result["promu_vs_strong"].iloc[0] == pytest.approx(0.375)
+        assert result["promu_vs_strong"].iloc[1] == pytest.approx(0.0)
+
+    def test_decalage_important(self, sample_df):
+        from scripts.features.differentials import _board_match_interactions
+
+        result = _board_match_interactions(sample_df.copy())
+        assert result["decalage_important"].iloc[0] == pytest.approx(2.0)
+        assert result["decalage_important"].iloc[1] == pytest.approx(0.0)

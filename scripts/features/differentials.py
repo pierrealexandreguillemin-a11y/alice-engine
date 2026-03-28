@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -62,4 +63,42 @@ def _team_differentials(df: pd.DataFrame) -> pd.DataFrame:
     ]
     for col_a, col_b, out in pairs:
         _safe_diff(df, col_a, col_b, out)
+    return df
+
+
+def _board_match_interactions(df: pd.DataFrame) -> pd.DataFrame:
+    """6 board x match interactions (player context in team context)."""
+    # form_in_danger: diff_form * zone_danger
+    if "diff_form" in df.columns and "zone_enjeu_dom" in df.columns:
+        is_danger = (df["zone_enjeu_dom"] == "danger").astype(int)
+        df["form_in_danger"] = df["diff_form"] * is_danger
+
+    # color_match: player has preferred color on this board (FFE convention)
+    if "echiquier" in df.columns and "est_domicile_blanc" in df.columns:
+        is_odd = df["echiquier"] % 2 == 1
+        est_dom = df["est_domicile_blanc"] == 1
+        blanc_plays_white = est_dom == is_odd
+        pref = df.get("couleur_preferee_blanc", pd.Series("neutre", index=df.index))
+        df["color_match"] = (
+            ((pref == "blanc") & blanc_plays_white) | ((pref == "noir") & ~blanc_plays_white)
+        ).astype(int)
+
+    # decalage_important: strategic placement in key match
+    if "decalage_position_blanc" in df.columns and "match_important" in df.columns:
+        df["decalage_important"] = df["decalage_position_blanc"] * df["match_important"]
+
+    # marge100_decale: deliberate captain strategy
+    if "club_utilise_marge_100_dom" in df.columns and "decalage_position_blanc" in df.columns:
+        df["marge100_decale"] = (
+            df["club_utilise_marge_100_dom"] * df["decalage_position_blanc"].abs()
+        )
+
+    # flex_decale: flexible player moved vs specialist moved
+    if "flexibilite_echiquier_blanc" in df.columns and "decalage_position_blanc" in df.columns:
+        df["flex_decale"] = df["flexibilite_echiquier_blanc"] * df["decalage_position_blanc"].abs()
+
+    # promu_vs_strong: reinforcement facing strong opponent
+    if "joueur_promu_blanc" in df.columns and "diff_elo" in df.columns:
+        df["promu_vs_strong"] = df["joueur_promu_blanc"] * np.clip(-df["diff_elo"], 0, 800) / 400
+
     return df
