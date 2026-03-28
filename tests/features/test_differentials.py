@@ -107,3 +107,54 @@ class TestPlayerDifferentials:
         ]
         for col in expected:
             assert col in result.columns, f"Missing: {col}"
+
+
+class TestTeamDifferentials:
+    """6 team differential features."""
+
+    @pytest.fixture()
+    def sample_df(self):
+        return pd.DataFrame(
+            {
+                "position_dom": [3, 8],
+                "position_ext": [8, 2],
+                "points_cumules_dom": [12, 4],
+                "points_cumules_ext": [6, 14],
+                "profondeur_effectif_dom": [15, 8],
+                "profondeur_effectif_ext": [8, 12],
+                "noyau_stable_dom": [6, 3],
+                "noyau_stable_ext": [4, 5],
+                "win_rate_home_dom": [0.6, 0.4],
+                "win_rate_home_ext": [0.3, 0.7],
+                "draw_rate_home_dom": [0.2, 0.15],
+                "draw_rate_home_ext": [0.1, 0.25],
+            }
+        )
+
+    def test_diff_position(self, sample_df):
+        from scripts.features.differentials import _team_differentials
+
+        result = _team_differentials(sample_df.copy())
+        assert result["diff_position"].iloc[0] == pytest.approx(-5.0)
+        assert result["diff_position"].iloc[1] == pytest.approx(6.0)
+
+    def test_diff_profondeur(self, sample_df):
+        from scripts.features.differentials import _team_differentials
+
+        result = _team_differentials(sample_df.copy())
+        assert result["diff_profondeur"].iloc[0] == pytest.approx(7.0)
+
+    def test_all_6_diffs_present(self, sample_df):
+        from scripts.features.differentials import _team_differentials
+
+        result = _team_differentials(sample_df.copy())
+        expected = [
+            "diff_position",
+            "diff_points_cumules",
+            "diff_profondeur",
+            "diff_stabilite",
+            "diff_win_rate_home",
+            "diff_draw_rate_home",
+        ]
+        for col in expected:
+            assert col in result.columns, f"Missing: {col}"

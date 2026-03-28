@@ -48,3 +48,18 @@ def _player_differentials(df: pd.DataFrame) -> pd.DataFrame:
     for col_a, col_b, out in pairs:
         _safe_diff(df, col_a, col_b, out)
     return df
+
+
+def _team_differentials(df: pd.DataFrame) -> pd.DataFrame:
+    """6 team matchup differentials (dom - ext)."""
+    pairs = [
+        ("position_dom", "position_ext", "diff_position"),
+        ("points_cumules_dom", "points_cumules_ext", "diff_points_cumules"),
+        ("profondeur_effectif_dom", "profondeur_effectif_ext", "diff_profondeur"),
+        ("noyau_stable_dom", "noyau_stable_ext", "diff_stabilite"),
+        ("win_rate_home_dom", "win_rate_home_ext", "diff_win_rate_home"),
+        ("draw_rate_home_dom", "draw_rate_home_ext", "diff_draw_rate_home"),
+    ]
+    for col_a, col_b, out in pairs:
+        _safe_diff(df, col_a, col_b, out)
+    return df
