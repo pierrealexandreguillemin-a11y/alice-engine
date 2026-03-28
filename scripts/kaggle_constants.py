@@ -3,13 +3,12 @@
 # fmt: off
 CATEGORICAL_FEATURES = ["type_competition", "division", "ligue_code", "jour_semaine"]
 CATBOOST_CAT_FEATURES = ["type_competition", "division", "ligue_code", "blanc_titre",
-                         "noir_titre", "jour_semaine", "zone_enjeu_dom"]
+                         "noir_titre", "jour_semaine", "zone_enjeu_dom", "zone_enjeu_ext"]
 ADVANCED_CAT_FEATURES = [
     "win_trend_blanc", "win_trend_noir", "draw_trend_blanc", "draw_trend_noir",
-    "couleur_preferee_blanc", "couleur_preferee_noir", "data_quality_blanc",
-    "data_quality_noir", "zone_enjeu_ext", "elo_trajectory_blanc", "elo_trajectory_noir",
-    "pressure_type_blanc", "pressure_type_noir", "categorie_blanc", "categorie_noir",
-    "elo_type_blanc", "elo_type_noir", "phase_saison", "regularite_blanc",
+    "couleur_preferee_blanc", "couleur_preferee_noir", "zone_enjeu_ext",
+    "elo_trajectory_blanc", "elo_trajectory_noir",
+    "pressure_type_blanc", "pressure_type_noir", "phase_saison", "regularite_blanc",
     "regularite_noir", "role_type_blanc", "role_type_noir"]
 BOOL_FEATURES = [
     "joueur_fantome_blanc", "joueur_fantome_noir", "ffe_multi_equipe_blanc",
