@@ -214,9 +214,11 @@ def run_feature_engineering_v2(
         data_dir=data_dir,
     )
 
-    # Valid: features calculées sur historique AVANT la saison valid (no leakage)
+    # Valid: include current season (same behavior as train — postmortem 2026-03-28)
+    # Without current season: 61 features 100% NaN on eval (standings, club, noyau)
+    # Intra-season leakage accepted: standings merge by ronde, club features are seasonal
     logger.info("\n  --- VALID ---")
-    valid_history = df[df["saison"] < valid_raw["saison"].min()]
+    valid_history = df[df["saison"] <= valid_raw["saison"].max()]
     valid = compute_features_for_split(
         df_split=valid_raw,
         df_history=valid_history,
@@ -225,9 +227,9 @@ def run_feature_engineering_v2(
         data_dir=data_dir,
     )
 
-    # Test: features calculées sur tout l'historique (avant test)
+    # Test: include current season (same behavior as train — postmortem 2026-03-28)
     logger.info("\n  --- TEST ---")
-    test_history = df[df["saison"] <= test_raw["saison"].min() - 1]
+    test_history = df[df["saison"] <= test_raw["saison"].max()]
     test = compute_features_for_split(
         df_split=test_raw,
         df_history=test_history,

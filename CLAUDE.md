@@ -307,6 +307,7 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - **Séquentiel obligatoire** : 15.4 GB RAM, train set ~7 GB → un modèle à la fois avec `gc.collect()` entre chaque
 - `scripts/training/parallel.py` est déjà séquentiel malgré son nom (refactoré en jan 2026)
 - **Split temporel** (pas k-fold random) : les règles FFE évoluent au fil des saisons (scoring 2pts jeunes U12+, catégories d'âge, seuils Elo E/N/F), k-fold mélangerait des ères réglementaires différentes
+- **CRITIQUE : historique DOIT inclure la saison courante** — sinon 61 features equipe (standings, club, noyau) sont 100% NaN sur valid/test. Fix commit XX. Postmortem: `docs/postmortem/2026-03-28-split-temporal-nan-features.md`
 - **@TODO Rolling Window** : comparer training 2012-2026 vs 2002-2026
   - 2012+ : features réglementaires plus cohérentes (scoring, catégories modernes)
   - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
