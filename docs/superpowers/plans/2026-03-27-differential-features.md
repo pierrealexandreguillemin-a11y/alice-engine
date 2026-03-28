@@ -701,10 +701,24 @@ git commit -m "docs(inference): add compute_differentials in Phase 2 TODO (FTI a
 
 ---
 
+### Task 8b: Fix temporal split — 61 features 100% NaN on eval — DONE
+
+**DISCOVERED 2026-03-28:** valid/test history excluded current season → 61 team features
+100% NaN on eval. Root cause of 116 "dead" features since v1. Fix: include current season
+in history (same as train behavior). Postmortem: `docs/postmortem/2026-03-28-split-temporal-nan-features.md`
+
+- [x] Step 1: Fix feature_engineering.py lines 219/230
+- [x] Step 2: Tests pass (1463)
+- [x] Step 3: Commit (ecd2020)
+
+**Requires re-upload dataset + re-push FE kernel before training.**
+
+---
+
 ### Task 8: Deploy to Kaggle and run training
 
 **Files:**
-- No code changes — deployment only
+- No code changes — deployment only (split fix already committed)
 
 - [ ] **Step 1: Upload dataset (contains new differentials.py)**
 

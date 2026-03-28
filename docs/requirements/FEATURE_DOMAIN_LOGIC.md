@@ -197,16 +197,22 @@ Confirme par v16 : `decalage_position_blanc` est VALIDATED alors qu'elle n'est d
 → Les differentiels numeriques seront automatiquement inclus. Pas besoin de modifier
 kaggle_constants.py pour les features numeriques.
 
-### 3.5 ~~Fantomes~~ ERREUR D'AUDIT (corrigee 2026-03-28)
+### 3.5 CAUSE RACINE : split temporel excluait la saison courante (fix 2026-03-28)
 
-**L'audit initial etait FAUX.** `data_quality`, `elo_type`, `categorie` SONT computees
-par `enrich_from_joueurs()`. `extract_temporal_features()` et `extract_adversaire_niveau()`
-SONT appelees dans `_add_contextual_features()`. Verifie par log FE Kaggle v3.
+**61/220 features 100% NaN sur valid et test.** Cause : `valid_history = df[saison < 2023]`
+excluait la saison 2023 → features equipe (standings, club, noyau, club_level)
+indexees par (equipe, saison) → merge echoue → NaN silencieux.
 
-Les features retirees a tort (commit 99a7349) ont ete restaurees (commit 15a5566).
+C'est LA cause racine des 116 features "mortes" depuis v1 et du gate es_mae.
 
-**Lecon** : TOUJOURS verifier l'existence des colonnes dans le parquet reel
-(pas juste grep le code) AVANT de modifier les listes d'encodage.
+**Fix (commit ecd2020)** : `valid_history = df[saison <= valid.max()]` (comme train).
+Postmortem : `docs/postmortem/2026-03-28-split-temporal-nan-features.md`
+
+### 3.5b Erreur d'audit fantomes (corrigee 2026-03-28)
+
+L'audit avait aussi declare `data_quality`, `elo_type`, `categorie` comme "fantomes".
+FAUX — elles sont computees par `enrich_from_joueurs()`. Retirees (99a7349) puis
+restaurees (15a5566). Lecon : verifier le parquet reel avant de modifier les listes.
 
 Asymetrie zone_enjeu : corrigee. `zone_enjeu_ext` ajoute dans CATBOOST_CAT (commit 99a7349).
 
