@@ -159,6 +159,11 @@ def _add_contextual_features(result: pd.DataFrame, df_history_played: pd.DataFra
     # match_important needs zone_enjeu columns already merged
     extract_match_important(result)
 
+    # Differential features (last step — needs all individual features computed)
+    from scripts.features.differentials import compute_differentials  # noqa: PLC0415
+
+    result = compute_differentials(result)
+
 
 def run_feature_engineering_v2(
     data_dir: Path,
