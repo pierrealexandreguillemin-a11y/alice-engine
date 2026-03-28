@@ -290,6 +290,8 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` - Plan Phase 1b SHAP + calibration (ACTIF)
 - `docs/postmortem/2026-03-22-training-v8-divergence.md` - Postmortem training V8
 - `docs/architecture/ADR-002-inference-feature-construction.md` - Feature store decision
+- `docs/requirements/FEATURE_DOMAIN_LOGIC.md` - **LIRE EN PRIORITE** — Logique metier features, differentiels manquants, litterature multisports, features mortes/vivantes
+- `docs/requirements/FEATURE_SPECIFICATION.md` - Spec formelle features (types, plages, ISO 5259)
 - `docs/bilan-v8-fe-complete.md` - Bilan FE V8 (196 cols, artefacts)
 - `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` - LLM co-authorship (ISO 42001)
 - `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
@@ -369,10 +371,18 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
 - **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
 
-### Inference REQUIERT init_scores (C1 — Phase 2)
+### Init Score Alpha — Prior Strength (v16, 2026-03-26)
+- `init_score_alpha=0.7` dans `config["global"]` (override: `ALICE_INIT_ALPHA`)
+- Réduit la dominance Elo : init_scores *= alpha avant training
+- Théorie : temperature scaling sur init logits (T=1/alpha), Guo et al. 2017
+- v15 : modèles convergent en 89-133 iters → prior trop fort → alpha < 1 donne plus de marge aux features
+- **Sweep prévu** : [0.5, 0.7, 0.9] via env var
+
+### Inference REQUIERT init_scores + alpha (C1 — Phase 2)
 - Les modèles entraînés avec residual learning ont besoin des init_scores à l'inférence
 - `draw_rate_lookup.parquet` sauvé comme artefact (45 cells)
-- L'inference service doit : compute_elo_baseline → compute_elo_init_scores → predict_with_init
+- L'inference service doit : compute_elo_baseline → compute_elo_init_scores → `*= alpha` → predict_with_init
+- **Alpha stocké dans metadata.json** (`config.global.init_score_alpha`) pour reproductibilité
 
 ### Lacunes versioning ISO 5259/42001 (@TODO Phase 2/5)
 - Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel

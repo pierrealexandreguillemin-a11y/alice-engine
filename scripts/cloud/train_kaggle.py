@@ -169,6 +169,17 @@ def main() -> None:
     init_scores_train = compute_init_scores_from_features(X_train, draw_lookup_train)
     init_scores_valid = compute_init_scores_from_features(X_valid, draw_lookup_train)
     init_scores_test = compute_init_scores_from_features(X_test, draw_lookup_train)
+
+    # Shrink init_scores to reduce Elo prior dominance (Guo et al. 2017: temperature scaling).
+    # Alpha < 1 gives features more room to express corrections beyond Elo.
+    # Env var override for sweep: ALICE_INIT_ALPHA=0.5 or 0.9
+    alpha = float(os.environ.get("ALICE_INIT_ALPHA", config["global"]["init_score_alpha"]))
+    if alpha != 1.0:
+        init_scores_train = init_scores_train * alpha
+        init_scores_valid = init_scores_valid * alpha
+        init_scores_test = init_scores_test * alpha
+        logger.info("Init score alpha=%.2f applied (T=%.2f)", alpha, 1.0 / alpha)
+
     for _name, _scores in [
         ("train", init_scores_train),
         ("valid", init_scores_valid),

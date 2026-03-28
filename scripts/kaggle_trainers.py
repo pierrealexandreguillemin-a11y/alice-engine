@@ -113,7 +113,15 @@ def default_hyperparameters() -> dict:
             xgb_gpu = {"tree_method": "gpu_hist"}
     # V9: residual-tuned (LR=0.005, depth=4, colsample=0.5 for 177 sparse features)
     return {
-        "global": {"random_seed": 42, "early_stopping_rounds": 500, "eval_metric": "multi_logloss"},
+        "global": {
+            "random_seed": 42,
+            "early_stopping_rounds": 500,
+            "eval_metric": "multi_logloss",
+            # Init score shrink: reduce Elo prior dominance so features can express corrections.
+            # Alpha < 1 = temperature scaling on init logits (T=1/alpha). Guo et al. 2017.
+            # v15: models converge in 89-133 iters → prior too strong → alpha=0.7
+            "init_score_alpha": 0.7,
+        },
         "catboost": {
             "iterations": 20000, "depth": 4, "border_count": 128,
             "learning_rate": 0.005, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
