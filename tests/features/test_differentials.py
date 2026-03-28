@@ -213,3 +213,77 @@ class TestInteractions:
         result = _board_match_interactions(sample_df.copy())
         assert result["decalage_important"].iloc[0] == pytest.approx(2.0)
         assert result["decalage_important"].iloc[1] == pytest.approx(0.0)
+
+
+class TestNewFeatures:
+    """4 new features: elo_uncertainty, k_asymmetry, zone dummies."""
+
+    def test_zone_dummies(self):
+        from scripts.features.differentials import _zone_dummies
+
+        df = pd.DataFrame({"zone_enjeu_dom": ["danger", "montee", "mi_tableau"]})
+        result = _zone_dummies(df.copy())
+        assert result["zone_danger_dom"].tolist() == [1, 0, 0]
+        assert result["zone_montee_dom"].tolist() == [0, 1, 0]
+
+    def test_elo_uncertainty_with_k(self):
+        from scripts.features.differentials import _new_features
+
+        df = pd.DataFrame(
+            {
+                "k_coefficient_blanc": [40, 20],
+                "k_coefficient_noir": [10, 20],
+            }
+        )
+        result = _new_features(df.copy())
+        assert result["elo_uncertainty"].iloc[0] == pytest.approx(50)
+        assert result["k_asymmetry"].iloc[0] == pytest.approx(30)
+
+    def test_elo_uncertainty_missing_k(self):
+        from scripts.features.differentials import _new_features
+
+        df = pd.DataFrame({"blanc_elo": [1500]})
+        result = _new_features(df.copy())
+        assert "elo_uncertainty" not in result.columns
+
+
+class TestMissingColumns:
+    """Module does not crash when source columns are absent."""
+
+    def test_missing_momentum(self):
+        from scripts.features.differentials import compute_differentials
+
+        df = pd.DataFrame(
+            {"expected_score_recent_blanc": [0.5], "expected_score_recent_noir": [0.4]}
+        )
+        result = compute_differentials(df.copy())
+        assert "diff_form" in result.columns
+        assert "diff_momentum" not in result.columns
+
+    def test_empty_df(self):
+        from scripts.features.differentials import compute_differentials
+
+        df = pd.DataFrame()
+        result = compute_differentials(df.copy())
+        assert len(result) == 0
+
+
+class TestBatchVsSingle:
+    """Same result on 1 row and N rows."""
+
+    def test_single_vs_batch(self):
+        from scripts.features.differentials import compute_differentials
+
+        row = pd.DataFrame(
+            {
+                "expected_score_recent_blanc": [0.7],
+                "expected_score_recent_noir": [0.3],
+                "position_dom": [3],
+                "position_ext": [8],
+            }
+        )
+        batch = pd.concat([row] * 100, ignore_index=True)
+        r1 = compute_differentials(row.copy())
+        rN = compute_differentials(batch.copy())
+        assert r1["diff_form"].iloc[0] == pytest.approx(rN["diff_form"].iloc[0])
+        assert r1["diff_position"].iloc[0] == pytest.approx(rN["diff_position"].iloc[0])

@@ -102,3 +102,37 @@ def _board_match_interactions(df: pd.DataFrame) -> pd.DataFrame:
         df["promu_vs_strong"] = df["joueur_promu_blanc"] * np.clip(-df["diff_elo"], 0, 800) / 400
 
     return df
+
+
+def _new_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Elo uncertainty from K-coefficients (Glicko-2, Glickman 2001)."""
+    if "k_coefficient_blanc" in df.columns and "k_coefficient_noir" in df.columns:
+        df["elo_uncertainty"] = df["k_coefficient_blanc"] + df["k_coefficient_noir"]
+        df["k_asymmetry"] = df["k_coefficient_blanc"] - df["k_coefficient_noir"]
+    return df
+
+
+def _zone_dummies(df: pd.DataFrame) -> pd.DataFrame:
+    """One-hot zone_enjeu_dom for interaction features."""
+    if "zone_enjeu_dom" in df.columns:
+        df["zone_danger_dom"] = (df["zone_enjeu_dom"] == "danger").astype(int)
+        df["zone_montee_dom"] = (df["zone_enjeu_dom"] == "montee").astype(int)
+    return df
+
+
+def compute_differentials(df: pd.DataFrame) -> pd.DataFrame:
+    """Add all differential + interaction features. Pure, no state.
+
+    Called in FE pipeline (batch) and inference (single row).
+    Same function both sides — prevents training-serving skew (Hopsworks FTI).
+    """
+    n_before = len(df.columns)
+    df = _player_differentials(df)
+    df = _team_differentials(df)
+    df = _zone_dummies(df)
+    df = _board_match_interactions(df)
+    df = _new_features(df)
+    n_added = len(df.columns) - n_before
+    if n_added > 0:
+        logger.info("Differentials: +%d features added", n_added)
+    return df
