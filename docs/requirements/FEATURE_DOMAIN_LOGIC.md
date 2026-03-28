@@ -197,26 +197,23 @@ Confirme par v16 : `decalage_position_blanc` est VALIDATED alors qu'elle n'est d
 → Les differentiels numeriques seront automatiquement inclus. Pas besoin de modifier
 kaggle_constants.py pour les features numeriques.
 
-### 3.5 Fantomes dans kaggle_constants.py
+### 3.5 ~~Fantomes~~ ERREUR D'AUDIT (corrigee 2026-03-28)
 
-Features listees dans ADVANCED_CAT_FEATURES mais JAMAIS COMPUTEES par le FE pipeline.
-L'encodeur les skip silencieusement (`if col not in train.columns: continue`).
-A nettoyer pour eviter la confusion :
+**L'audit initial etait FAUX.** `data_quality`, `elo_type`, `categorie` SONT computees
+par `enrich_from_joueurs()`. `extract_temporal_features()` et `extract_adversaire_niveau()`
+SONT appelees dans `_add_contextual_features()`. Verifie par log FE Kaggle v3.
 
-- `data_quality_blanc/noir` : jamais compute → retirer
-- `elo_type_blanc/noir` : jamais compute → retirer (redondant avec Elo brut)
-- `categorie_blanc/noir` : jamais compute → retirer OU implementer (k_coefficient proxy)
+Les features retirees a tort (commit 99a7349) ont ete restaurees (commit 15a5566).
 
-Asymetrie : `zone_enjeu_dom` dans CATBOOST_CAT, `zone_enjeu_ext` dans ADVANCED_CAT
-→ encodage different pour la meme feature. Corriger en ajoutant ext dans CATBOOST_CAT.
+**Lecon** : TOUJOURS verifier l'existence des colonnes dans le parquet reel
+(pas juste grep le code) AVANT de modifier les listes d'encodage.
 
-### 3.6 Modules jamais appeles
+Asymetrie zone_enjeu : corrigee. `zone_enjeu_ext` ajoute dans CATBOOST_CAT (commit 99a7349).
 
-- `extract_adversaire_niveau()` : adversaire_niveau_dom/ext — utile, a brancher
-- `extract_temporal_features()` : phase_saison, ronde_normalisee — verifier si ronde_normalisee
-  arrive par un autre chemin
+### 3.6 Modules CE jamais appeles (VRAI orphelins)
+
 - `ce/scenarios.py` : urgence_score [0,1] — meilleur que match_important (81% positif),
-  proxy `urgence_proxy = zone_critique × ronde_normalisee` dans differentials.py
+  proxy `urgence_proxy = zone_critique × ronde_normalisee` possible dans differentials.py
 - `ce/urgency.py`, `ce/transferability.py` : CE-only, hors scope ML
 
 ### 3.4 Training-serving skew (FTI pattern, Hopsworks)

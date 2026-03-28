@@ -237,18 +237,21 @@ string listees dans ADVANCED_CAT NE SONT PAS droppees — elles sont label-encod
 puis gardees. Les vraies orphelines sont les features LISTEES MAIS JAMAIS COMPUTEES,
 et les modules JAMAIS APPELES.
 
-### 5.1 Fantomes dans kaggle_constants.py (P0 — nettoyer)
+### 5.1 ~~Fantomes dans kaggle_constants.py~~ ERREUR D'AUDIT (corrigee 2026-03-28)
 
-Features dans ADVANCED_CAT_FEATURES mais JAMAIS COMPUTEES par le FE pipeline.
-L'encodeur les skip silencieusement (`if col not in train.columns: continue`).
+**L'audit etait FAUX.** Les features `data_quality`, `elo_type`, `categorie` SONT
+computees par `enrich_from_joueurs()` dans `_add_direct_features()`. Elles existent
+dans les parquets (verifie localement et sur Kaggle FE v3 log ligne 65).
 
-| Feature | Dans ADVANCED_CAT | Computee | Action |
-|---|---|---|---|
-| `data_quality_blanc/noir` | Oui | **NON** | Retirer de la liste |
-| `elo_type_blanc/noir` | Oui | **NON** | Retirer (redondant avec Elo brut) |
-| `categorie_blanc/noir` | Oui | **NON** | Retirer OU implementer (P2: k_coefficient proxy) |
+Elles ont ete retirees de ADVANCED_CAT par erreur (commit 99a7349) puis restaurees
+(commit 15a5566). **Lecon** : toujours verifier l'existence des colonnes dans le
+parquet AVANT de modifier les listes d'encodage.
 
-**Action** : nettoyer ADVANCED_CAT pour ne garder que les colonnes reellement computees.
+| Feature | Computee par | Statut |
+|---|---|---|
+| `data_quality_blanc/noir` | `enrich_from_joueurs()` | DANS ADVANCED_CAT ✓ |
+| `elo_type_blanc/noir` | `enrich_from_joueurs()` | DANS ADVANCED_CAT ✓ |
+| `categorie_blanc/noir` | `enrich_from_joueurs()` | DANS ADVANCED_CAT ✓ |
 
 ### 5.2 Asymetrie zone_enjeu (P0 — corriger)
 

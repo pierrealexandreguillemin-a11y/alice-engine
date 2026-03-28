@@ -28,53 +28,18 @@ The differentials call goes inside `compute_features_for_split()` — so fe_kagg
 
 ---
 
-### Task 1: Clean up kaggle_constants.py phantom entries
+### Task 1: Fix kaggle_constants.py (zone_enjeu_ext asymmetry) — DONE + ERRATUM
 
-**Files:**
-- Modify: `scripts/kaggle_constants.py`
+**ERRATUM (2026-03-28):** L'audit avait identifie data_quality, elo_type, categorie comme
+"fantomes jamais computes". C'etait FAUX — elles sont computees par `enrich_from_joueurs()`.
+Elles ont ete retirees (commit 99a7349) puis restaurees (commit 15a5566).
 
-- [ ] **Step 1: Remove phantom features from ADVANCED_CAT_FEATURES**
+**Ce qui a ete fait correctement :** zone_enjeu_ext ajoutee dans CATBOOST_CAT.
 
-These features are listed but never computed by any FE module. The encoder silently skips them.
-
-```python
-# scripts/kaggle_constants.py — remove these 6 phantoms from ADVANCED_CAT_FEATURES:
-# "data_quality_blanc", "data_quality_noir" — never computed
-# "elo_type_blanc", "elo_type_noir" — never computed (redundant with Elo)
-# "categorie_blanc", "categorie_noir" — never computed (P2: k_coefficient proxy)
-```
-
-After removal, ADVANCED_CAT_FEATURES should be:
-```python
-ADVANCED_CAT_FEATURES = [
-    "win_trend_blanc", "win_trend_noir", "draw_trend_blanc", "draw_trend_noir",
-    "couleur_preferee_blanc", "couleur_preferee_noir",
-    "zone_enjeu_ext", "elo_trajectory_blanc", "elo_trajectory_noir",
-    "pressure_type_blanc", "pressure_type_noir",
-    "phase_saison", "regularite_blanc", "regularite_noir",
-    "role_type_blanc", "role_type_noir"]
-```
-
-- [ ] **Step 2: Add zone_enjeu_ext to CATBOOST_CAT_FEATURES for consistency**
-
-Currently `zone_enjeu_dom` is in CATBOOST_CAT but `zone_enjeu_ext` is only in ADVANCED_CAT. Fix asymmetry:
-
-```python
-CATBOOST_CAT_FEATURES = ["type_competition", "division", "ligue_code", "blanc_titre",
-                         "noir_titre", "jour_semaine", "zone_enjeu_dom", "zone_enjeu_ext"]
-```
-
-- [ ] **Step 3: Run tests**
-
-Run: `.venv/Scripts/python -m pytest tests/ -x -q --ignore=tests/test_cloud_features.py -k "not test_forfeits_excluded"`
-Expected: all pass (no behavioral change, just config cleanup)
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add scripts/kaggle_constants.py
-git commit -m "fix(constants): remove 6 phantom ADVANCED_CAT entries, fix zone_enjeu_ext asymmetry"
-```
+- [x] Step 1: ~~Remove phantoms~~ ANNULE (features existaient)
+- [x] Step 2: Add zone_enjeu_ext to CATBOOST_CAT ✓ (commit 99a7349)
+- [x] Step 3: Tests pass ✓
+- [x] Step 4: Commit ✓ (99a7349 + fix 15a5566)
 
 ---
 

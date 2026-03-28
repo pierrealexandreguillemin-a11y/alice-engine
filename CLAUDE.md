@@ -290,9 +290,11 @@ kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
 - `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` - Plan Phase 1b SHAP + calibration (ACTIF)
 - `docs/postmortem/2026-03-22-training-v8-divergence.md` - Postmortem training V8
 - `docs/architecture/ADR-002-inference-feature-construction.md` - Feature store decision
-- `docs/requirements/FEATURE_DOMAIN_LOGIC.md` - **LIRE EN PRIORITE** — Logique metier features, differentiels manquants, litterature multisports, features mortes/vivantes
+- `docs/requirements/FEATURE_DOMAIN_LOGIC.md` - **LIRE EN PRIORITE** — Logique metier features, differentiels, litterature multisports
 - `docs/requirements/FEATURE_SPECIFICATION.md` - Spec formelle features (types, plages, ISO 5259)
-- `docs/bilan-v8-fe-complete.md` - Bilan FE V8 (196 cols, artefacts)
+- `docs/superpowers/specs/2026-03-27-differential-features-design.md` - Spec differentiels (24 features)
+- `docs/superpowers/plans/2026-03-27-differential-features.md` - Plan impl differentiels (Tasks 1-8)
+- `docs/bilan-v8-fe-complete.md` - Bilan FE V8 (196→220 cols avec differentiels)
 - `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` - LLM co-authorship (ISO 42001)
 - `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
 - `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md` - Spec V8 MultiClass
