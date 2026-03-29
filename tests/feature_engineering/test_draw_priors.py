@@ -183,22 +183,22 @@ class TestForfaitExclusion:
     """Forfait rows excluded from all computations — 1 test."""
 
     def test_forfeits_excluded(self, sample_games: pd.DataFrame) -> None:
-        """Test resultat_blanc=2.0 rows are excluded from draw rate computation."""
-        # Build a df where ALL forfeits would produce non-zero draw_rate if included
+        """Test forfeit rows (type_resultat=forfait_*) excluded from draw rates."""
+        # P1/P2: all forfeits — should be excluded by filter_played_games
         df_forfeits_only = pd.DataFrame(
             {
                 "blanc_nom": ["P1"] * 20,
                 "noir_nom": ["P2"] * 20,
                 "blanc_elo": [1500.0] * 20,
                 "noir_elo": [1500.0] * 20,
-                "resultat_blanc": [2.0] * 20,
+                "resultat_blanc": [1.0] * 20,
                 "resultat_noir": [0.0] * 20,
                 "equipe_dom": ["A"] * 20,
                 "equipe_ext": ["B"] * 20,
-                "type_resultat": ["victoire_blanc"] * 20,
+                "type_resultat": ["forfait_noir"] * 20,
             }
         )
-        # Mix: 30 real draws + 20 forfeits — if forfeits included, rate != 1.0
+        # P3/P4: 30 real draws
         df_real = pd.DataFrame(
             {
                 "blanc_nom": ["P3"] * 30,

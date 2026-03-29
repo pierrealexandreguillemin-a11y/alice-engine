@@ -71,6 +71,19 @@ def calculate_standings(df: pd.DataFrame) -> pd.DataFrame:
     standings_data = _compute_all_standings(matches)
 
     result = pd.DataFrame(standings_data)
+    # Cast int cols to float64 — these will have NaN after left join merge,
+    # and pandas promotes int→float inconsistently across splits (F7 gate)
+    float_cols = [
+        "points_cumules",
+        "position",
+        "nb_equipes",
+        "ecart_premier",
+        "ecart_dernier",
+        "niveau_hierarchique",
+    ]
+    for c in float_cols:
+        if c in result.columns:
+            result[c] = result[c].astype("float64")
     logger.info(f"  {len(result)} lignes classement générées")
     return result
 

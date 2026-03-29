@@ -76,6 +76,17 @@ def extract_team_enjeu_features(
         )
 
     result = pd.DataFrame(features_data)
+    # Cast to float64 — left join will introduce NaN, consistent dtype (F7 gate)
+    for c in (
+        "niveau_hierarchique",
+        "position",
+        "nb_equipes",
+        "ecart_premier",
+        "ecart_dernier",
+        "points_cumules",
+    ):
+        if c in result.columns:
+            result[c] = result[c].astype("float64")
     logger.info(f"  {len(result)} équipes/rondes avec zones enjeu réelles")
 
     return result
