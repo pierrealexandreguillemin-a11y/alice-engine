@@ -11,3 +11,5 @@
 {"timestamp": "2026-03-26T22:40:51.118622", "git_commit": "8c1f778", "dataset_slug": "pguillemin/alice-code", "content_hash": "c8a8e7e6e4d541a4", "version_notes": "v16: init_score_alpha=0.7 (Guo et al. 2017 temperature scaling)"}
 {"timestamp": "2026-03-28T11:54:33.742970", "git_commit": "178e169", "dataset_slug": "pguillemin/alice-code", "content_hash": "c72ad4bd137b6594", "version_notes": "differential features (24 cols, PMC11265715/Hubacek 2019)"}
 {"timestamp": "2026-03-28T14:19:14.400667", "git_commit": "15a5566", "dataset_slug": "pguillemin/alice-code", "content_hash": "5238ad6445204361", "version_notes": "fix: restore categorie/elo_type/data_quality in ADVANCED_CAT"}
+{"timestamp": "2026-03-28T18:21:11.375397", "git_commit": "e9001a0", "dataset_slug": "pguillemin/alice-code", "content_hash": "787e72441b68e1e2", "version_notes": "v4: split fix \u2014 include current season in valid/test history (61 NaN\u21920)"}
+{"timestamp": "2026-03-29T18:19:43.908742", "git_commit": "e9001a0", "dataset_slug": "pguillemin/alice-code", "content_hash": "58ef11ee37b9f696", "version_notes": "v18: single-model kernels, n_est=50K, early_stop=200, checkpoints, F7 dtype fix"}

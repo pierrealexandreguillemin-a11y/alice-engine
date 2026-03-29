@@ -171,8 +171,12 @@ scripts/
 │   ├── autogluon_model_card.py   # ISO 42001 Model Card builder
 │   ├── promote_model.py          # Promotion locale ISO
 │   ├── upload_all_data.py        # Upload data+code → Kaggle Dataset
-│   ├── kernel-metadata.json      # Config Kaggle CatBoost kernel
-│   └── kernel-metadata-autogluon.json # Config Kaggle AutoGluon kernel
+│   ├── kernel-metadata-fe.json         # Config FE kernel (CPU)
+│   ├── kernel-metadata-train.json      # Config training all-in-one (legacy)
+│   ├── kernel-metadata-xgboost.json    # Config XGBoost seul (CPU, canary)
+│   ├── kernel-metadata-catboost.json   # Config CatBoost seul (CPU, SHAP)
+│   ├── kernel-metadata-lightgbm.json   # Config LightGBM seul (CPU, best)
+│   └── kernel-metadata-autogluon.json  # Config Kaggle AutoGluon kernel
 ├── kaggle_trainers.py      # ML training logic (CatBoost/XGBoost/LightGBM)
 ├── kaggle_metrics.py       # Multiclass metrics + predict_with_init + quality gates
 ├── kaggle_artifacts.py     # Model persistence + HF Hub push
@@ -241,47 +245,60 @@ make sync          # Sync données depuis ffe_scrapper
 make refresh-data  # Sync + parse + validate ISO 5259 + features (pipeline complet)
 ```
 
-### Training cloud (Kaggle)
+### Training cloud (Kaggle) — Architecture 4-kernel CPU (ADR-003)
 ```bash
 python -m scripts.cloud.upload_all_data    # Upload data+code → Kaggle Dataset
 
-# CatBoost/XGBoost/LightGBM (kernel-metadata.json)
-cp scripts/cloud/kernel-metadata.json scripts/cloud/kernel-metadata.json.bak
-kaggle kernels push -p scripts/cloud/
-kaggle kernels status pguillemin/alice-training
-
-# AutoGluon (kernel-metadata-autogluon.json → T4x2 GPU)
-cp scripts/cloud/kernel-metadata-autogluon.json scripts/cloud/kernel-metadata.json
+# 1. XGBoost canary (~1h CPU, fast feedback)
+cp scripts/cloud/kernel-metadata-xgboost.json scripts/cloud/kernel-metadata.json
 kaggle kernels push -p scripts/cloud/
 git checkout -- scripts/cloud/kernel-metadata.json
-kaggle kernels status pguillemin/alice-autogluon-v1
+# → Analyser résultats, ajuster si besoin
+
+# 2. CatBoost + LightGBM en parallèle (~9-10h CPU)
+cp scripts/cloud/kernel-metadata-catboost.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+cp scripts/cloud/kernel-metadata-lightgbm.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+git checkout -- scripts/cloud/kernel-metadata.json
 
 python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion ISO locale
 ```
 
 **IMPORTANT Kaggle :**
-- Datasets montés à `/kaggle/input/datasets/{user}/{slug}/` (PAS `/kaggle/input/{slug}/`)
-- **kernel_sources montés à `/kaggle/input/notebooks/{user}/{slug}/`** (PAS `/kaggle/input/{slug}/`)
-- AutoGluon pas pré-installé — pip install au runtime dans le script
-- GPU T4x2 (sm_75) compatible CUDA 12.8 — P100 (sm_60) INCOMPATIBLE PyTorch mais OK tree models
+- **CPU illimité** (pas de quota hebdo, 12h/session). GPU = 30h/semaine partagé P100+T4
+- **Tous les kernels training sont CPU** (`enable_gpu: false`) — tree models n'utilisent pas GPU
+- Datasets montés à `/kaggle/input/datasets/{user}/{slug}/`
+- **kernel_sources montés à `/kaggle/input/notebooks/{user}/{slug}/`**
+- Modèle détecté via `KAGGLE_KERNEL_RUN_SLUG` (slug contient xgboost/catboost/lightgbm)
+- **Checkpoints** après chaque modèle (protection timeout)
 - Toujours re-uploader `alice-code` dataset AVANT push kernel si fichiers modifiés
 - **cudf RALENTIT le feature engineering** (groupby-heavy) — désactivé dans fe_kaggle.py
 - **Secrets impossibles en batch push** (Kaggle API issue #582) — HF push échoue silencieusement
-- **`--accelerator NvidiaTeslaT4`** obligatoire dans la commande push (enable_gpu donne P100 par défaut)
 
-**V8 Architecture 2-kernel :**
+**V8 Architecture 4-kernel (ADR-003, 2026-03-29) :**
 ```
-# Kernel 1: Feature Engineering (P100 CPU, ~1h)
+# Kernel 1: Feature Engineering (CPU, ~1h)
 cp scripts/cloud/kernel-metadata-fe.json scripts/cloud/kernel-metadata.json
 kaggle kernels push -p scripts/cloud/
 # → Output: features/train.parquet, valid.parquet, test.parquet
 
-# Kernel 2: Training MultiClass (T4 GPU, ~30min)
-cp scripts/cloud/kernel-metadata-train.json scripts/cloud/kernel-metadata.json
-kaggle kernels push -p scripts/cloud/ --accelerator NvidiaTeslaT4
-# → Input: kernel_sources pguillemin/alice-fe-v8
-# → Output: CatBoost/XGBoost/LightGBM MultiClass models + diagnostics
+# Kernel 2: XGBoost canary (CPU, ~1h) — fast feedback
+cp scripts/cloud/kernel-metadata-xgboost.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+# → Analyse résultats, ajuster si besoin
+
+# Kernel 3+4: CatBoost + LightGBM (CPU, ~9-10h) — en parallèle
+cp scripts/cloud/kernel-metadata-catboost.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+cp scripts/cloud/kernel-metadata-lightgbm.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+git checkout -- scripts/cloud/kernel-metadata.json
 ```
+**CPU uniquement** — 0 GPU quota (Kaggle CPU illimité, 12h/session).
+Modèle détecté via `KAGGLE_KERNEL_RUN_SLUG` (slug contient xgboost/catboost/lightgbm).
+**Checkpoints** après chaque modèle (timeout protection).
+n_estimators=50K, early_stopping=200.
 
 ## Documentation
 
