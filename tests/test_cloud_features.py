@@ -59,6 +59,7 @@ def realistic_df() -> pd.DataFrame:
             "blanc_titre": rng.choice(["GM", "IM", ""], n),
             "noir_titre": rng.choice(["GM", "FM", ""], n),
             "zone_enjeu_dom": rng.choice(["danger", "confort"], n),
+            "zone_enjeu_ext": rng.choice(["danger", "confort", "montee"], n),
             "blanc_nom": [f"Player_{i}" for i in range(n)],
             "noir_nom": [f"Opponent_{i}" for i in range(n)],
             "equipe_dom": [f"Team_{i % 10}" for i in range(n)],

@@ -1,7 +1,8 @@
 """ML training constants — feature lists, labels, extensions (ISO 5055 SRP)."""
 
 # fmt: off
-CATEGORICAL_FEATURES = ["type_competition", "division", "ligue_code", "jour_semaine"]
+CATEGORICAL_FEATURES = ["type_competition", "division", "ligue_code", "jour_semaine",
+                        "zone_enjeu_dom", "zone_enjeu_ext"]
 CATBOOST_CAT_FEATURES = ["type_competition", "division", "ligue_code", "blanc_titre",
                          "noir_titre", "jour_semaine", "zone_enjeu_dom", "zone_enjeu_ext"]
 ADVANCED_CAT_FEATURES = [
