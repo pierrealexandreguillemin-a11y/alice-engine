@@ -1,7 +1,7 @@
 {
-  "id": "pguillemin/alice-training-v8",
-  "title": "alice-training-v8",
-  "code_file": "train_kaggle.py",
+  "id": "pguillemin/alice-train-catboost",
+  "title": "alice-train-catboost",
+  "code_file": "train_catboost.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,

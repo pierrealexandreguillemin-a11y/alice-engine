@@ -100,52 +100,43 @@ def _has_gpu() -> bool:
 
 
 def default_hyperparameters() -> dict:
-    """Auto-detect GPU and set optimal hyperparameters for Kaggle."""
-    gpu = _has_gpu()
-    logger.info("GPU detected: %s", gpu)
+    """Optimal hyperparameters for Kaggle CPU training (ADR-003: all models CPU)."""
     # fmt: off
-    xgb_gpu = {"tree_method": "hist", "device": "cpu"}
-    if gpu:
-        try:
-            from xgboost import __version__ as xv  # noqa: PLC0415
-            xgb_gpu = {"tree_method": "hist", "device": "cuda"} if int(xv.split(".")[0]) >= 2 else {"tree_method": "gpu_hist"}
-        except Exception:
-            xgb_gpu = {"tree_method": "gpu_hist"}
-    # V9: residual-tuned (LR=0.005, depth=4, colsample=0.5 for 177 sparse features)
     return {
         "global": {
             "random_seed": 42,
-            "early_stopping_rounds": 500,
+            "early_stopping_rounds": 200,
             "eval_metric": "multi_logloss",
             # Init score shrink: reduce Elo prior dominance so features can express corrections.
-            # Alpha < 1 = temperature scaling on init logits (T=1/alpha). Guo et al. 2017.
+            # Alpha < 1 = confidence in Elo prior (Ash & Adams 2020, NeurIPS). Not a hack.
             # v15: models converge in 89-133 iters → prior too strong → alpha=0.7
             "init_score_alpha": 0.7,
         },
         "catboost": {
-            "iterations": 20000, "depth": 4, "border_count": 128,
+            "iterations": 50000, "depth": 4, "border_count": 128,
             "learning_rate": 0.005, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
             "random_strength": 3, "bagging_temperature": 1, "model_size_reg": 0.5,
             "rsm": 0.3,  # Feature subsampling — MANDATORY >50 features (v10 bug: 11/177 sans rsm)
             "thread_count": 4, "task_type": "CPU",  # rsm incompatible GPU (CatBoost: pairwise only)
             "use_best_model": True, "loss_function": "MultiClass",
-            "random_seed": 42, "verbose": 500, "early_stopping_rounds": 500,
+            "random_seed": 42, "verbose": 500, "early_stopping_rounds": 200,
         },
         "xgboost": {
-            "n_estimators": 20000, "max_depth": 4, "eta": 0.005,
+            "n_estimators": 50000, "max_depth": 4, "eta": 0.005,
             "objective": "multi:softprob", "num_class": 3,
             "lambda": 10.0, "alpha": 0.5, "min_child_weight": 50,
             "subsample": 0.7, "colsample_bytree": 0.5,
-            **xgb_gpu, "nthread": 4, "seed": 42,
-            "early_stopping_rounds": 500, "verbosity": 1,
+            "tree_method": "hist", "device": "cpu",  # CPU — no GPU needed for tree models
+            "nthread": 4, "seed": 42,
+            "early_stopping_rounds": 200, "verbosity": 1,
         },
         "lightgbm": {
-            "n_estimators": 20000, "num_leaves": 15, "max_depth": 4,
+            "n_estimators": 50000, "num_leaves": 15, "max_depth": 4,
             "learning_rate": 0.003, "objective": "multiclass", "num_class": 3,
             "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_samples": 200,
             "min_gain_to_split": 0.01, "subsample": 0.7, "colsample_bytree": 0.5,
             "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 500, "verbose": -1,
+            "early_stopping_rounds": 200, "verbose": -1,
         },
     }
     # fmt: on
@@ -292,9 +283,21 @@ def train_all_sequential(
     config: dict,
     init_scores_train: Any | None = None,
     init_scores_valid: Any | None = None,
+    checkpoint_dir: Any | None = None,
+    encoders: Any = None,
+    model_extensions: dict | None = None,
+    model_filter: str | None = None,
 ) -> dict:
-    """CatBoost -> gc -> XGBoost -> gc -> LightGBM. Sequential memory management."""
-    trainers = [("CatBoost", _train_catboost), ("XGBoost", _train_xgboost), ("LightGBM", _train_lightgbm)]  # fmt: skip
+    """Train models sequentially. Checkpoint after each. Filter with ALICE_MODEL env var."""
+    all_trainers = [("CatBoost", _train_catboost), ("XGBoost", _train_xgboost), ("LightGBM", _train_lightgbm)]  # fmt: skip
+    if model_filter:
+        trainers = [(n, f) for n, f in all_trainers if n.lower() == model_filter.lower()]
+        if not trainers:
+            logger.error("Unknown model filter: %s", model_filter)
+            trainers = all_trainers
+    else:
+        trainers = all_trainers
+    logger.info("Training %d model(s): %s", len(trainers), [n for n, _ in trainers])
     results: dict = {}
     for name, fn in trainers:
         results[name] = fn(
@@ -306,5 +309,24 @@ def train_all_sequential(
             init_scores_train,
             init_scores_valid,
         )
+        if checkpoint_dir and results[name]["model"] is not None:
+            _checkpoint_model(name, results[name], checkpoint_dir, model_extensions)
         gc.collect()
     return results
+
+
+def _checkpoint_model(
+    name: str, result: dict, out_dir: Any, model_extensions: dict | None = None
+) -> None:
+    """Save a single model to disk immediately after training."""
+    from pathlib import Path  # noqa: PLC0415
+
+    out_dir = Path(out_dir)
+    model = result["model"]
+    ext = (model_extensions or {}).get(name, ".bin")
+    path = out_dir / f"{name.lower()}_checkpoint{ext}"
+    try:
+        model.save_model(str(path))
+        logger.info("Checkpoint: %s saved to %s", name, path)
+    except Exception as e:
+        logger.warning("Checkpoint failed for %s: %s", name, e)

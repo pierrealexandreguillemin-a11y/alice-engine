@@ -124,7 +124,30 @@ def _compute_baselines(
 
 def main() -> None:
     """Full Kaggle training pipeline orchestration (ISO 42001)."""
-    logger.info("ALICE Engine — V8 MultiClass Training (Kernel 2/2)")
+    # Single-model mode: detect from env var, slug, or notebook title
+    kaggle_env = {k: v for k, v in os.environ.items() if k.startswith("KAGGLE")}
+    logger.info("KAGGLE env vars: %s", list(kaggle_env.keys()))
+    model_filter = os.environ.get("ALICE_MODEL")
+    if not model_filter:
+        # Try multiple Kaggle env vars that may contain the kernel name
+        for env_key in ("KAGGLE_KERNEL_RUN_SLUG", "KAGGLE_URL_BASE", "KAGGLE_DOCKER_IMAGE"):
+            val = os.environ.get(env_key, "")
+            for m in ("xgboost", "catboost", "lightgbm"):
+                if m in val.lower():
+                    model_filter = m
+                    logger.info("Model detected from %s=%s", env_key, val)
+                    break
+            if model_filter:
+                break
+    if model_filter:
+        logger.info("Single-model mode: %s", model_filter)
+    elif Path("/kaggle/working").exists():
+        model_filter = "xgboost"
+        logger.warning("No model filter detected on Kaggle — defaulting to xgboost (safe)")
+    else:
+        logger.info("Local mode — training all models")
+    label = f" [{model_filter.upper()}]" if model_filter else ""
+    logger.info("ALICE Engine — V8 MultiClass Training%s", label)
     _setup_kaggle_imports()
 
     from scripts.kaggle_artifacts import (  # noqa: PLC0415
@@ -232,6 +255,10 @@ def main() -> None:
         config,
         init_scores_train=init_scores_train,
         init_scores_valid=init_scores_valid,
+        checkpoint_dir=out_dir,
+        encoders=encoders,
+        model_extensions=MODEL_EXTENSIONS,
+        model_filter=model_filter,
     )
     # Step 0.5: SHAP + permutation importance on freshly trained models (ISO 25059)
     from scripts.kaggle_shap import compute_shap_importance  # noqa: PLC0415
