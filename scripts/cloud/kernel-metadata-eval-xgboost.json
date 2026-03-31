@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-eval-xgboost",
+  "title": "alice-eval-xgboost",
+  "code_file": "eval_xgboost.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["pguillemin/alice-code", "pguillemin/alice-xgboost-checkpoint"],
+  "competition_sources": [],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}
