@@ -1,6 +1,6 @@
 """Resume XGBoost from checkpoint — ISO eval pipeline (CPU, 8-11h).
 
-A: preflight (SHA-256, NaN, sanity predict). B: resume (eta=0.01, early_stop=200,
+A: preflight (SHA-256, NaN, sanity predict). B: resume (eta=0.005, early_stop=200,
 save_best=True, TrainingCheckPoint/5000). C: eval (TreeSHAP 20K subsample, calibration,
 gates, diagnostics, model card). Permutation importance excluded (4-5h).
 """
@@ -86,7 +86,7 @@ def _preflight(booster: object, X_train: pd.DataFrame) -> None:
     """Validate checkpoint integrity + data coherence."""
     import xgboost as xgb  # noqa: PLC0415
 
-    expected = int(os.environ.get("ALICE_CKPT_ROUNDS", "50000"))
+    expected = int(os.environ.get("ALICE_CKPT_ROUNDS", "84785"))
     actual = booster.num_boosted_rounds()
     if actual != expected:
         logger.warning("Checkpoint rounds: %d (expected %d)", actual, expected)
@@ -134,9 +134,14 @@ def _compute_treeshap(
     dm.set_base_margin(init_test[shap_idx].ravel())
     logger.info("TreeSHAP: %d/%d samples, %d trees", shap_n, len(X_test), n_trees)
     t0 = time.time()
-    shap_vals = booster.predict(dm, pred_contribs=True)
-    shap_vals = shap_vals.reshape(shap_n, -1, 3)[:, :-1, :]  # drop bias term
-    mean_shap = np.abs(shap_vals).mean(axis=0).sum(axis=1)
+    shap_vals = booster.predict(dm, pred_contribs=True)  # (N, C, F+1) or (N, F+1, C)
+    n_feat = len(X_test.columns)
+    if shap_vals.ndim == 3 and shap_vals.shape[2] == n_feat + 1:  # (N, C, F+1)
+        mean_shap = np.abs(shap_vals[:, :, :-1]).mean(axis=0).sum(axis=0)
+    elif shap_vals.ndim == 3 and shap_vals.shape[1] == n_feat + 1:  # (N, F+1, C)
+        mean_shap = np.abs(shap_vals[:, :-1, :]).mean(axis=0).sum(axis=1)
+    else:
+        raise ValueError(f"Unexpected SHAP shape {shap_vals.shape} for {n_feat} features")
     shap_df = pd.DataFrame({"feature": list(X_test.columns), "treeshap": mean_shap})
     shap_df = shap_df.sort_values("treeshap", ascending=False).reset_index(drop=True)
     shap_df.to_csv(out_dir / "xgboost_treeshap_importance.csv", index=False)
@@ -223,9 +228,9 @@ def main() -> None:  # noqa: PLR0915
     # === PHASE B: RESUME TRAINING ===
     extra_rounds = int(os.environ.get("ALICE_EXTRA_ROUNDS", "50000"))
     early_stop = int(os.environ.get("ALICE_EARLY_STOP", "200"))
-    resume_eta = float(os.environ.get("ALICE_RESUME_ETA", "0.01"))
+    resume_eta = float(os.environ.get("ALICE_RESUME_ETA", "0.005"))
     xgb_p = {k: v for k, v in config["xgboost"].items() if k not in ("n_estimators", "early_stopping_rounds")}
-    xgb_p["eta"] = resume_eta  # 2x original: faster convergence, save_best handles early stop
+    xgb_p["eta"] = resume_eta  # Same as original: finer steps after early stop at eta=0.01
     n_before = booster.num_boosted_rounds()
     logger.info("Resuming: +%d rounds (eta=%.3f, early_stop=%d) from %d", extra_rounds, resume_eta, early_stop, n_before)
 

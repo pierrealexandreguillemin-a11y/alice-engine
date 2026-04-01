@@ -18,3 +18,4 @@
 {"timestamp": "2026-03-31T02:52:09.935111", "git_commit": "4d481fd", "dataset_slug": "pguillemin/alice-code", "content_hash": "489256318dddf10a", "version_notes": "4d481fd fix(constants): add zone_enjeu_dom/ext to CATEGORICAL_FEATURES"}
 {"timestamp": "2026-03-31T22:07:57.580105", "git_commit": "4d481fd", "dataset_slug": "pguillemin/alice-code", "content_hash": "489256318dddf10a", "version_notes": "4d481fd fix(constants): add zone_enjeu_dom/ext to CATEGORICAL_FEATURES"}
 {"timestamp": "2026-03-31T23:49:28.029285", "git_commit": "4d481fd", "dataset_slug": "pguillemin/alice-code", "content_hash": "489256318dddf10a", "version_notes": "4d481fd fix(constants): add zone_enjeu_dom/ext to CATEGORICAL_FEATURES"}
+{"timestamp": "2026-04-01T14:23:54.350345", "git_commit": "2f141fb", "dataset_slug": "pguillemin/alice-code", "content_hash": "489256318dddf10a", "version_notes": "2f141fb fix(cloud): TreeSHAP subsample 20K + ruff-compatible formatting"}

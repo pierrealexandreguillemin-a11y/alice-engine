@@ -1,6 +1,6 @@
 {
-  "id": "pguillemin/alice-resume-xgboost-v4",
-  "title": "alice-resume-xgboost-v4",
+  "id": "pguillemin/alice-resume-xgboost-v5",
+  "title": "alice-resume-xgboost-v5",
   "code_file": "resume_xgboost.py",
   "language": "python",
   "kernel_type": "script",
