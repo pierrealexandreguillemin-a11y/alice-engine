@@ -27,9 +27,9 @@ Ce document trace chaque phase, son statut, et les artefacts produits.
 | 2 | Feature Engineering V7 | ✅ Complete | 2 min | 8 fichiers features/*.parquet |
 | 3 | Split temporel | ✅ Complete | inclus Phase 2 | train/valid/test.parquet |
 | 4 | Evaluation ML V7 | ✅ Complete (OBSOLÈTE V8) | 5 min | AUC 0.75 (binaire, leakage) |
-| 5 | **V8 Feature Engineering** | ✅ Complete | 74 min | **196 cols, Kaggle FE kernel** |
-| 6 | **V8 Residual Learning** | ⚠️ BLOQUÉ (calibration) | 11 versions | **Bat Elo (0.887) mais gate 8/9** |
-| 7 | Calibration conforme | 🔄 EN COURS | - | Temperature scaling à valider |
+| 5 | **V8 Feature Engineering** | ✅ Complete | 74 min | **201 cols (FE v4), Kaggle FE kernel** |
+| 6 | **V8 Residual Learning** | ✅ Complete | 18 versions | **XGBoost v18: 15/15 gates PASS** |
+| 7 | Calibration conforme | ✅ Complete | — | Temperature T=0.928, ECE<2% |
 | 8 | Feature Store + API | 🔄 A faire | - | Wiring model→CE |
 | 9 | ALI (Adversarial Lineup) | 🔄 A faire | - | generate_scenarios() |
 | 10 | CE V9 Multi-équipe | 🔄 A faire | - | OR-Tools solver |
@@ -397,6 +397,7 @@ Un renforcement d'une equipe = affaiblissement d'une autre.
 | 1.2.0 | 2026-01-08 | Claude Code | Ajout section 4 "Integration regles FFE dans ML" |
 | 1.3.0 | 2026-01-08 | Claude Code | Ajout section 2bis "Gaps Critiques", lien methodologie |
 | 2.0.0 | 2026-03-25 | Claude Code | V8 MultiClass complet — résultats v3→v11, residual learning |
+| **3.0.0** | **2026-03-30** | **Claude Code** | **v18 XGBoost 15/15 PASS — first all-gate pass, -34% vs Elo** |
 
 ---
 
@@ -456,37 +457,43 @@ Elo trajectory (4), composition strategy (8).
 | v9 | 03-24 | 177 | Oui | 0.005 | 0.888 | **0.889** | 0.887 | FAIL (draw_bias) | 0fbfd1f |
 | v10 | 03-24 | 177 | Oui | 0.005 | 0.888 | 0.889 | 0.887 | FAIL (es_mae) RÉGRESSION | 6e1fb00 |
 | v11 | 03-25 | 177 | Oui | 0.005 | — | — | — | Annulé | 39e4d75 |
+| v12-v14 | — | — | — | — | — | — | — | Skipped (data contamination fix) | — |
+| v15 | 03-26 | 201 | Oui α=0.7 | 0.005 | — | — | — | Clean data (running) | 56a58e7 |
+| v16 | 03-26 | 201 | Oui α=0.7 | 0.005 | 0.869 | — | — | Prior trop fort (89 iters) | — |
+| v17 | 03-29 | 201 | Oui α=0.7 | 0.005 | 0.574 | 0.549 | 0.564 | TIMEOUT (3 modèles, 0 sauvegardés) | — |
+| **v18** | **03-30** | **201** | **Oui α=0.7** | **0.005** | **—** | **0.574** | **—** | **15/15 PASS** | **4d481fd** |
 
-### 9.5 Quality Gate 9 conditions — état par version
+### 9.5 Quality Gate — état par version
 
-| Cond | Description | v9 (raw) | v10 (isotonic) |
-|------|-------------|----------|----------------|
-| 1 | log_loss < naive | PASS | PASS |
-| 2 | log_loss < Elo | PASS | PASS |
-| 3 | RPS < naive | PASS | PASS |
-| 4 | RPS < Elo | PASS | PASS |
-| 5 | Brier < naive | PASS | PASS |
-| 6 | E[score] MAE < Elo | PASS | **FAIL** (régression) |
-| 7 | ECE < 0.05 per class | Non évalué sur test calibré | PASS |
-| 8 | draw_calibration_bias < 2% | **FAIL** | PASS |
-| 9 | mean_p_draw > 1% | PASS | PASS |
+| Gate | Description | v9 (raw) | v10 (isotonic) | **v18 (temperature)** |
+|------|-------------|----------|----------------|-----------------------|
+| T1 | log_loss < Elo | PASS | PASS | **PASS** (0.574) |
+| T2 | RPS < Elo | PASS | PASS | **PASS** (0.090) |
+| T3 | E[score] MAE < Elo | PASS | **FAIL** | **PASS** (0.250) |
+| T4 | ECE < 0.05 per class | — | PASS | **PASS** (1.0-1.6%) |
+| T5 | draw_bias < ±2% | **FAIL** | PASS | **PASS** (+1.6%) |
+| T6 | mean_p_draw > 1% | PASS | PASS | **PASS** (14.2%) |
+| T7-T8 | NaN/Inf + sum=1 | PASS | PASS | **PASS** |
+| T9 | >5 features gain>0 | — | — | **PASS** (197) |
+| T10-T12 | Surfit + diag + report | — | — | **PASS** |
+| **Total** | | 7/9 | 8/9 | **15/15** |
 
-### 9.6 Problème ouvert : calibration
+### 9.6 Calibration — RÉSOLU (v18)
 
-**Isotonic per-class + renormalization** (v10) corrige draw_bias mais dégrade E[score].
-Confirmé par ICML 2025 (arXiv:2512.09054) : "re-normalization to sum to one might compromise calibration."
+**Temperature scaling T=0.928** validé sur XGBoost v18.
 
-**Temperature scaling** (v11, annulé) : 1 paramètre T, softmax(logits/T), préserve ratios.
-Non vérifié sur données ALICE.
+Historique :
+- v10 : Isotonic per-class + renormalization dégradait E[score] (ICML 2025 arXiv:2512.09054)
+- v18 : Temperature scaling (Guo 2017) — 1 paramètre T, softmax(logits/T), préserve ratios
+- Résultat : ECE < 2% toutes classes, draw_bias +1.6%, E[score] MAE 0.250 < Elo 0.372
 
-**Littérature :**
-- Walsh & Joshi 2024 : calibration > accuracy pour decision-making (ROI +34.69%)
-- Ramezani & Dinh 2025 (arXiv:2505.02170) : FPL predict-then-optimize = architecture ALICE
-- Guo et al. 2017 : temperature scaling pour GBMs
-- ICML 2025 : NA-FIR (normalization-aware isotonic) = state-of-the-art multiclass
+**T=0.928 (mild)** confirme que le residual learning α=0.7 produit un modèle déjà bien calibré.
+La temperature ne fait qu'un ajustement fin.
 
-**Statut** : BLOQUÉ. Le modèle bat l'Elo mais la calibration qui préserve E[score]
-et corrige draw_bias n'est pas encore validée.
+**Littérature confirmée :**
+- Guo et al. 2017 : temperature scaling = simple + efficace pour GBMs ✅
+- Walsh & Joshi 2024 : calibration > accuracy pour decision-making ✅ (Alice = predict-then-optimize)
+- ICML 2025 : isotonic renorm problématique ✅ (confirmé par nos résultats v10)
 
 ### 9.7 Acquis techniques (réutilisables)
 
@@ -573,6 +580,94 @@ All previous versions (v1-v13) trained on contaminated data (295K forfeits inclu
 - Shrink init_scores (multiply by 0.5-0.8)
 - Increase lr/depth to compensate
 - Partial init (Elo init for W/L only, flat prior for D)
+
+### 9.13 v18: XGBoost — FIRST ALL-PASS (2026-03-30)
+
+**Date** : 2026-03-30
+**Status** : COMPLETE — 15/15 quality gates PASS
+**Kernel** : `pguillemin/alice-eval-xgboost` (eval kernel, checkpoint-based)
+**Commit** : 4d481fd
+
+**Architecture** : XGBoost trained in `alice-train-xgboost` (50K rounds, early_stopping=200),
+checkpoint uploaded as dataset `alice-xgboost-checkpoint`, evaluated in separate eval kernel.
+
+**Metrics (test set, n=231,532) :**
+
+| Metric | XGBoost v18 | Elo baseline | Naive baseline | Δ vs Elo |
+|--------|-------------|--------------|----------------|----------|
+| log_loss | **0.5742** | 0.8751 | 0.9839 | **-34.4%** |
+| RPS | **0.0901** | 0.1388 | 0.1638 | **-35.2%** |
+| E[score] MAE | **0.2499** | 0.3721 | — | **-32.8%** |
+| Brier | **0.3454** | — | 0.6015 | — |
+| Accuracy | 74.4% | — | — | — |
+| F1-macro | 69.6% | — | — | — |
+
+**Calibration (temperature scaling T=0.928) :**
+
+| Metric | Value | Threshold | Status |
+|--------|-------|-----------|--------|
+| ECE loss | 1.03% | < 5% | PASS |
+| ECE draw | 1.64% | < 5% | PASS |
+| ECE win | 1.04% | < 5% | PASS |
+| Draw bias | +1.64% | < ±2% | PASS |
+| mean_p_draw | 14.2% | > 1% | PASS |
+| Recall draw | 54.4% | — | Info |
+| Recall loss | 75.8% | — | Info |
+| Recall win | 78.5% | — | Info |
+
+**Features** : 197/201 with gain > 0 (XGBoost utilise quasi toutes les features).
+
+**Key findings :**
+- Temperature scaling mild (T=0.928) — model already well-calibrated from residual learning
+- Residual α=0.7 + split fix + data contamination fix + differential features = massive improvement
+- v10 best was LightGBM 0.877, v18 XGBoost 0.574 = **-34.5% log_loss improvement**
+- RPS 0.090 = 2.3× better than best football ML models (~0.206)
+- 74.4% accuracy on 3-class is misleading — log_loss/RPS/E[score] MAE are the real KPIs
+
+**Quality gates T1-T12 + T1b/T2b/T3b :**
+
+| Gate | Check | Value | Threshold | Status |
+|------|-------|-------|-----------|--------|
+| T1 | log_loss < Elo | 0.574 | < 0.875 | PASS |
+| T1b | log_loss < Naive | 0.574 | < 0.984 | PASS |
+| T2 | RPS < Elo | 0.090 | < 0.139 | PASS |
+| T2b | RPS < Naive | 0.090 | < 0.164 | PASS |
+| T3 | E[score] MAE < Elo | 0.250 | < 0.372 | PASS |
+| T3b | Brier < Naive | 0.345 | < 0.601 | PASS |
+| T4 | ECE < 0.05 all | 1.0-1.6% | < 5% | PASS |
+| T5 | Draw bias < ±2% | +1.6% | < ±2% | PASS |
+| T6 | mean_p_draw > 1% | 14.2% | > 1% | PASS |
+| T7 | No NaN/Inf | OK | 0 | PASS |
+| T8 | Probas sum=1 | OK | < 1e-6 | PASS |
+| T9 | >5 features gain>0 | 197 | > 5 | PASS |
+| T10 | Train-test gap < 0.05 | OK | < 0.05 | PASS |
+| T11 | Reliability diagram | Visual | Near diagonal | PASS |
+| T12 | Report RPS+ll | Both | — | PASS |
+
+### 9.14 Resume XGBoost — Continuation Training (2026-03-31 → 04-01)
+
+**Objectif** : continuer le training XGBoost au-delà de 50K rounds (v18).
+
+| Version | Date | Checkpoint | eta | Rounds | val_mlogloss | Status |
+|---------|------|-----------|-----|--------|-------------|--------|
+| Resume v1 (brouillon) | 03-31 | 50K | 0.005? | +50K=100K | 0.5143 | COMPLETE — pas ISO (manque SHAP, diagnostics) |
+| Resume v2 (ISO) | 03-31 | 50K | 0.01 | +35K=85K | 0.5127 | TIMEOUT — permutation 4h avant gates |
+| Resume v3 | 03-31 | 50K | 0.01 | +35K=85K | 0.5127 | TIMEOUT — TreeSHAP 231K rows |
+| Resume v4 | 03-31 | 50K | 0.01 | +35K=85K | 0.5127 | TIMEOUT — TreeSHAP 231K rows (avec checkpoints) |
+| **Resume v5** | **04-01** | **85K** | **0.005** | **+1.7K=86.5K** | **0.5126** | **RUNNING — TreeSHAP 20K subsample** |
+
+**Findings :**
+- v2-v4 : 3 timeouts consécutifs. Root cause : compute post-training non budgété
+  - Permutation 197×5×17s = 4h39m (v2)
+  - TreeSHAP 231K×85K trees = ~5h (v3, v4)
+  - Fix : subsample 20K, benchmark 26min/85K trees
+- `xgb.train()` retourne last iteration pas best → `EarlyStopping(save_best=True)`
+- `reshape(N,-1,3)` scramblait axes SHAP → auto-detect `(N,C,F+1)` vs `(N,F+1,C)`
+- eta=0.01 early-stop à 85K → eta=0.005 pour finer steps → +1.7K rounds seulement
+- **Le modèle est à son optimum** : 0.51269 → 0.51255 (Δ=0.00014 en 1.7K rounds)
+
+**Conclusion** : XGBoost convergé à ~86K rounds, val=0.5126. Amélioration marginale vs v18 (0.574 test).
+Prochaine étape : CatBoost + LightGBM training pour comparaison cross-modèles.
 
 ### 9.10 Lacunes identifiées
 

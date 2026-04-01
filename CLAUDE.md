@@ -368,11 +368,13 @@ n_estimators=50K, early_stopping=200.
 - `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
 - Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
 
-### V8 Training Findings (2026-03-22→26) — CRITIQUE
+### V8 Training Findings (2026-03-22→30)
 - **v1-v3 échoués** (path, divergence, hyperparams) — postmortem dans `docs/postmortem/`
 - **v5 : PREMIÈRE VICTOIRE** — CatBoost 0.886, LightGBM 0.885 < Elo baseline 0.92
-- **v10 : MEILLEUR** — LightGBM 0.877 (test), gate 8/9 (E[score] régression isotonic)
-- **v15 : FIRST CLEAN DATA** — data fix + dynamic white advantage + rsm + SHAP + dual calibration (running)
+- **v10 : MEILLEUR v1** — LightGBM 0.877 (test), gate 8/9 (E[score] régression isotonic)
+- **v15 : FIRST CLEAN DATA** — data fix + dynamic white advantage + rsm + SHAP + dual calibration
+- **v18 : FIRST ALL-PASS** — XGBoost 0.574 log_loss, 15/15 gates PASS, -34% vs Elo
+- **v18 RÉSULTATS** : log_loss 0.574 (-34.4%), RPS 0.090 (-35.2%), E[score] MAE 0.250 (-32.8%), T=0.928, 197/201 features actives
 - **DÉCOUVERTE v10** : 166/177 features à importance 0 = **artefact CatBoost PredictionValuesChange**
   - XGBoost utilise **109 features**, LightGBM **50 features** (même données)
   - Root cause : CatBoost manque `rsm` (feature subsampling) — oblivious trees depth=4
@@ -384,12 +386,19 @@ n_estimators=50K, early_stopping=200.
 - **Residual learning** : `compute_elo_init_scores()` → `Pool(baseline=)` / `base_margin` / `init_score`
 - **Eval cohérente** : `predict_with_init()` pour CatBoost/XGBoost/LightGBM (audit C2)
 - **Quality gate** : 9 conditions, condition 9 = `mean_p_draw > 1%` (pas recall_draw)
-- **Plan actuel** : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md`
+- **Resume XGBoost (2026-04-01)** : 50K→86.5K rounds (v5), val=0.5126, modèle CONVERGÉ
+- **3 timeouts resume (v2-v4)** : TreeSHAP 231K=5h, permutation 4h — fixé subsample 20K (26min)
+- **`EarlyStopping(save_best=True)`** : OBLIGATOIRE, `xgb.train()` retourne last pas best
+- **`TrainingCheckPoint(interval=5000)`** : OBLIGATOIRE pour kernels >4h
+- **Plan actuel** : v5 post-training en cours, CatBoost + LightGBM training à lancer
 - **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
 - **NE JAMAIS utiliser PredictionValuesChange seul** — comparer importance cross-modèles + SHAP
 - **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
+- **NE JAMAIS lancer TreeSHAP/permutation sur le test set complet** — subsample 20K, benchmark AVANT
+- **NE JAMAIS écrire un budget temps sans calcul** — "~1-2h" mensonger = timeout garanti
 - **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
 - **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
+- **TOUJOURS calculer le budget post-training AVANT d'écrire le script** (TreeSHAP + calibration + diagnostics)
 
 ### Init Score Alpha — Prior Strength (v16, 2026-03-26)
 - `init_score_alpha=0.7` dans `config["global"]` (override: `ALICE_INIT_ALPHA`)
