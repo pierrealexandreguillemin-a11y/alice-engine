@@ -1,6 +1,6 @@
 {
-  "id": "pguillemin/alice-train-catboost",
-  "title": "alice-train-catboost",
+  "id": "pguillemin/alice-train-catboost-v3",
+  "title": "alice-train-catboost-v3",
   "code_file": "train_catboost.py",
   "language": "python",
   "kernel_type": "script",

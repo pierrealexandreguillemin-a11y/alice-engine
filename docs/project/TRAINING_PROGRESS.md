@@ -654,7 +654,27 @@ checkpoint uploaded as dataset `alice-xgboost-checkpoint`, evaluated in separate
 | Resume v2 (ISO) | 03-31 | 50K | 0.01 | +35K=85K | 0.5127 | TIMEOUT — permutation 4h avant gates |
 | Resume v3 | 03-31 | 50K | 0.01 | +35K=85K | 0.5127 | TIMEOUT — TreeSHAP 231K rows |
 | Resume v4 | 03-31 | 50K | 0.01 | +35K=85K | 0.5127 | TIMEOUT — TreeSHAP 231K rows (avec checkpoints) |
-| **Resume v5** | **04-01** | **85K** | **0.005** | **+1.7K=86.5K** | **0.5126** | **RUNNING — TreeSHAP 20K subsample** |
+| **Resume v5** | **04-01** | **85K** | **0.005** | **+1.7K=86.5K** | **0.5126** | **COMPLETE — ALL GATES PASS** |
+
+**Resume v5 Results (2026-04-01) :**
+
+| Metric | v18 (50K) | v5 Resume (86K) | Delta |
+|--------|-----------|-----------------|-------|
+| test_log_loss | 0.574 | **0.566** | -1.4% |
+| test_rps | 0.090 | **0.089** | -1.1% |
+| test_es_mae | 0.250 | **0.247** | -1.2% |
+| test_accuracy | — | 0.746 | — |
+| test_f1_macro | — | 0.699 | — |
+| Temperature T | 0.928 | **0.971** | closer to 1.0 |
+| Features active | 197/201 | **197/197** | all active |
+| ECE (loss/draw/win) | — | 0.011/0.016/0.009 | all < 0.05 |
+| P(draw) bias | — | 1.46% | within ±2% |
+| Recall (loss/draw/win) | — | 76%/55%/79% | — |
+| Total time | — | 4.7h | — |
+
+**TreeSHAP Top 5** : `draw_rate_home_dom` (1.34), `saison` (0.71), `draw_rate_noir` (0.70), `draw_rate_blanc` (0.67), `win_rate_home_dom` (0.45)
+
+**Artefacts** : `reports/v8_xgboost_v5_resume/` (model .ubj, calibrators, SHAP, predictions, diagnostics)
 
 **Findings :**
 - v2-v4 : 3 timeouts consécutifs. Root cause : compute post-training non budgété
@@ -665,8 +685,9 @@ checkpoint uploaded as dataset `alice-xgboost-checkpoint`, evaluated in separate
 - `reshape(N,-1,3)` scramblait axes SHAP → auto-detect `(N,C,F+1)` vs `(N,F+1,C)`
 - eta=0.01 early-stop à 85K → eta=0.005 pour finer steps → +1.7K rounds seulement
 - **Le modèle est à son optimum** : 0.51269 → 0.51255 (Δ=0.00014 en 1.7K rounds)
+- HF Hub push failed (Kaggle Secrets connection error) — manual push needed
 
-**Conclusion** : XGBoost convergé à ~86K rounds, val=0.5126. Amélioration marginale vs v18 (0.574 test).
+**Conclusion** : XGBoost CONVERGÉ à 86K rounds, val=0.5126, test=0.566. All gates PASS.
 Prochaine étape : CatBoost + LightGBM training pour comparaison cross-modèles.
 
 ### 9.10 Lacunes identifiées

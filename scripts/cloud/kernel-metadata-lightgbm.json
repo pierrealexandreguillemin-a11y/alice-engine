@@ -1,6 +1,6 @@
 {
-  "id": "pguillemin/alice-train-lightgbm",
-  "title": "alice-train-lightgbm",
+  "id": "pguillemin/alice-train-lightgbm-v3",
+  "title": "alice-train-lightgbm-v3",
   "code_file": "train_lightgbm.py",
   "language": "python",
   "kernel_type": "script",

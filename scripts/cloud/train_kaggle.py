@@ -177,6 +177,23 @@ def main() -> None:
         train, valid, test
     )
 
+    # NaN audit per split — MANDATORY (2 weeks of debug on v9-v13 without this)
+    for split_name, df_split in [("train", X_train), ("valid", X_valid), ("test", X_test)]:
+        dead = [c for c in df_split.columns if df_split[c].isna().mean() > 0.99]
+        if dead:
+            logger.error("STOP: %d features >99%% NaN on %s: %s", len(dead), split_name, dead[:10])
+            raise ValueError(f"{len(dead)} features >99% NaN on {split_name}: {dead[:5]}")
+        nan_any = {
+            c: df_split[c].isna().mean() for c in df_split.columns if df_split[c].isna().any()
+        }
+        if nan_any:
+            logger.info(
+                "  %s NaN features (%d): max=%.1f%%",
+                split_name,
+                len(nan_any),
+                max(nan_any.values()) * 100,
+            )
+
     version = datetime.now(tz=UTC).strftime("v%Y%m%d_%H%M%S")
     out_dir = OUTPUT_DIR / version
     out_dir.mkdir(parents=True, exist_ok=True)

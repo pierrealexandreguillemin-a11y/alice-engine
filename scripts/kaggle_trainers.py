@@ -20,6 +20,7 @@ from scripts.kaggle_constants import (  # noqa: E402
     LABEL_COLUMN,
     LEAKY_COLUMNS,
     MODEL_EXTENSIONS,  # noqa: F401 — re-exported for train_kaggle.py
+    default_hyperparameters,  # noqa: F401 — re-exported for train_kaggle.py
 )
 
 
@@ -81,67 +82,6 @@ def prepare_features(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFram
     return X_train, y_train, X_valid, y_valid, X_test, y_test, encoders
 
 
-_GPU_CACHE: bool | None = None
-
-
-def _has_gpu() -> bool:
-    """Detect NVIDIA GPU availability (cached)."""
-    global _GPU_CACHE  # noqa: PLW0603
-    if _GPU_CACHE is not None:
-        return _GPU_CACHE
-    try:
-        import subprocess  # noqa: PLC0415
-
-        result = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)  # noqa: S603, S607
-        _GPU_CACHE = result.returncode == 0
-    except Exception:
-        _GPU_CACHE = False
-    return _GPU_CACHE
-
-
-def default_hyperparameters() -> dict:
-    """Optimal hyperparameters for Kaggle CPU training (ADR-003: all models CPU)."""
-    # fmt: off
-    return {
-        "global": {
-            "random_seed": 42,
-            "early_stopping_rounds": 200,
-            "eval_metric": "multi_logloss",
-            # Init score shrink: reduce Elo prior dominance so features can express corrections.
-            # Alpha < 1 = confidence in Elo prior (Ash & Adams 2020, NeurIPS). Not a hack.
-            # v15: models converge in 89-133 iters → prior too strong → alpha=0.7
-            "init_score_alpha": 0.7,
-        },
-        "catboost": {
-            "iterations": 50000, "depth": 4, "border_count": 128,
-            "learning_rate": 0.005, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
-            "random_strength": 3, "bagging_temperature": 1, "model_size_reg": 0.5,
-            "rsm": 0.3,  # Feature subsampling — MANDATORY >50 features (v10 bug: 11/177 sans rsm)
-            "thread_count": 4, "task_type": "CPU",  # rsm incompatible GPU (CatBoost: pairwise only)
-            "use_best_model": True, "loss_function": "MultiClass",
-            "random_seed": 42, "verbose": 500, "early_stopping_rounds": 200,
-        },
-        "xgboost": {
-            "n_estimators": 50000, "max_depth": 4, "eta": 0.005,
-            "objective": "multi:softprob", "num_class": 3,
-            "lambda": 10.0, "alpha": 0.5, "min_child_weight": 50,
-            "subsample": 0.7, "colsample_bytree": 0.5,
-            "tree_method": "hist", "device": "cpu",  # CPU — no GPU needed for tree models
-            "nthread": 4, "seed": 42,
-            "early_stopping_rounds": 200, "verbosity": 1,
-        },
-        "lightgbm": {
-            "n_estimators": 50000, "num_leaves": 15, "max_depth": 4,
-            "learning_rate": 0.003, "objective": "multiclass", "num_class": 3,
-            "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_samples": 200,
-            "min_gain_to_split": 0.01, "subsample": 0.7, "colsample_bytree": 0.5,
-            "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 200, "verbose": -1,
-        },
-    }
-    # fmt: on
-
-
 def _eval_model(
     model: Any,
     X_valid: Any,
@@ -181,7 +121,13 @@ def _train_catboost(
     try:
         from catboost import CatBoostClassifier, Pool  # noqa: PLC0415
 
-        cb = CatBoostClassifier(**params, eval_metric="MultiClass")
+        # Snapshot checkpoint every 10 min — protects against timeout (12h limit)
+        snap_params = {
+            "save_snapshot": True,
+            "snapshot_file": "/kaggle/working/catboost_snapshot",
+            "snapshot_interval": 600,
+        }
+        cb = CatBoostClassifier(**params, **snap_params, eval_metric="MultiClass")
         train_pool = Pool(X_train, y_train, baseline=init_scores_train)
         valid_pool = Pool(X_valid, y_valid, baseline=init_scores_valid)
         t0 = time.time()
@@ -236,6 +182,18 @@ def _train_xgboost(
         return _fail_result()
 
 
+def _lgbm_checkpoint_callback(path: str, interval: int = 5000) -> Any:
+    """Save LightGBM model every `interval` iterations (timeout protection)."""
+
+    def _callback(env: Any) -> None:
+        if env.iteration > 0 and env.iteration % interval == 0:
+            env.model.save_model(f"{path}/lgbm_ckpt_{env.iteration}.txt")
+            logger.info("LightGBM checkpoint: iteration %d saved", env.iteration)
+
+    _callback.order = 100  # run after early_stopping / log_evaluation
+    return _callback
+
+
 def _train_lightgbm(
     X_train: Any,
     y_train: Any,
@@ -253,7 +211,13 @@ def _train_lightgbm(
         lgb_p = {k: v for k, v in params.items() if k != "early_stopping_rounds"}
         lgb_p["device"] = "cpu"
         es = params.get("early_stopping_rounds", 50)
-        cbs = [lgb_lib.early_stopping(es), lgb_lib.log_evaluation(100)]
+        ckpt_dir = "/kaggle/working/checkpoints"
+        __import__("os").makedirs(ckpt_dir, exist_ok=True)
+        cbs = [
+            lgb_lib.early_stopping(es),
+            lgb_lib.log_evaluation(100),
+            _lgbm_checkpoint_callback(ckpt_dir, interval=5000),
+        ]
         lgbm = LGBMClassifier(**lgb_p)
         fit_kw: dict = {
             "eval_set": [(X_valid, y_valid)],
