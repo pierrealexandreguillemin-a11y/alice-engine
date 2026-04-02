@@ -270,8 +270,9 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
 - **Tous les kernels training sont CPU** (`enable_gpu: false`) — tree models n'utilisent pas GPU
 - Datasets montés à `/kaggle/input/datasets/{user}/{slug}/`
 - **kernel_sources montés à `/kaggle/input/notebooks/{user}/{slug}/`**
-- Modèle détecté via `KAGGLE_KERNEL_RUN_SLUG` (slug contient xgboost/catboost/lightgbm)
-- **Checkpoints** après chaque modèle (protection timeout)
+- Modèle détecté via env var `ALICE_MODEL` dans entry point (PAS `KAGGLE_KERNEL_RUN_SLUG` — n'existe pas)
+- **Entry points** : `train_catboost.py` / `train_lightgbm.py` / `train_xgboost.py` — DOIVENT setup sys.path AVANT import
+- **Checkpoints** : CatBoost `snapshot_file` (10 min), LightGBM callback (5K iters), XGBoost `TrainingCheckPoint` (5K rounds)
 - Toujours re-uploader `alice-code` dataset AVANT push kernel si fichiers modifiés
 - **cudf RALENTIT le feature engineering** (groupby-heavy) — désactivé dans fe_kaggle.py
 - **Secrets impossibles en batch push** (Kaggle API issue #582) — HF push échoue silencieusement
@@ -390,7 +391,11 @@ n_estimators=50K, early_stopping=200.
 - **3 timeouts resume (v2-v4)** : TreeSHAP 231K=5h, permutation 4h — fixé subsample 20K (26min)
 - **`EarlyStopping(save_best=True)`** : OBLIGATOIRE, `xgb.train()` retourne last pas best
 - **`TrainingCheckPoint(interval=5000)`** : OBLIGATOIRE pour kernels >4h
-- **Plan actuel** : v5 post-training en cours, CatBoost + LightGBM training à lancer
+- **Resume v5 COMPLETE (2026-04-02)** : test 0.566 (-35.2% vs Elo), RPS 0.089, E[score] MAE 0.247, T=0.971, 197/197 features
+- **CatBoost v3 + LightGBM v3 LANCÉS (2026-04-02)** : CPU, checkpoints, NaN audit, sys.path fix
+- **Entry points DOIVENT setup sys.path** : crash ModuleNotFoundError sans (v1 CatBoost, 2026-04-02)
+- **NaN audit per split OBLIGATOIRE** dans `train_kaggle.py` (raise ValueError si >99% NaN)
+- **`default_hyperparameters()` dans `kaggle_constants.py`** (SRP refactor, was in kaggle_trainers.py)
 - **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
 - **NE JAMAIS utiliser PredictionValuesChange seul** — comparer importance cross-modèles + SHAP
 - **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine

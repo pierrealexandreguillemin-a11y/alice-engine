@@ -30,7 +30,8 @@ Audience: LLM assistant + developpeur ML. Utiliser comme reference pour:
 5. [Features DIFFERENTIELLES manquantes](#5-differentiels-manquants)
 6. [Features INTERACTION board x match](#6-interactions)
 7. [Features A CREER (non existantes)](#7-features-a-creer)
-8. [References et sources](#8-references)
+8. [Structure spatiale: 3 niveaux emboites](#8-structure-spatiale)
+9. [References et sources](#9-references)
 
 ---
 
@@ -822,7 +823,76 @@ win_rate_vs_weak = wins(games WHERE adversaire_elo < joueur_elo - 100) / n
 
 ---
 
-## 8. References et sources
+## 8. Structure spatiale: 3 niveaux emboites
+
+Les donnees ALICE ont une structure spatiale naturelle a 3 niveaux. Le modele
+actuel (V8) n'exploite que le niveau le plus bas (features tabulaires). Les
+niveaux superieurs sont des pistes pour V9+ et V10.
+
+```
+Club (3-5 equipes par club, meme week-end)
+  └── Equipe (1 match = 8 echiquiers)
+        └── Echiquier (1 poste = 1 joueur vs 1 adversaire)
+              └── Features (220 cols) ← V8 actuel (XGBoost/CatBoost/LightGBM)
+```
+
+### Niveau 1 — Features tabulaires (V8, actuel)
+
+Chaque echiquier est predit independamment. 220 features par ligne, pas de
+structure spatiale. Les arbres de decision sont optimaux pour ce niveau
+(Grinsztajn et al. 2022, NeurIPS: tree models > neural nets on tabular data).
+
+### Niveau 2 — Inter-echiquiers (V10, piste recherche)
+
+Les 8 echiquiers d'un match ne sont PAS independants:
+- Le capitaine place les joueurs strategiquement (sacrifice ech. 7 pour renforcer ech. 3)
+- L'ordre Elo impose une structure (ech. 1 = meilleur joueur, ech. 8 = plus faible)
+- Les resultats sont correles (equipe en forme → tous les echiquiers surperforment)
+
+**Approche possible**: FT-Transformer (Gorishniy 2021) ou GNN sur les 8 postes d'un match.
+Chaque echiquier = un noeud, attention inter-postes pour capturer les interactions
+de composition. Le match entier vu comme une "image 8×N" ou N = features par echiquier.
+
+**Signal attendu**: patterns de composition adverse (ex: "quand l'adversaire aligne
+un joueur sous-cote en ech. 3, les ech. 4-5 sont souvent renforces").
+Mecanisme identique a l'attention dans les transformers sur sequences.
+
+**Prerequis**: V8 ML fiable (predictions par echiquier calibrees) — le niveau 2
+s'appuie sur les predictions du niveau 1.
+
+### Niveau 3 — Inter-equipes par club (V9, OR-Tools)
+
+Le capitaine distribue ~40 joueurs entre N equipes. C'est un probleme
+d'optimisation combinatoire sous contraintes dures FFE (noyau, mutes, 100pts).
+
+**OR-Tools LP/CP** est le bon outil (pas du ML): les contraintes FFE sont
+binaires et non-negociables. Le ML (V8) fournit les P(W/D/L) par combinaison
+joueur×echiquier×equipe, le solveur optimise l'allocation.
+
+Voir Phase 4 roadmap: `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md`
+
+### Pourquoi les arbres dominent au niveau 1
+
+Les features tabulaires n'ont pas d'ordre spatial intrinseque: permuter les
+colonnes ne change pas les donnees. Les arbres coupent feature par feature,
+independamment de l'ordre — c'est exactement ce qu'il faut.
+
+Un transformer/CNN a besoin de structure spatiale pour exploiter ses convolutions
+ou son attention. Au niveau 1, il n'y en a pas. Au niveau 2 (8 echiquiers
+ordonnes), il y en a — c'est la piste FT-Transformer/GNN.
+
+### References
+
+- Grinsztajn et al. 2022, *Why do tree-based models still outperform deep
+  learning on tabular data?*, NeurIPS
+- Gorishniy et al. 2021, *Revisiting Deep Learning Models for Tabular Data*,
+  NeurIPS (FT-Transformer)
+- Hollmann et al. 2023, *TabPFN: A Transformer That Solves Small Tabular
+  Classification Problems in a Second*, ICLR
+
+---
+
+## 9. References et sources
 
 ### Litterature multisports
 
