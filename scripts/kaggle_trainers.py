@@ -21,6 +21,7 @@ from scripts.kaggle_constants import (  # noqa: E402
     LABEL_COLUMN,
     LEAKY_COLUMNS,
     MODEL_EXTENSIONS,  # noqa: F401 — re-exported
+    default_hyperparameters,  # noqa: F401 — re-exported
 )
 
 
