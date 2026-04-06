@@ -114,6 +114,7 @@ models/v*/
 # Generated Reports (JSON artifacts)
 # ============================================
 reports/*.json
+reports/validation/*.json
 
 # ============================================
 # Large Binary Files
