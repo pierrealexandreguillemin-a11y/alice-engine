@@ -37,18 +37,21 @@
 
 | Norme | Exigence | Implémentation ALICE |
 |-------|----------|---------------------|
-| ISO 42001 | Model Card | `ProductionModelCard` dans `model_registry.py`. V8: MultiClass 3-way, ~156 features |
-| ISO 42001 | Traçabilité | Git commit tracking, versioning modèles. V8: `alice-training-v8` slug |
-| ISO 42001 | Explicabilité | Feature importance per class (MultiClass). SHAP pending. |
-| ISO 5259 | Qualité données | `DataLineage`, `validate_dataframe_schema()`. V8: forfaits excluded |
-| ISO 5259 | Lineage | `compute_data_lineage()` train/valid/test. V8: ~156 features, temporal split ≤2022/2023/≥2024 |
+| ISO 42001 | Model Card | `ProductionModelCard` dans `model_registry.py`. V8: MultiClass 3-way, 196 colonnes (dont ~165 ML features) |
+| ISO 42001 | Traçabilité | Git commit tracking, versioning modèles. V8: `alice-training-v8` slug, 2-kernel Kaggle |
+| ISO 42001 | Explicabilité | Feature importance per class (MultiClass 3-way). SHAP pending. |
+| ISO 5259 | Qualité données | `DataLineage`, `validate_dataframe_schema()`. V8: forfaits (2.0) exclus de TOUT |
+| ISO 5259 | Lineage | `compute_data_lineage()` train/valid/test. V8: 196 cols, temporal split ≤2022/2023/≥2024 |
 | ISO 27001 | Intégrité | SHA-256 checksums, HMAC signatures |
 | ISO 27001 | Confidentialité | Chiffrement AES-256-GCM |
 | ISO 27001 | Auditabilité | Logs, retention policy, drift reports |
 | ISO 23894 | Risques AI | Drift monitoring PSI, alertes seuils |
 | ISO 24027 | Biais | `scripts/fairness/bias_detection.py` - SPD, EOD, DIR |
 | ISO 24029 | Robustesse | `scripts/robustness/adversarial_tests.py` - Tests adversariaux |
-| ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - V7/AutoGluon era. V8: redo after MultiClass training |
+| ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - V7/AutoGluon era. V8: redo post-training |
+| ISO 25059 | Quality Gate | `check_quality_gates()` dans `kaggle_trainers.py`. V8: 8 conditions (voir §Quality Gate) |
+| ISO 24029 | Calibration | Isotonic per-class (3 regressors) + renormalisation. `kaggle_diagnostics.py` |
+| ISO 42001 | AI Transparency | `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` — LLM co-authorship, traceability, QA gates |
 
 ---
 
@@ -370,25 +373,41 @@ valider_composition(composition, equipe, hist_brulage, hist_noyau, regles) -> li
 
 ### Feature Engineering (`scripts/feature_engineering.py`)
 
-Pipeline ML V8 — MultiClass 3-way (win/draw/loss). ~156 features across 13 categories.
+Pipeline ML V8 — **MultiClass 3-way** (win/draw/loss). 196 colonnes totales (~165 ML features + ~31 metadata/identifiers).
 
 **Spec complète :** `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
+**Bilan FE :** `docs/bilan-v8-fe-complete.md` (2026-03-22, Kaggle kernel output verified)
 
 | Category | Features | Columns | Status V8 |
 |----------|----------|---------|-----------|
-| 1. Match context | echiquier, est_domicile, type_competition, division, etc. | 12 | Unchanged |
-| 2. Player strength | Elo, titres, categorie_age, K_coefficient | 10 | +4 new (age, K) |
-| 3. Player form W/D/L | win_rate/draw_rate/expected_score (recent, color, trend) | 20 | Refactored from 12 binary |
-| 4. Draw priors | avg_elo, elo_proximity, draw_rate_prior, player, equipe | 8 | All new (Pawnalyze) |
-| 5. Presence/availability | taux_presence, regularite, role_type, echiquier_prefere | 16 | Wire existing code |
-| 6. Pressure | clutch_win/draw (zone_enjeu, not score_dom) | 6 | Fixed (leakage) |
-| 7. H2H | h2h_win_rate, h2h_draw_rate, h2h_exists | 4 | Refactored W/D/L |
-| 8. Standings | position, ecart, points_cumules, zone_enjeu | 16 | Unchanged (draw-aware) |
-| 9. Club behavior | rotation, noyau, win/draw_rate_home | 16 | Wire + refactor W/D/L |
-| 10. Vases communiquants | joueur_promu/relegue, team_rank, reinforcement_rate | 16 | All new (REGLES_FFE §4) |
-| 11. FFE regulatory | est_dans_noyau, ffe_nb_equipes, joueur_fantome | 20 | Unchanged |
-| 12. Elo trajectory | momentum, elo_trajectory | 4 | Unchanged |
-| 13. Composition strategy | decalage_position, echiquier_moyen | 8 | Minor fix (rolling) |
+| 1. Match context | saison, ronde, echiquier, division, ligue_code, etc. | ~15 | Input brut |
+| 2. Player strength | Elo, titres, diff_elo | ~6 | Input brut |
+| 3. Enrichissement joueurs | elo_type, categorie, K-coefficient (×blanc/noir) | 6 | **NEW V8** |
+| 4. Player form W/D/L | win_rate/draw_rate/expected_score/trend (×blanc/noir) | 10 | Refactored W/D/L |
+| 5. Color perf W/D/L | win_rate_white/black, draw_adv, couleur_preferee (×B/N) | 16 | Refactored rolling 3 saisons |
+| 6. Board position | echiquier_moyen, echiquier_std (×blanc/noir) | 4 | Fix rolling last season |
+| 7. Club reliability | taux_forfait, taux_non_joue, fiabilite_score (×dom/ext) | 6 | — |
+| 8. Player reliability | taux_presence, joueur_fantome (×blanc/noir) | 4 | — |
+| 9. Standings + zone_enjeu | position, ecart, points_cumules, zone_enjeu (×dom/ext) | 16 | — |
+| 10. Club behavior | rotation, noyau, win/draw_rate_home (×dom/ext) | ~16 | Refactored W/D/L |
+| 11. Noyau | est_dans_noyau (×blanc/noir) | 2 | — |
+| 12. FFE regulatory | ffe_nb_equipes, niveau_max/min, multi_equipe (×B/N) | 8 | — |
+| 13. **Draw priors** | avg_elo, elo_proximity, draw_rate_prior | **3** | **NEW V8** |
+| 14. **Draw rate player** | draw_rate (×blanc/noir) | **2** | **NEW V8** |
+| 15. **Draw rate equipe** | draw_rate_equipe (×dom/ext) | **2** | **NEW V8** |
+| 16. **Club level / vases** | team_rank, club_nb_teams, reinforcement, stabilite, elo_evol (×dom/ext) | **10** | **NEW V8** |
+| 17. **Player team context** | joueur_promu, joueur_relegue, player_team_elo_gap (×B/N) | **6** | **NEW V8** |
+| 18. ALI presence | taux_presence_saison, derniere_presence, regularite (×B/N) | 6 | — |
+| 19. ALI patterns | role_type, echiquier_prefere, flexibilite (×B/N) | 6 | — |
+| 20. ALI absence | rondes_manquees_consecutives, taux_presence_global (×B/N) | 4 | — |
+| 21. Composition strategy | decalage_position, joueur_decale_haut/bas (×B/N) | 6 | Fix rolling |
+| 22. Elo trajectory | elo_trajectory, momentum (×blanc/noir) | 4 | — |
+| 23. Pressure/clutch | win/draw_rate_normal/pression, clutch_win/draw (×B/N) | 14 | Fix zone_enjeu |
+| 24. H2H | h2h_win_rate, h2h_draw_rate, h2h_nb_confrontations, h2h_exists (×B/N) | 8 | Refactored W/D/L |
+| 25. Temporal | phase_saison, ronde_normalisee | 2 | — |
+| 26. Context | match_important, adversaire_niveau (×dom/ext), est_domicile | 4 | — |
+| 27. Identifiers + target | blanc_nom, noir_nom, equipe_dom/ext, resultat_blanc/noir, etc. | ~18 | Metadata |
+| **TOTAL** | | **196** | **+23 new V8 ML features** |
 
 **Key V8 changes vs V7 :**
 - Target: 3-class (loss=0, draw=1, win=2). Forfaits (2.0) excluded from everything.
@@ -397,6 +416,51 @@ Pipeline ML V8 — MultiClass 3-way (win/draw/loss). ~156 features across 13 cat
 - All player features rolling (3 seasons) instead of global career
 - `score_dom`/`score_ext` removed (match score leakage)
 - `clutch_factor` fixed: uses `zone_enjeu` instead of `score_dom`
+- Split temporel AVANT features (train≤2022, valid=2023, test≥2024)
+- FE exécuté sur Kaggle (P100 CPU, 74 min) — 2-kernel architecture
+
+### V8 Quality Gate — 8 conditions (ISO 25059 / 42001)
+
+Le training V8 doit passer les 8 conditions suivantes avant push HuggingFace :
+
+| # | Condition | Seuil | Métrique | Norme |
+|---|-----------|-------|----------|-------|
+| 1 | log_loss < naive | Distribution marginale (class freq) | `test_log_loss` | ISO 25059 |
+| 2 | log_loss < Elo | Elo formula + draw_rate_prior lookup | `test_log_loss` | ISO 25059 |
+| 3 | RPS < naive | Ranked Probability Score (ordinal) | `test_rps` | ISO 25059 |
+| 4 | RPS < Elo | idem | `test_rps` | ISO 25059 |
+| 5 | Brier < naive | Multiclass Brier score | `test_brier` | ISO 25059 |
+| 6 | E[score] MAE < Elo | P(win)+0.5*P(draw) vs actual | `test_es_mae` | ISO 25059 |
+| 7 | ECE < 0.05 per class | Expected Calibration Error | `ece_class_loss/draw/win` | ISO 24029 |
+| 8 | draw calibration bias < 0.02 | mean P(draw) - observed draw rate | `draw_calibration_bias` | ISO 24027 |
+
+**Implémentation :** `scripts/kaggle_trainers.py:check_quality_gates()` (8 conditions)
+**Baselines :** `scripts/baselines.py` (naive marginal + Elo + draw rate lookup)
+**Métriques :** `scripts/kaggle_metrics.py` (RPS, ECE, E[score] MAE, Brier)
+
+### V8 Calibration Strategy (ISO 24029)
+
+- **Post-hoc isotonic** : 3 `IsotonicRegression` per model (1 per class: loss, draw, win)
+- **Fitted on** : validation set only (no leakage from test)
+- **Renormalization** : calibrated probas renormalized to sum=1 after isotonic transform
+- **Implémentation** : `scripts/kaggle_diagnostics.py:calibrate_models()`
+- **Artefact** : `calibrators.joblib` (per model × 3 classes)
+
+### V8 Cloud Architecture — 2-kernel Kaggle (ISO 42001)
+
+```
+Kernel 1: alice-fe-v8 (P100 CPU, 74 min, enable_gpu=false)
+  Input:  pguillemin/alice-code (data/ + scripts/)
+  Output: features/{train,valid,test}.parquet (196 cols)
+
+Kernel 2: alice-training-v8 (T4 GPU, ~30 min, --accelerator NvidiaTeslaT4)
+  Input:  pguillemin/alice-code (scripts/)
+          kernel_sources: pguillemin/alice-fe-v8 (parquets)
+  Output: CatBoost/XGBoost/LightGBM models + diagnostics + model card
+```
+
+**Rationale :** FE (74 min CPU) et training (GPU) ont des besoins hardware différents.
+Séparation permet de relancer le training sans refaire le FE.
 
 ### Tests (`tests/test_ffe_rules_features.py`)
 
@@ -587,6 +651,31 @@ Current PSI code works per-column — call 3x (P(loss), P(draw), P(win)). Phase 
 |---------|-------------------|-----------|
 | `scripts/reports/generate_iso25059.py` | ISO 25059, 5055 | Rapport final qualité AI, <50 lignes |
 
+### Scripts V8 Cloud Training
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/cloud/train_kaggle.py` | ISO 42001, 5259, 25059 | Kernel 2 orchestration, baselines, quality gate |
+| `scripts/cloud/fe_kaggle.py` | ISO 5259, 42001 | Kernel 1 FE, temporal split, no leakage |
+| `scripts/kaggle_trainers.py` | ISO 42001, 24029, 5055 | CatBoost/XGBoost/LightGBM MultiClass 3-way |
+| `scripts/kaggle_diagnostics.py` | ISO 42001, 24029, 24027 | Calibration isotonic 3-class, ROC, ECE |
+| `scripts/kaggle_metrics.py` | ISO 25059, 24029 | RPS, ECE, E[score] MAE, Brier multiclass |
+| `scripts/kaggle_artifacts.py` | ISO 42001, 5259 | Model card, lineage, HF Hub push |
+| `scripts/kaggle_constants.py` | ISO 5055 | Feature lists, label, leaky columns |
+| `scripts/baselines.py` | ISO 25059, 24029 | Naive marginal + Elo + draw rate baselines |
+
+### Scripts V8 Feature Modules
+
+| Fichier | Normes Applicables | Exigences |
+|---------|-------------------|-----------|
+| `scripts/features/draw_priors.py` | ISO 5259, 42001 | Draw rate lookup (elo_band × diff_band), per-player/equipe |
+| `scripts/features/club_level.py` | ISO 5259, 5055 | Vases communiquants, team_rank, reinforcement, stabilite |
+| `scripts/features/merge_v8.py` | ISO 5055 | Merge helpers V8 (draw rates, club level, player context) |
+| `scripts/features/pipeline.py` | ISO 5259, 5055 | extract_all_features + merge_all_features orchestration |
+| `scripts/features/pipeline_extended.py` | ISO 5259, 5055 | ALI presence/patterns/absence, temporal, match_important |
+| `scripts/features/player_enrichment.py` | ISO 5259 | elo_type, categorie FFE, K-coefficient FIDE 8.3.3 |
+| `scripts/features/helpers.py` | ISO 5259 | exclude_forfeits(), FORFAIT_RESULT constant |
+
 ### Scripts Baseline (Comparaison Indépendante)
 
 | Fichier | Normes Applicables | Exigences |
@@ -724,28 +813,50 @@ Last Updated: YYYY-MM-DD
 
 ---
 
-## Résultats Pipeline ISO (2026-01-17)
+## Résultats Pipeline ISO
 
-### Dernière Validation
+### V7 Binary (2026-01-17) — ARCHIVED
+
+> Ces résultats sont issus du modèle binaire V7 (57 features, AUC).
+> Remplacés par V8 MultiClass après training.
 
 | Norme | Métrique | Valeur | Seuil | Status |
 |-------|----------|--------|-------|--------|
-| ISO 24027 | Demographic Parity | **70.20%** | ≥80% | ⚠️ CAUTION |
+| ISO 24027 | Demographic Parity | 70.20% | ≥80% | ⚠️ CAUTION |
 | ISO 24027 | Equalized Odds | 52.50% | ≥80% | ⚠️ |
-| ISO 24029 | Noise Tolerance | **99.28%** | ≥95% | ✅ ROBUST |
+| ISO 24029 | Noise Tolerance | 99.28% | ≥95% | ✅ ROBUST |
 | ISO 24029 | Stability Score | 95.58% | ≥90% | ✅ |
 | ISO 24029 | Consistency | 95.60% | ≥95% | ✅ |
 | ISO 42005 | Impact Level | MEDIUM | - | ✅ |
 | ISO 42005 | Recommendation | APPROVED_WITH_MONITORING | - | ✅ |
 
+### V8 MultiClass (2026-03-22) — EN COURS
+
+| Etape | Status | Date | Artefact |
+|-------|--------|------|----------|
+| Feature Engineering (196 cols) | COMPLETE | 2026-03-22 | `pguillemin/alice-fe-v8` kernel output |
+| Training MultiClass (CatBoost/XGBoost/LightGBM) | A LANCER | — | `pguillemin/alice-training-v8` |
+| Quality Gate (8 conditions) | PENDING | — | `check_quality_gates()` |
+| Calibration isotonic 3-class | PENDING | — | `calibrators.joblib` |
+| ISO 24027 Fairness V8 | PENDING | — | A générer post-training |
+| ISO 24029 Robustness V8 | PENDING | — | A générer post-training |
+| ISO 42005 Impact Assessment V8 | PENDING | — | A générer post-training |
+| ISO 25059 Report V8 | PENDING | — | A générer post-training |
+| Model Card V8 | PENDING | — | `metadata.json` post-training |
+
+**Métriques V8 attendues :** log loss, RPS, ECE per class, E[score] MAE, Brier, draw_calibration_bias.
+**Métriques V7 archivées :** AUC, accuracy binaire — plus pertinentes en MultiClass.
+
 ### Notes Importantes
 
-1. **ligue_code vide (118k samples)**: Ce sont les compétitions NATIONALES (N1-N4, Top 16, Coupes, UNSS) où le code ligue n'est pas applicable. **Ce n'est PAS une erreur de données.**
+1. **ligue_code vide (118k samples)**: Compétitions NATIONALES (N1-N4, Top 16, Coupes, UNSS) — PAS une erreur.
 
-2. **Feature critique**: `diff_elo` (différence ELO blanc-noir) - impact de 7.5% sur accuracy si dropout.
+2. **Feature critique V7**: `diff_elo` (7.5% impact). V8: à vérifier post-training (feature importance 3-class).
 
-3. **Prochaine review**: 2026-03-03 (monitoring trimestriel)
+3. **Draw rate V8**: 14.2% (parties jouées, forfaits exclus). Varie de 4.9% (Elo<1200) à 45.8% (Elo>2400).
+
+4. **Color perf coverage**: 7.4% des joueurs seulement — NaN pour 93%. CatBoost gère nativement.
 
 ---
 
-*Dernière MAJ: 2026-01-18 | ALICE Engine v0.6.1 - AIMMS Integration*
+*Dernière MAJ: 2026-03-22 | ALICE Engine v0.8.0 - V8 MultiClass FE Complete*

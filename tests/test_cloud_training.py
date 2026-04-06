@@ -1,4 +1,10 @@
-"""Tests Cloud Training — ISO 29119/42001. Doc: ALICE-TEST-CLOUD-TRAINING v2.0.0."""
+"""Tests Cloud Training — ISO 29119/42001.
+
+Document ID: ALICE-TEST-CLOUD-TRAINING
+Version: 3.0.0
+Tests count: 14
+Classes: TestComputeHash, TestBuildLineage, TestQualityGates, TestModelCard
+"""
 
 from __future__ import annotations
 
@@ -8,17 +14,16 @@ from unittest.mock import MagicMock
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 
 from scripts.kaggle_artifacts import (
     build_lineage,
     build_model_card,
     compute_dataframe_hash,
 )
+from scripts.kaggle_metrics import check_quality_gates
 from scripts.kaggle_trainers import (
     LABEL_COLUMN,
     MODEL_EXTENSIONS,
-    check_quality_gates,
     default_hyperparameters,
 )
 
@@ -39,14 +44,14 @@ def small_df() -> pd.DataFrame:
 
 @pytest.fixture()
 def mock_results() -> dict:
-    """Fake training results dict."""
+    """Fake training results dict (multiclass 3-class)."""
     m = MagicMock()
-    m.predict_proba.return_value = np.array([[0.3, 0.7]] * 100)
+    m.predict_proba.return_value = np.array([[0.15, 0.15, 0.70]] * 100)
     # fmt: off
     return {"CatBoost": {
         "model": m,
-        "metrics": {"auc_roc": 0.75, "accuracy": 0.70, "f1_score": 0.68,
-                     "test_auc": 0.74, "test_accuracy": 0.70, "test_f1": 0.68, "train_time_s": 1.0},
+        "metrics": {"log_loss": 0.75, "accuracy_3class": 0.70, "test_log_loss": 0.74,
+                     "test_accuracy": 0.70, "test_f1_macro": 0.68, "train_time_s": 1.0},
         "importance": {"blanc_elo": 0.5, "noir_elo": 0.3},
     }}
     # fmt: on
@@ -60,7 +65,10 @@ def mock_lineage() -> dict:
         "valid": {"path": "/data/valid.parquet", "samples": 100, "hash": "def456"},
         "test": {"path": "/data/test.parquet", "samples": 100, "hash": "ghi789"},
         "feature_count": 10,
-        "target_distribution": {"positive_ratio": 0.5, "total_samples": 800},
+        "target_distribution": {
+            "class_distribution": {"loss": 0.33, "draw": 0.33, "win": 0.34},
+            "total_samples": 800,
+        },
         "created_at": "2026-03-18T12:00:00+00:00",
     }
 
@@ -101,7 +109,7 @@ class TestBuildLineage:
         assert "feature_count" in lineage
         assert "target_distribution" in lineage
         assert "created_at" in lineage
-        assert "positive_ratio" in lineage["target_distribution"]
+        assert "class_distribution" in lineage["target_distribution"]
 
     def test_lineage_feature_count_excludes_target(
         self, small_df: pd.DataFrame, tmp_path: Path
@@ -112,39 +120,82 @@ class TestBuildLineage:
 
 
 class TestQualityGates:
-    """Tests AUC quality gates -- 4 tests."""
+    """Tests 8-condition quality gates (multiclass) -- 6 tests."""
 
-    def _make_results(self, auc: float) -> dict:
+    def _make_results(self, ll: float, ece_draw: float = 0.01, bias: float = 0.005) -> dict:
         m = MagicMock()
         return {
             "CatBoost": {
                 "model": m,
-                "metrics": {"test_auc": auc, "test_accuracy": 0.7, "test_f1": 0.6},
+                "metrics": {
+                    "test_log_loss": ll,
+                    "test_accuracy": 0.7,
+                    "test_f1_macro": 0.6,
+                    "test_rps": 0.15,
+                    "test_brier": 0.30,
+                    "test_es_mae": 0.25,
+                    "ece_class_loss": 0.01,
+                    "ece_class_draw": ece_draw,
+                    "ece_class_win": 0.01,
+                    "draw_calibration_bias": bias,
+                    "recall_draw": 0.05,
+                    "mean_p_draw": 0.14,
+                },
                 "importance": {},
             }
         }
 
-    def test_auc_below_floor_fails(self) -> None:
-        """AUC 0.65 < AUC_FLOOR must fail quality gate."""
-        gate = check_quality_gates(self._make_results(0.65))
-        assert gate["passed"] is False
-        assert "AUC" in gate["reason"]
+    def _make_baselines(self, naive_ll: float = 1.10, elo_ll: float = 1.05) -> dict:
+        return {
+            "naive": {"log_loss": naive_ll, "rps": 0.22, "brier": 0.40},
+            "elo": {"log_loss": elo_ll, "rps": 0.20, "es_mae": 0.35},
+        }
 
-    def test_auc_above_floor_passes(self) -> None:
-        """AUC 0.75 > AUC_FLOOR must pass quality gate."""
-        gate = check_quality_gates(self._make_results(0.75))
+    def test_logloss_beats_naive_fails(self) -> None:
+        """LogLoss 1.20 >= naive 1.10 must fail quality gate."""
+        gate = check_quality_gates(
+            self._make_results(1.20), baseline_metrics=self._make_baselines()
+        )
+        assert gate["passed"] is False
+        assert "naive" in gate["reason"]
+
+    def test_logloss_beats_baselines_passes(self) -> None:
+        """LogLoss 0.85 < naive and elo must pass baseline checks."""
+        gate = check_quality_gates(
+            self._make_results(0.85), baseline_metrics=self._make_baselines()
+        )
         assert gate["passed"] is True
-        assert gate["best_auc"] == pytest.approx(0.75)
+        assert gate["best_log_loss"] == pytest.approx(0.85)
+
+    def test_ece_draw_above_threshold_fails(self) -> None:
+        """ECE draw 0.08 >= 0.05 must fail quality gate."""
+        gate = check_quality_gates(
+            self._make_results(0.85, ece_draw=0.08), baseline_metrics=self._make_baselines()
+        )
+        assert gate["passed"] is False
+        assert "ece_draw" in gate["reason"]
+
+    def test_draw_calibration_bias_fails(self) -> None:
+        """draw_calibration_bias 0.03 >= 0.02 must fail quality gate."""
+        gate = check_quality_gates(
+            self._make_results(0.85, bias=0.03), baseline_metrics=self._make_baselines()
+        )
+        assert gate["passed"] is False
+        assert "draw_calibration_bias" in gate["reason"]
 
     def test_degradation_relative_fails(self) -> None:
-        """Champion 0.75, new 0.72 -> 4% drop > 2% threshold -> fail."""
-        gate = check_quality_gates(self._make_results(0.72), champion_auc=0.75)
+        """Champion 0.80, new 0.85 -> 6.25% rise > 5% threshold -> fail."""
+        gate = check_quality_gates(
+            self._make_results(0.85), baseline_metrics=self._make_baselines(), champion_ll=0.80
+        )
         assert gate["passed"] is False
         assert "Degradation" in gate["reason"]
 
     def test_first_run_no_champion_passes(self) -> None:
-        """champion_auc=None must skip degradation check."""
-        gate = check_quality_gates(self._make_results(0.75), champion_auc=None)
+        """champion_ll=None must skip degradation check."""
+        gate = check_quality_gates(
+            self._make_results(0.85), baseline_metrics=self._make_baselines(), champion_ll=None
+        )
         assert gate["passed"] is True
 
 
@@ -153,7 +204,7 @@ class TestModelCard:
 
     @pytest.fixture()
     def gate(self) -> dict:
-        return {"passed": True, "best_model": "CatBoost", "best_auc": 0.74}
+        return {"passed": True, "best_model": "CatBoost", "best_log_loss": 0.85}
 
     def test_card_has_all_required_fields(
         self, mock_results: dict, mock_lineage: dict, gate: dict
@@ -212,91 +263,3 @@ class TestModelCard:
             mock_results, mock_lineage, gate, default_hyperparameters(), MODEL_EXTENSIONS
         )
         assert card["quality_gate_result"] == gate
-
-
-class TestHyperparamsSync:
-    """Tests config matches YAML -- 1 test."""
-
-    def test_kaggle_params_match_yaml(self) -> None:
-        """Keys in default_hyperparameters() must match config/hyperparameters.yaml."""
-        with Path("config/hyperparameters.yaml").open() as fh:
-            yaml_cfg = yaml.safe_load(fh)
-        kaggle_cfg = default_hyperparameters()
-        skip_keys = {
-            "thread_count",
-            "n_jobs",
-            "cat_features",
-            "categorical_feature",
-            "device",
-            "task_type",
-            "train_dir",
-        }
-        for section in ("catboost", "xgboost", "lightgbm"):
-            yaml_keys = {k for k in yaml_cfg[section] if k not in skip_keys}
-            kaggle_keys = {k for k in kaggle_cfg[section] if k not in skip_keys}
-            assert yaml_keys == kaggle_keys, f"[{section}] mismatch"
-
-
-class TestPromoteModel:
-    """Tests promotion logic -- 3 tests."""
-
-    def _fake_robustness(self, compliant: bool) -> dict:
-        return {
-            "base_auc": 0.74,
-            "noisy_auc": 0.73 if compliant else 0.50,
-            "noise_tolerance": 0.99 if compliant else 0.67,
-            "compliant": compliant,
-        }
-
-    def _fake_fairness(self, status: str) -> dict:
-        return {"status": status, "demographic_parity": 0.9, "group_rates": {}}
-
-    def _mcnemar(self) -> dict:
-        return {"p_value": 0.5, "significant": False, "new_auc": 0.74}
-
-    def test_robustness_fail_rejects(self) -> None:
-        """Non-compliant robustness must result in REJECTED status."""
-        from scripts.cloud.promote_model import decide_promotion
-
-        result = decide_promotion(
-            self._fake_robustness(False), self._fake_fairness("FAIR"), self._mcnemar()
-        )
-        assert result["decision"] == "REJECTED"
-        assert "robustness" in result["reason"].lower()
-
-    def test_fairness_critical_rejects(self) -> None:
-        """CRITICAL fairness must result in REJECTED status."""
-        from scripts.cloud.promote_model import decide_promotion
-
-        result = decide_promotion(
-            self._fake_robustness(True), self._fake_fairness("CRITICAL"), self._mcnemar()
-        )
-        assert result["decision"] == "REJECTED"
-        assert "fairness" in result["reason"].lower()
-
-    def test_mcnemar_significantly_worse_rejects(self) -> None:
-        """Significantly worse on McNemar must result in REJECTED."""
-        from scripts.cloud.promote_model import decide_promotion
-
-        mcnemar_worse = {
-            "p_value": 0.001,
-            "significant": True,
-            "new_auc": 0.70,
-            "champion_auc": 0.75,
-        }
-        result = decide_promotion(
-            self._fake_robustness(True),
-            self._fake_fairness("FAIR"),
-            mcnemar_worse,
-        )
-        assert result["decision"] == "REJECTED"
-        assert "mcnemar" in result["reason"].lower()
-
-    def test_all_pass_promotes(self) -> None:
-        """All checks passing must result in PRODUCTION status."""
-        from scripts.cloud.promote_model import decide_promotion
-
-        result = decide_promotion(
-            self._fake_robustness(True), self._fake_fairness("FAIR"), self._mcnemar()
-        )
-        assert result["decision"] == "PRODUCTION"

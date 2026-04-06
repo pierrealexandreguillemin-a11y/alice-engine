@@ -23,20 +23,23 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# FFE age categories mapping to FIDE "young player" (K=40)
+# FFE uses French abbreviations: PpoM=Petit Poussin Masculin (U8), PouM=Poussin (U10), etc.
+# Covers U8 through U18 (< 18 years old at start of season)
 _YOUNG_CATS = frozenset(
     {
-        "U8",
-        "U8F",
-        "U10",
-        "U10F",
-        "U12",
-        "U12F",
-        "U14",
-        "U14F",
-        "U16",
-        "U16F",
-        "U18",
-        "U18F",
+        "PpoM",
+        "PpoF",  # Petit Poussin = U8
+        "PouM",
+        "PouF",  # Poussin = U10
+        "PupM",
+        "PupF",  # Pupille = U12
+        "BenM",
+        "BenF",  # Benjamin = U14
+        "MinM",
+        "MinF",  # Minime = U16
+        "CadM",
+        "CadF",  # Cadet = U18
     }
 )
 

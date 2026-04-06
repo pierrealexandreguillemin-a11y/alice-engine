@@ -97,10 +97,11 @@ class InferenceService:
             logger.warning("Modele non charge, utilisation fallback")
             return self._fallback_prediction(opponent_players, team_size)
 
-        # TODO: Implementer la prediction ML
+        # TODO: Implementer la prediction ML (Phase 2)
         # 1. Preparer les features pour chaque joueur
-        # 2. Appeler model.predict_proba()
-        # 3. Trier par probabilite et assigner aux echiquiers
+        # 2. compute_differentials(df_features)  # FTI anti-skew (same as FE pipeline)
+        # 3. Appeler model.predict_proba() with init_scores (residual learning)
+        # 4. Trier par probabilite et assigner aux echiquiers
 
         return self._fallback_prediction(opponent_players, team_size)
 

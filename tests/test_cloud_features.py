@@ -31,7 +31,6 @@ from scripts.kaggle_trainers import (
     CATBOOST_CAT_FEATURES,
     CATEGORICAL_FEATURES,
     LABEL_COLUMN,
-    compute_validation_metrics,
     prepare_features,
 )
 
@@ -60,6 +59,7 @@ def realistic_df() -> pd.DataFrame:
             "blanc_titre": rng.choice(["GM", "IM", ""], n),
             "noir_titre": rng.choice(["GM", "FM", ""], n),
             "zone_enjeu_dom": rng.choice(["danger", "confort"], n),
+            "zone_enjeu_ext": rng.choice(["danger", "confort", "montee"], n),
             "blanc_nom": [f"Player_{i}" for i in range(n)],
             "noir_nom": [f"Opponent_{i}" for i in range(n)],
             "equipe_dom": [f"Team_{i % 10}" for i in range(n)],
@@ -115,52 +115,6 @@ class TestPrepareFeatures:
 # ---------------------------------------------------------------------------
 # TestComputeValidationMetrics
 # ---------------------------------------------------------------------------
-
-
-class TestComputeValidationMetrics:
-    """Tests metrics computation — 2 tests."""
-
-    @pytest.fixture()
-    def binary_predictions(self) -> tuple:
-        """Generate deterministic binary predictions for metrics testing."""
-        rng = np.random.default_rng(42)
-        y_true = rng.choice([0, 1], 200)
-        y_proba = np.where(y_true == 1, rng.uniform(0.5, 0.9, 200), rng.uniform(0.1, 0.5, 200))
-        y_pred = (y_proba >= 0.5).astype(int)
-        return y_true, y_pred, y_proba
-
-    def test_metrics_has_required_fields(self, binary_predictions: tuple) -> None:
-        """compute_validation_metrics must return all required fields."""
-        y_true, y_pred, y_proba = binary_predictions
-        metrics = compute_validation_metrics(y_true, y_pred, y_proba)
-        required_keys = {
-            "auc_roc",
-            "accuracy",
-            "precision",
-            "recall",
-            "f1_score",
-            "log_loss",
-            "log_loss_baseline",
-            "log_loss_ratio",
-            "brier_score",
-            "mean_proba",
-            "positive_rate",
-            "true_negatives",
-            "false_positives",
-            "false_negatives",
-            "true_positives",
-        }
-        assert required_keys.issubset(set(metrics.keys()))
-
-    def test_metrics_values_in_range(self, binary_predictions: tuple) -> None:
-        """All probability metrics must be in [0, 1], confusion counts >= 0."""
-        y_true, y_pred, y_proba = binary_predictions
-        metrics = compute_validation_metrics(y_true, y_pred, y_proba)
-        for key in ("auc_roc", "accuracy", "precision", "recall", "f1_score"):
-            assert 0.0 <= metrics[key] <= 1.0, f"{key}={metrics[key]} out of range"
-        assert metrics["log_loss"] >= 0.0
-        for key in ("true_negatives", "false_positives", "false_negatives", "true_positives"):
-            assert metrics[key] >= 0, f"{key}={metrics[key]} negative"
 
 
 # ---------------------------------------------------------------------------

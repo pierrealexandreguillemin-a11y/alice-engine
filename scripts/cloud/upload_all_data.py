@@ -3,10 +3,11 @@
 Everything the Kaggle kernel needs in one dataset:
 - data/echiquiers.parquet (raw parsed games)
 - data/joueurs.parquet (player registry)
-- scripts/ (feature engineering code)
+- scripts/ (feature engineering code, training code, baselines)
 - schemas/ (validation constants)
 
 Usage: python -m scripts.cloud.upload_all_data
+       python -m scripts.cloud.upload_all_data --version-notes "V8 bool fix"
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -24,16 +26,65 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATASET_SLUG = "pguillemin/alice-code"
 
 
-def upload() -> None:
-    """Package everything and upload to Kaggle."""
+def _git_version_notes() -> str:
+    """Build version notes from git HEAD (short hash + subject)."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%h %s"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=str(PROJECT_ROOT),
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:  # noqa: BLE001
+        logger.debug("git log failed, using default version notes")
+    return "manual upload"
+
+
+def _compute_content_hash(tmp_path: Path) -> str:
+    """SHA-256 hash of all files in the package (ISO 5259 lineage)."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for f in sorted(tmp_path.rglob("*")):
+        if f.is_file() and f.name != "dataset-metadata.json":
+            h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def _save_upload_record(notes: str, content_hash: str) -> None:
+    """Append upload record to tracking log (ISO 5259 commit↔dataset↔kernel)."""
+    record_path = PROJECT_ROOT / "reports" / "kaggle_upload_log.jsonl"
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp": __import__("datetime").datetime.now().isoformat(),
+        "git_commit": _git_version_notes().split(" ")[0],
+        "dataset_slug": DATASET_SLUG,
+        "content_hash": content_hash,
+        "version_notes": notes,
+    }
+    with open(record_path, "a") as f:
+        f.write(json.dumps(record) + "\n")
+    logger.info("Upload record saved: commit=%s hash=%s", record["git_commit"], content_hash)
+
+
+def upload(version_notes: str | None = None) -> None:
+    """Package everything and upload to Kaggle (ISO 5259 tracked)."""
     from kaggle.api.kaggle_api_extended import KaggleApi
 
     api = KaggleApi()
     api.authenticate()
 
+    notes = version_notes or _git_version_notes()
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         _package_all(tmp_path)
+        content_hash = _compute_content_hash(tmp_path)
+        logger.info("Content hash: %s", content_hash)
+
         meta = {
             "title": "alice-code",
             "id": DATASET_SLUG,
@@ -42,17 +93,19 @@ def upload() -> None:
         }
         (tmp_path / "dataset-metadata.json").write_text(json.dumps(meta, indent=2))
 
-        logger.info("Uploading to Kaggle as %s...", DATASET_SLUG)
+        logger.info("Uploading to Kaggle as %s (notes: %s)...", DATASET_SLUG, notes)
         try:
             api.dataset_create_version(
                 folder=str(tmp_path),
-                version_notes="Full data + code",
+                version_notes=notes,
                 dir_mode="zip",
             )
             logger.info("Version updated: %s", DATASET_SLUG)
         except Exception:
             api.dataset_create_new(folder=str(tmp_path), dir_mode="zip", public=False)
             logger.info("Created: %s", DATASET_SLUG)
+
+        _save_upload_record(notes, content_hash)
 
 
 def _package_all(tmp_path: Path) -> None:
@@ -96,9 +149,9 @@ def _package_all(tmp_path: Path) -> None:
     cloud_dir = dst_scripts / "cloud"
     cloud_dir.mkdir(exist_ok=True)
     (cloud_dir / "__init__.py").touch()
-    for cloud_module in ["autogluon_diagnostics.py", "autogluon_model_card.py"]:
+    for cloud_module in ["autogluon_diagnostics.py", "autogluon_model_card.py", "train_kaggle.py"]:
         shutil.copy2(src_scripts / "cloud" / cloud_module, cloud_dir / cloud_module)
-    logger.info("Copied autogluon_diagnostics.py + autogluon_model_card.py")
+    logger.info("Copied autogluon_diagnostics.py + autogluon_model_card.py + train_kaggle.py")
 
     # Schemas
     shutil.copytree(
@@ -111,4 +164,9 @@ def _package_all(tmp_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    upload()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Upload alice-code dataset to Kaggle")
+    parser.add_argument("--version-notes", type=str, default=None, help="Custom version notes")
+    args = parser.parse_args()
+    upload(version_notes=args.version_notes)

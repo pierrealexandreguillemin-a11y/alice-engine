@@ -1,12 +1,12 @@
 """Features comportement club — stabilite effectif, noyau, rotation.
 
 Features specifiees dans FEATURE_SPECIFICATION.md §10.
-Ajout features §14 (renforce_fin_saison, avantage_dom_club,
+Ajout features §14 (renforce_fin_saison, win_rate_home, draw_rate_home,
 club_utilise_marge_100).
 
 Conformite ISO/IEC:
 - 5055: Code maintenable (<300 lignes, SRP)
-- 5259: Qualite donnees ML
+- 5259: Qualite donnees ML — forfaits exclus via filter_played_games()
 """
 
 from __future__ import annotations
@@ -15,17 +15,9 @@ import logging
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from scripts.features.helpers import filter_played_games
 
-_PLAYED_RESULTS = frozenset(
-    {
-        "victoire_blanc",
-        "victoire_noir",
-        "nulle",
-        "victoire_blanc_ajournement",
-        "victoire_noir_ajournement",
-    }
-)
+logger = logging.getLogger(__name__)
 
 
 def extract_club_behavior(df_history: pd.DataFrame) -> pd.DataFrame:
@@ -36,7 +28,7 @@ def extract_club_behavior(df_history: pd.DataFrame) -> pd.DataFrame:
         DataFrame avec colonnes: equipe, saison,
         nb_joueurs_utilises, rotation_effectif, noyau_stable,
         profondeur_effectif, renforce_fin_saison,
-        avantage_dom_club, club_utilise_marge_100
+        win_rate_home, draw_rate_home, club_utilise_marge_100
     """
     if df_history.empty or "equipe_dom" not in df_history.columns:
         return pd.DataFrame()
@@ -45,7 +37,7 @@ def extract_club_behavior(df_history: pd.DataFrame) -> pd.DataFrame:
     if unified.empty:
         return pd.DataFrame()
 
-    rows = []
+    rows: list[dict] = []
     for (equipe, saison), group in unified.groupby(["equipe", "saison"]):
         _process_club(group, str(equipe), int(saison), rows)
 
@@ -69,6 +61,7 @@ def _build_unified_view(df: pd.DataFrame) -> pd.DataFrame:
             home["elo"] = df["blanc_elo"].values
         if "type_resultat" in df.columns:
             home["type_resultat"] = df["type_resultat"].values
+            home["resultat_blanc"] = df["resultat_blanc"].values
             home["is_home"] = True
         parts.append(home)
     # Away: equipe_ext, noir_nom, noir_elo
@@ -79,6 +72,7 @@ def _build_unified_view(df: pd.DataFrame) -> pd.DataFrame:
             away["elo"] = df["noir_elo"].values
         if "type_resultat" in df.columns:
             away["type_resultat"] = df["type_resultat"].values
+            away["resultat_blanc"] = df["resultat_blanc"].values
             away["is_home"] = False
         parts.append(away)
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
@@ -104,7 +98,7 @@ def _process_club(
     rotation = group.groupby("ronde")["joueur_nom"].nunique().mean()
 
     renforce = _calc_renforce_fin_saison(group)
-    avantage_dom = _calc_avantage_dom(group)
+    win_rate_home, draw_rate_home = _calc_home_rates(group)
     marge_100 = _calc_marge_100(group)
 
     rows.append(
@@ -116,7 +110,8 @@ def _process_club(
             "noyau_stable": noyau,
             "profondeur_effectif": nb_joueurs,
             "renforce_fin_saison": renforce,
-            "avantage_dom_club": avantage_dom,
+            "win_rate_home": win_rate_home,
+            "draw_rate_home": draw_rate_home,
             "club_utilise_marge_100": marge_100,
         }
     )
@@ -136,19 +131,29 @@ def _calc_renforce_fin_saison(group: pd.DataFrame) -> int:
     return int(fin > debut)
 
 
-def _calc_avantage_dom(group: pd.DataFrame) -> float:
-    """Taux de victoire a domicile (parties jouees uniquement)."""
-    if "type_resultat" not in group.columns or "is_home" not in group.columns:
-        return 0.0
+def _calc_home_rates(group: pd.DataFrame) -> tuple[float, float]:
+    """W/D rates a domicile (parties jouees uniquement — forfaits exclus ISO 5259)."""
+    if (
+        "type_resultat" not in group.columns
+        or "is_home" not in group.columns
+        or "resultat_blanc" not in group.columns
+    ):
+        return 0.0, 0.0
 
-    home = group[group["is_home"] & group["type_resultat"].isin(_PLAYED_RESULTS)]
-    if len(home) == 0:
-        return 0.0
+    home_all = group[group["is_home"]].copy()
+    if home_all.empty:
+        return 0.0, 0.0
 
-    victoires_dom = (
-        home["type_resultat"].isin({"victoire_blanc", "victoire_blanc_ajournement"})
-    ).sum()
-    return round(float(victoires_dom) / len(home), 3)
+    # Exclude forfeits using filter_played_games (needs type_resultat + resultat_blanc)
+    home = filter_played_games(home_all)
+    n = len(home)
+    if n == 0:
+        return 0.0, 0.0
+
+    # Home team is always blanc (equipe_dom plays blanc)
+    wins = (home["resultat_blanc"] == 1.0).sum()
+    draws = (home["resultat_blanc"] == 0.5).sum()
+    return round(float(wins) / n, 3), round(float(draws) / n, 3)
 
 
 def _calc_marge_100(group: pd.DataFrame) -> float:

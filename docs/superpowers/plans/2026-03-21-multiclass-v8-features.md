@@ -706,48 +706,61 @@ git commit -m "feat(features): integrate all V8 features into pipeline — ~156 
 
 ---
 
-## Task 12 (FINAL): Generate V8 feature parquets + upload
+## Task 12 (FINAL): Local sample test + upload code to Kaggle
+
+**IMPORTANT:** Full feature engineering CANNOT run locally (15GB RAM, needs ~20GB+).
+`train_kaggle.py` already calls `run_feature_engineering_v2()` internally — feature
+engineering + training happen together on Kaggle (30GB RAM). Plan A only uploads code.
 
 **Files:**
-- Run: `make refresh-data` or `python -m scripts.feature_engineering`
 - Run: `python -m scripts.cloud.upload_all_data`
 
-- [ ] **Step 1: Generate full feature parquets**
-
-```bash
-python -m scripts.feature_engineering --output-dir data/features
-```
-
-Expected: train.parquet, valid.parquet, test.parquet with ~156 columns each.
-
-- [ ] **Step 2: Verify data quality**
+- [ ] **Step 1: Local smoke test on 2K sample**
 
 ```python
-for split in ['train', 'valid', 'test']:
-    df = pd.read_parquet(f'data/features/{split}.parquet')
-    print(f"{split}: {len(df)} rows, {len(df.columns)} cols")
-    assert 2.0 not in df['resultat_blanc'].values, "Forfaits in data!"
-    assert 'score_dom' not in df.columns or 'score_dom' in METADATA_COLS
+python -c "
+import pandas as pd
+from pathlib import Path
+from scripts.feature_engineering import compute_features_for_split, temporal_split
+
+ech = pd.read_parquet('data/echiquiers.parquet')
+train_raw, _, _ = temporal_split(ech)
+sample = train_raw.head(2000)
+result = compute_features_for_split(
+    df_split=sample,
+    df_history=ech[ech['saison'] <= train_raw['saison'].max()].head(10000),
+    split_name='smoke_test', include_advanced=True, data_dir=Path('data')
+)
+print(f'Columns: {len(result.columns)}, Rows: {len(result)}')
+v8_cols = ['avg_elo', 'elo_proximity', 'draw_rate_prior', 'win_rate_recent_blanc',
+           'clutch_win_blanc', 'h2h_exists', 'win_rate_home_dom', 'joueur_promu_blanc']
+missing = [c for c in v8_cols if c not in result.columns]
+print(f'V8 cols missing: {missing or \"NONE\"}')
+assert 2.0 not in result['resultat_blanc'].values, 'Forfaits!'
+print('SMOKE TEST PASSED')
+"
 ```
 
-- [ ] **Step 3: Upload to Kaggle dataset**
+- [ ] **Step 2: Commit**
 
 ```bash
-python -m scripts.cloud.upload_all_data
+git commit -m "feat(v8): Plan A complete — V8 features ready for Kaggle execution"
 ```
 
-- [ ] **Step 4: Final commit**
-
-```bash
-git add data/features/ scripts/
-git commit -m "feat(v8): generate V8 feature parquets — 156 columns, forfaits excluded, W/D/L decomposed"
-```
+**NOTE: DO NOT upload to Kaggle yet.** Plan B (MultiClass training) must be
+implemented first. Otherwise Kaggle would run V8 features + binary training
+= incoherent and wastes GPU quota. Upload happens in Plan B Task 11.
 
 ---
 
 ## Notes for Plan B (Training + Diagnostics)
 
-Plan B picks up from here with the V8 feature parquets and implements:
+**CRITICAL CHANGE:** Feature parquets are NOT generated locally. They are generated
+ON KAGGLE as part of `train_kaggle.py` (which calls `run_feature_engineering_v2()`).
+Plan B Task 10 (local integration test) uses a 5K SAMPLE, not full parquets.
+Plan B Task 11 (Kaggle push) runs BOTH feature engineering AND training in one kernel.
+
+Plan B implements:
 - MultiClass target encoding (loss=0, draw=1, win=2)
 - CatBoost/XGBoost/LightGBM MultiClass configs
 - Baselines (naïve + Elo draw rate model)

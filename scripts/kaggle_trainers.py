@@ -4,41 +4,32 @@ from __future__ import annotations
 
 import gc  # noqa: E401
 import logging
+import os
 import time
 from typing import Any
 
-import pandas as pd  # noqa: TCH002 — used at runtime, not just type-checking
+import numpy as np
+import pandas as pd  # noqa: TCH002 — used at runtime
 
 logger = logging.getLogger(__name__)
 
-# fmt: off
-CATEGORICAL_FEATURES = ["type_competition", "division", "ligue_code", "jour_semaine"]
-CATBOOST_CAT_FEATURES = ["type_competition", "division", "ligue_code", "blanc_titre",
-                         "noir_titre", "jour_semaine", "zone_enjeu_dom"]
-ADVANCED_CAT_FEATURES = [
-    "forme_tendance_blanc", "forme_tendance_noir", "couleur_preferee_blanc",
-    "couleur_preferee_noir", "data_quality_blanc", "data_quality_noir", "zone_enjeu_ext",
-    "elo_trajectory_blanc", "elo_trajectory_noir", "pressure_type_blanc",
-    "pressure_type_noir", "categorie_blanc", "categorie_noir", "elo_type_blanc",
-    "elo_type_noir", "phase_saison", "regularite_blanc", "regularite_noir",
-    "role_type_blanc", "role_type_noir"]
-BOOL_FEATURES = [
-    "joueur_fantome_blanc", "joueur_fantome_noir", "ffe_multi_equipe_blanc",
-    "ffe_multi_equipe_noir", "est_dans_noyau_blanc", "est_dans_noyau_noir",
-    "match_important", "renforce_fin_saison_dom", "renforce_fin_saison_ext"]
-# fmt: on
-LABEL_COLUMN = "resultat_blanc"
-# Match score = sum of individual board results → target leakage
-LEAKY_COLUMNS = {"score_dom", "score_ext"}
-AUC_FLOOR = 0.70
-MODEL_EXTENSIONS = {"CatBoost": ".cbm", "XGBoost": ".ubj", "LightGBM": ".txt"}
+from scripts.kaggle_constants import (  # noqa: E402
+    ADVANCED_CAT_FEATURES,
+    BOOL_FEATURES,
+    CATBOOST_CAT_FEATURES,
+    CATEGORICAL_FEATURES,
+    LABEL_COLUMN,
+    LEAKY_COLUMNS,
+    MODEL_EXTENSIONS,  # noqa: F401 — re-exported
+    default_hyperparameters,  # noqa: F401 — re-exported
+)
 
 
 def _encode_categoricals(splits: list[pd.DataFrame]) -> dict:
     """Label-encode all categorical columns. Adds UNKNOWN class for inference safety."""
-    import numpy as np  # noqa: PLC0415
+    # fmt: off
     from sklearn.preprocessing import LabelEncoder  # noqa: PLC0415
-
+    # fmt: on
     all_cat_cols = sorted(
         set(CATEGORICAL_FEATURES) | set(CATBOOST_CAT_FEATURES) | set(ADVANCED_CAT_FEATURES)
     )
@@ -63,13 +54,18 @@ def _encode_categoricals(splits: list[pd.DataFrame]) -> dict:
 
 def _split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """Extract X and y, keeping numeric + casting bools to int."""
-    y = (df[LABEL_COLUMN] == 1.0).astype(int)
+    from scripts.features.helpers import NON_PLAYED  # noqa: PLC0415
+
+    # Exclude non-played games via type_resultat (NOT resultat_blanc)
+    if "type_resultat" in df.columns:
+        df = df[~df["type_resultat"].isin(NON_PLAYED)].copy()
+    TARGET_MAP = {0.0: 0, 0.5: 1, 1.0: 2, 2.0: 2}  # 2.0=victoire jeunes FFE (J02 §4.1)
+    y = df[LABEL_COLUMN].map(TARGET_MAP).astype(int)
     for col in BOOL_FEATURES:
         if col in df.columns:
             df[col] = df[col].fillna(0).astype(int)
     X = df.select_dtypes(include=["int64", "int32", "float64", "float32"])
-    # Drop target + outcome columns + match-score leakage (ISO 5259)
-    drop = [
+    drop = [  # target + outcome + leakage columns
         c
         for c in X.columns
         if c in (LABEL_COLUMN, "resultat_noir") or "resultat" in c.lower() or c in LEAKY_COLUMNS
@@ -87,99 +83,57 @@ def prepare_features(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFram
     return X_train, y_train, X_valid, y_valid, X_test, y_test, encoders
 
 
-_GPU_CACHE: bool | None = None
-
-
-def _has_gpu() -> bool:
-    """Detect NVIDIA GPU availability (cached)."""
-    global _GPU_CACHE  # noqa: PLW0603
-    if _GPU_CACHE is not None:
-        return _GPU_CACHE
-    try:
-        import subprocess  # noqa: PLC0415
-
-        result = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)  # noqa: S603, S607
-        _GPU_CACHE = result.returncode == 0
-    except Exception:
-        _GPU_CACHE = False
-    return _GPU_CACHE
-
-
-def default_hyperparameters() -> dict:
-    """Auto-detect GPU and set optimal hyperparameters for Kaggle."""
-    gpu = _has_gpu()
-    logger.info("GPU detected: %s", gpu)
-    # fmt: off
-    xgb_gpu = {"tree_method": "hist", "device": "cpu"}
-    if gpu:
-        try:
-            from xgboost import __version__ as xv  # noqa: PLC0415
-            xgb_gpu = {"tree_method": "hist", "device": "cuda"} if int(xv.split(".")[0]) >= 2 else {"tree_method": "gpu_hist"}
-        except Exception:
-            xgb_gpu = {"tree_method": "gpu_hist"}
-    # fmt: on
-    # fmt: off
-    return {
-        "global": {"random_seed": 42, "early_stopping_rounds": 100, "eval_metric": "logloss"},
-        "catboost": {
-            "iterations": 3000, "depth": 8, "border_count": 254,
-            "l2_leaf_reg": 3, "min_data_in_leaf": 20, "thread_count": 4,
-            "task_type": "GPU" if gpu else "CPU", "use_best_model": True,
-            "random_seed": 42, "verbose": 100, "early_stopping_rounds": 100,
-        },
-        "xgboost": {
-            "n_estimators": 3000, "max_depth": 8,
-            "reg_lambda": 1.0, "reg_alpha": 0.0, "min_child_weight": 1,
-            **xgb_gpu, "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 100, "verbosity": 1,
-        },
-        "lightgbm": {
-            "n_estimators": 3000, "num_leaves": 255,
-            "max_depth": -1, "reg_lambda": 1.0, "reg_alpha": 0.0,
-            "min_child_samples": 20, "n_jobs": 4, "random_state": 42,
-            "early_stopping_rounds": 100, "verbose": -1,
-        },
-    }
-    # fmt: on
-
-
-def compute_validation_metrics(y_true: Any, y_pred: Any, y_proba: Any) -> dict:
-    """Delegate to kaggle_diagnostics (moved for ISO 5055 line limit)."""
-    from scripts.kaggle_diagnostics import _compute_metrics  # noqa: PLC0415
-
-    return _compute_metrics(y_true, y_pred, y_proba)
-
-
-def _eval_model(model: Any, X_valid: Any, y_valid: Any, train_time: float) -> dict:
+def _eval_model(
+    model: Any,
+    X_valid: Any,
+    y_valid: Any,
+    train_time: float,
+    init_scores_valid: Any | None = None,
+) -> dict:
     """Evaluate model on validation, return {model, metrics, importance}."""
-    import numpy as np  # noqa: PLC0415
+    from scripts.kaggle_diagnostics import _compute_metrics  # noqa: PLC0415
+    from scripts.kaggle_metrics import predict_with_init  # noqa: PLC0415
 
-    y_proba = model.predict_proba(X_valid)[:, 1]
-    y_pred = (y_proba >= 0.5).astype(np.int64)
-    metrics = compute_validation_metrics(y_valid.values, y_pred, y_proba)
+    y_proba = predict_with_init(model, X_valid, init_scores_valid)
+    y_pred = np.argmax(y_proba, axis=1)
+    metrics = _compute_metrics(y_valid.values, y_pred, y_proba)
     metrics["train_time_s"] = train_time
-    importance = (
-        dict(zip(X_valid.columns, model.feature_importances_, strict=False))
-        if hasattr(model, "feature_importances_")
-        else {}
-    )
+    if hasattr(model, "feature_importances_"):  # CatBoost, LightGBM
+        importance = dict(zip(X_valid.columns, model.feature_importances_, strict=False))
+    else:  # xgb.Booster
+        importance = model.get_score(importance_type="gain") if hasattr(model, "get_score") else {}
     return {"model": model, "metrics": metrics, "importance": importance}
 
 
 def _fail_result() -> dict:
-    """Sentinel result for a model that failed to train (I1)."""
     return {"model": None, "metrics": {}, "importance": {}}
 
 
-def _train_catboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
-    """Train CatBoost — no cat_features since data is label-encoded (I1)."""
+def _train_catboost(
+    X_train: Any,
+    y_train: Any,
+    X_valid: Any,
+    y_valid: Any,
+    params: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
+) -> dict:
+    """Train CatBoost with residual learning via Pool baseline."""
     try:
-        from catboost import CatBoostClassifier  # noqa: PLC0415
+        from catboost import CatBoostClassifier, Pool  # noqa: PLC0415
 
-        cb = CatBoostClassifier(**params, eval_metric="Logloss")
+        # Snapshot checkpoint every 10 min — protects against timeout (12h limit)
+        snap_params = {
+            "save_snapshot": True,
+            "snapshot_file": "/kaggle/working/catboost_snapshot",
+            "snapshot_interval": 600,
+        }
+        cb = CatBoostClassifier(**params, **snap_params, eval_metric="MultiClass")
+        train_pool = Pool(X_train, y_train, baseline=init_scores_train)
+        valid_pool = Pool(X_valid, y_valid, baseline=init_scores_valid)
         t0 = time.time()
-        cb.fit(X_train, y_train, eval_set=(X_valid, y_valid))
-        result = _eval_model(cb, X_valid, y_valid, time.time() - t0)
+        cb.fit(train_pool, eval_set=valid_pool)
+        result = _eval_model(cb, X_valid, y_valid, time.time() - t0, init_scores_valid)
         del cb
         gc.collect()
         return result
@@ -188,16 +142,40 @@ def _train_catboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, para
         return _fail_result()
 
 
-def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
-    """Train XGBoost with partial-failure handling (I1)."""
+def _train_xgboost(
+    X_train: Any,
+    y_train: Any,
+    X_valid: Any,
+    y_valid: Any,
+    params: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
+) -> dict:
+    """Train XGBoost via native xgb.train + DMatrix (sklearn API base_margin broken #5288)."""
     try:
-        from xgboost import XGBClassifier  # noqa: PLC0415
+        import xgboost as xgb  # noqa: PLC0415
 
-        xgb = XGBClassifier(**params, eval_metric="logloss")
+        p = {k: v for k, v in params.items() if k not in ("n_estimators", "early_stopping_rounds")}
+        n_rounds = params.get("n_estimators", 5000)
+        es = params.get("early_stopping_rounds", 500)
+        dtrain = xgb.DMatrix(X_train, label=y_train)
+        dvalid = xgb.DMatrix(X_valid, label=y_valid)
+        if init_scores_train is not None:
+            dtrain.set_base_margin(init_scores_train.ravel())
+        if init_scores_valid is not None:
+            dvalid.set_base_margin(init_scores_valid.ravel())
         t0 = time.time()
-        xgb.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], verbose=100)
-        result = _eval_model(xgb, X_valid, y_valid, time.time() - t0)
-        del xgb
+        evals_log: dict = {}
+        # fmt: off
+        bst = xgb.train(p, dtrain, n_rounds, evals=[(dvalid, "val")],
+                        early_stopping_rounds=es, verbose_eval=100, evals_result=evals_log)
+        # fmt: on
+        # Wrap Booster for sklearn-compatible pipeline (predict_proba, feature_importances_)
+        from scripts.kaggle_metrics import XGBWrapper  # noqa: PLC0415
+
+        wrapper = XGBWrapper(bst, X_train.columns, p.get("num_class", 3), evals_result=evals_log)
+        result = _eval_model(wrapper, X_valid, y_valid, time.time() - t0, init_scores_valid)
+        del bst
         gc.collect()
         return result
     except Exception:
@@ -205,40 +183,65 @@ def _train_xgboost(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, param
         return _fail_result()
 
 
-def _train_lightgbm(X_train: Any, y_train: Any, X_valid: Any, y_valid: Any, params: dict) -> dict:
-    """Train LightGBM CPU only (GPU requires special OpenCL build, not on Kaggle)."""
+def _lgbm_checkpoint_callback(path: str, interval: int = 5000) -> Any:
+    """Save LightGBM model every `interval` iterations (timeout protection)."""
+
+    def _callback(env: Any) -> None:
+        if env.iteration > 0 and env.iteration % interval == 0:
+            env.model.save_model(f"{path}/lgbm_ckpt_{env.iteration}.txt")
+            logger.info("LightGBM checkpoint: iteration %d saved", env.iteration)
+
+    _callback.order = 100  # run after early_stopping / log_evaluation
+    return _callback
+
+
+def _train_lightgbm(
+    X_train: Any,
+    y_train: Any,
+    X_valid: Any,
+    y_valid: Any,
+    params: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
+) -> dict:
+    """Train LightGBM with residual learning via init_score."""
     try:
         import lightgbm as lgb_lib  # noqa: PLC0415
         from lightgbm import LGBMClassifier  # noqa: PLC0415
 
         lgb_p = {k: v for k, v in params.items() if k != "early_stopping_rounds"}
+        lgb_p["device"] = "cpu"
         es = params.get("early_stopping_rounds", 50)
-        cbs = [lgb_lib.early_stopping(es), lgb_lib.log_evaluation(100)]
-        # LightGBM pip package has no GPU support (needs OpenCL build) — CPU only
-        for device in ["cpu"]:
-            lgb_p["device"] = device
-            try:
-                lgbm = LGBMClassifier(**lgb_p)
-                t0 = time.time()
-                lgbm.fit(
-                    X_train,
-                    y_train,
-                    eval_set=[(X_valid, y_valid)],
-                    eval_metric="binary_logloss",
-                    callbacks=cbs,
-                )
-                result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0)
-                del lgbm
-                gc.collect()
-                return result
-            except Exception:
-                if device == "gpu":
-                    logger.warning("LightGBM GPU failed — falling back to CPU")
-                else:
-                    raise
+        ckpt_dir = "/kaggle/working/checkpoints"
+        os.makedirs(ckpt_dir, exist_ok=True)
+        cbs = [
+            lgb_lib.early_stopping(es),
+            lgb_lib.log_evaluation(100),
+            _lgbm_checkpoint_callback(ckpt_dir, interval=5000),
+        ]
+        lgbm = LGBMClassifier(**lgb_p)
+        fit_kw: dict = {
+            "eval_set": [(X_valid, y_valid)],
+            "eval_metric": "multi_logloss",
+            "callbacks": cbs,
+        }
+        init_model = os.environ.get("ALICE_INIT_MODEL")
+        if init_model:
+            fit_kw["init_model"] = init_model
+            logger.info("Resume from checkpoint: %s", init_model)
+        if init_scores_train is not None:
+            fit_kw["init_score"] = init_scores_train
+        if init_scores_valid is not None:
+            fit_kw["eval_init_score"] = [init_scores_valid]
+        t0 = time.time()
+        lgbm.fit(X_train, y_train, **fit_kw)
+        result = _eval_model(lgbm, X_valid, y_valid, time.time() - t0, init_scores_valid)
+        del lgbm
+        gc.collect()
+        return result
     except Exception:
         logger.exception("LightGBM training failed")
-    return _fail_result()
+        return _fail_result()
 
 
 def train_all_sequential(
@@ -247,44 +250,56 @@ def train_all_sequential(
     X_valid: Any,
     y_valid: Any,
     config: dict,
+    init_scores_train: Any | None = None,
+    init_scores_valid: Any | None = None,
+    checkpoint_dir: Any | None = None,
+    encoders: Any = None,
+    model_extensions: dict | None = None,
+    model_filter: str | None = None,
 ) -> dict:
-    """CatBoost -> gc -> XGBoost -> gc -> LightGBM. Sequential memory management."""
+    """Train models sequentially. Checkpoint after each. Filter with ALICE_MODEL env var."""
+    all_trainers = [("CatBoost", _train_catboost), ("XGBoost", _train_xgboost), ("LightGBM", _train_lightgbm)]  # fmt: skip
+    if model_filter:
+        trainers = [(n, f) for n, f in all_trainers if n.lower() == model_filter.lower()]
+        if not trainers:
+            logger.error("Unknown model filter: %s", model_filter)
+            trainers = all_trainers
+    else:
+        trainers = all_trainers
+    logger.info("Training %d model(s): %s", len(trainers), [n for n, _ in trainers])
     results: dict = {}
-    results["CatBoost"] = _train_catboost(X_train, y_train, X_valid, y_valid, config["catboost"])
-    gc.collect()
-    results["XGBoost"] = _train_xgboost(X_train, y_train, X_valid, y_valid, config["xgboost"])
-    gc.collect()
-    results["LightGBM"] = _train_lightgbm(X_train, y_train, X_valid, y_valid, config["lightgbm"])
-    gc.collect()
+    for name, fn in trainers:
+        results[name] = fn(
+            X_train,
+            y_train,
+            X_valid,
+            y_valid,
+            config[name.lower()],
+            init_scores_train,
+            init_scores_valid,
+        )
+        if checkpoint_dir and results[name]["model"] is not None:
+            _checkpoint_model(name, results[name], checkpoint_dir, model_extensions)
+        gc.collect()
     return results
 
 
-def evaluate_on_test(results: dict, X_test: Any, y_test: Any) -> None:
-    """Compute test_auc, test_accuracy, test_f1 for each model. Mutates results."""
-    import numpy as np  # noqa: PLC0415
-    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score  # noqa: PLC0415
+def _checkpoint_model(
+    name: str, result: dict, out_dir: Any, model_extensions: dict | None = None
+) -> None:
+    """Save a single model to disk immediately after training."""
+    from pathlib import Path  # noqa: PLC0415
 
-    for _name, r in results.items():
-        if r["model"] is None:
-            continue
-        y_proba = r["model"].predict_proba(X_test)[:, 1]
-        y_pred = (y_proba >= 0.5).astype(np.int64)
-        r["metrics"]["test_auc"] = float(roc_auc_score(y_test, y_proba))
-        r["metrics"]["test_accuracy"] = float(accuracy_score(y_test, y_pred))
-        r["metrics"]["test_f1"] = float(f1_score(y_test, y_pred, zero_division=0))
-
-
-def check_quality_gates(results: dict, champion_auc: float | None = None) -> dict:
-    """ISO 42001: AUC floor + relative degradation (2%) gate."""
-    candidates = [(n, r) for n, r in results.items() if r["model"] is not None]
-    if not candidates:
-        return {"passed": False, "reason": "All models failed to train"}
-    best_name, best_r = max(candidates, key=lambda x: x[1]["metrics"].get("test_auc", 0.0))
-    best_auc = best_r["metrics"].get("test_auc", 0.0)
-    if best_auc < AUC_FLOOR:
-        return {"passed": False, "reason": f"AUC {best_auc:.4f} < {AUC_FLOOR}"}
-    if champion_auc and champion_auc > 0:
-        drop_pct = (champion_auc - best_auc) / champion_auc * 100
-        if drop_pct > 2.0:
-            return {"passed": False, "reason": f"Degradation {drop_pct:.1f}% > 2.0%"}
-    return {"passed": True, "best_model": best_name, "best_auc": best_auc}
+    out_dir = Path(out_dir)
+    model = result["model"]
+    ext = (model_extensions or {}).get(name, ".bin")
+    path = out_dir / f"{name.lower()}_checkpoint{ext}"
+    try:
+        # LGBMClassifier doesn't have save_model — use booster_ (GitHub #4841)
+        if hasattr(model, "booster_"):
+            model.booster_.save_model(str(path))
+        else:
+            model.save_model(str(path))
+        logger.info("Checkpoint: %s saved to %s", name, path)
+    except Exception as e:
+        logger.warning("Checkpoint failed for %s: %s", name, e)

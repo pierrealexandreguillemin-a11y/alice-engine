@@ -63,6 +63,13 @@ models/*.pkl
 models/*.cbm
 models/*.json
 !models/.gitkeep
+# Training artifacts (large model files in reports/)
+reports/**/*.ubj
+reports/**/*.cbm
+reports/**/*.txt
+reports/**/calibrators.joblib
+reports/**/encoders.joblib
+!reports/**/*.md
 
 # ============================================
 # Dataset (lien symbolique vers 2.4 GB)

@@ -17,7 +17,24 @@ Les nulles = 12.6% des parties, varient de 4.9% (Elo<1200) à 45.8% (Elo>2400). 
 
 **Contraintes métier** : les compositions sont soumises simultanément sur place (A02 Art. 3.6.a) — le capitaine ne connaît PAS la composition adverse.
 
-## État actuel (mars 2026)
+## État actuel (avril 2026)
+
+### V8 MILESTONE ATTEINT (2026-04-06)
+
+3 modèles convergés, ALL GATES PASS. **Phase 1 terminée.**
+
+| Modèle | Test log_loss | vs Elo | Early stop | Taille |
+|--------|---------------|--------|-----------|--------|
+| **XGBoost v5** | **0.566** | **-42%** | 86.5K (lr=0.005) | 427 MB |
+| LightGBM v7 | 0.572 | -41% | 16.1K (lr=0.03) | 86 MB |
+| CatBoost v6 | 0.575 | -41% | 37K (lr=0.03) | 23 MB |
+
+**Champion : XGBoost v5.** Blend test (90/5/5 optimal) = pas de gain d'ensemble.
+**Doc de référence : `docs/project/V8_MODEL_COMPARISON.md`** (métriques, SHAP, features, résidus).
+**AutoGluon évalué et écarté** — pas de support init_score, régresserait sans residual learning.
+**Plafond features estimé ~80-90%** — gain résiduel ~0.01-0.02 via feature engineering (Phase 3).
+
+### Couches système
 
 | Couche | Statut | Fichiers |
 |--------|--------|----------|
@@ -94,6 +111,7 @@ api.upload_file("models/model.pkl", repo_id="Pierrax/alice-engine", repo_type="m
 ### Démarche de rigueur (OBLIGATOIRE)
 - **Raisonnement profond** : comprendre le scope métier AVANT de coder (Alice = P(victoire) pour CE, pas classification)
 - **WebSearch si doute** : vérifier la doc officielle de CHAQUE API/outil avant utilisation. Ne JAMAIS assumer.
+- **Audit domaine AVANT push** : auditer features/approche contre standards ML échecs avant push Kaggle. Ne JAMAIS utiliser l'importance d'un modèle raté pour sélectionner des features.
 - **Checklist pré-déploiement** : avant tout push cloud (Kaggle, HF Hub), vérifier :
   - [ ] Dépendances dans l'env cible ?
   - [ ] Paths/montages corrects ?
@@ -101,6 +119,8 @@ api.upload_file("models/model.pkl", repo_id="Pierrax/alice-engine", repo_type="m
   - [ ] Hardware compatible (GPU/CUDA/PyTorch) ?
   - [ ] Dataset uploadé avec les bons fichiers ?
   - [ ] Kernel slug versionné ?
+  - [ ] Ordre des opérations (init_scores AVANT feature subset) ?
+  - [ ] Features justifiées par logique domaine (pas modèle raté) ?
 - **Post-mortem** : diagnostiquer CHAQUE échec avant de relancer. Documenter dans `docs/postmortem/`.
 - **Pas de mensonge** : "je ne sais pas" > affirmation fausse. Toujours.
 
@@ -148,7 +168,8 @@ Makefile                   # Commandes (make help)
 
 ```
 scripts/
-├── generate_graphs.py      # Graphs SVG architecture (pydeps)
+├── generate_graphs.py      # Graphs SVG imports/deps (pydeps)
+├── generate_ml_graphs.py   # Graphs SVG ML pipeline/inference/system (graphviz)
 ├── update_iso_docs.py      # Génère docs/iso/IMPLEMENTATION_STATUS.md
 ├── analyze_architecture.py # Score santé architecture (coupling, cycles)
 ├── autogluon/              # Pipeline AutoGluon (ISO 42001)
@@ -167,11 +188,17 @@ scripts/
 │   ├── autogluon_model_card.py   # ISO 42001 Model Card builder
 │   ├── promote_model.py          # Promotion locale ISO
 │   ├── upload_all_data.py        # Upload data+code → Kaggle Dataset
-│   ├── kernel-metadata.json      # Config Kaggle CatBoost kernel
-│   └── kernel-metadata-autogluon.json # Config Kaggle AutoGluon kernel
+│   ├── kernel-metadata-fe.json         # Config FE kernel (CPU)
+│   ├── kernel-metadata-train.json      # Config training all-in-one (legacy)
+│   ├── kernel-metadata-xgboost.json    # Config XGBoost seul (CPU, canary)
+│   ├── kernel-metadata-catboost.json   # Config CatBoost seul (CPU, SHAP)
+│   ├── kernel-metadata-lightgbm.json   # Config LightGBM seul (CPU, best)
+│   └── kernel-metadata-autogluon.json  # Config Kaggle AutoGluon kernel
 ├── kaggle_trainers.py      # ML training logic (CatBoost/XGBoost/LightGBM)
+├── kaggle_metrics.py       # Multiclass metrics + predict_with_init + quality gates
 ├── kaggle_artifacts.py     # Model persistence + HF Hub push
 ├── kaggle_diagnostics.py   # ISO diagnostics (ROC, calibration, learning curves)
+├── baselines.py            # Elo baseline + compute_elo_init_scores (residual learning)
 ├── sync_data/              # Sync données FFE (Phase B1)
 │   ├── freshness.py        # Vérification fraîcheur données
 │   ├── symlink.py          # Gestion symlink/junction Windows
@@ -235,50 +262,94 @@ make sync          # Sync données depuis ffe_scrapper
 make refresh-data  # Sync + parse + validate ISO 5259 + features (pipeline complet)
 ```
 
-### Training cloud (Kaggle)
+### Training cloud (Kaggle) — Architecture 4-kernel CPU (ADR-003)
 ```bash
 python -m scripts.cloud.upload_all_data    # Upload data+code → Kaggle Dataset
 
-# CatBoost/XGBoost/LightGBM (kernel-metadata.json)
-cp scripts/cloud/kernel-metadata.json scripts/cloud/kernel-metadata.json.bak
-kaggle kernels push -p scripts/cloud/
-kaggle kernels status pguillemin/alice-training
-
-# AutoGluon (kernel-metadata-autogluon.json → T4x2 GPU)
-cp scripts/cloud/kernel-metadata-autogluon.json scripts/cloud/kernel-metadata.json
+# 1. XGBoost canary (~1h CPU, fast feedback)
+cp scripts/cloud/kernel-metadata-xgboost.json scripts/cloud/kernel-metadata.json
 kaggle kernels push -p scripts/cloud/
 git checkout -- scripts/cloud/kernel-metadata.json
-kaggle kernels status pguillemin/alice-autogluon-v1
+# → Analyser résultats, ajuster si besoin
+
+# 2. CatBoost + LightGBM en parallèle (~9-10h CPU)
+cp scripts/cloud/kernel-metadata-catboost.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+cp scripts/cloud/kernel-metadata-lightgbm.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+git checkout -- scripts/cloud/kernel-metadata.json
 
 python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion ISO locale
 ```
 
 **IMPORTANT Kaggle :**
-- Datasets montés à `/kaggle/input/datasets/{user}/{slug}/` (PAS `/kaggle/input/{slug}/`)
-- AutoGluon pas pré-installé — pip install au runtime dans le script
-- GPU T4x2 (sm_75) compatible CUDA 12.8 — P100 (sm_60) INCOMPATIBLE
+- **CPU illimité** (pas de quota hebdo, 12h/session). GPU = 30h/semaine partagé P100+T4
+- **Tous les kernels training sont CPU** (`enable_gpu: false`) — tree models n'utilisent pas GPU
+- Datasets montés à `/kaggle/input/datasets/{user}/{slug}/`
+- **kernel_sources montés à `/kaggle/input/notebooks/{user}/{slug}/`**
+- Modèle détecté via env var `ALICE_MODEL` dans entry point (PAS `KAGGLE_KERNEL_RUN_SLUG` — n'existe pas)
+- **Entry points** : `train_catboost.py` / `train_lightgbm.py` / `train_xgboost.py` — DOIVENT setup sys.path AVANT import
+- **Checkpoints** : CatBoost `snapshot_file` (10 min), LightGBM callback (5K iters), XGBoost `TrainingCheckPoint` (5K rounds)
 - Toujours re-uploader `alice-code` dataset AVANT push kernel si fichiers modifiés
+- **cudf RALENTIT le feature engineering** (groupby-heavy) — désactivé dans fe_kaggle.py
+- **Secrets impossibles en batch push** (Kaggle API issue #582) — HF push échoue silencieusement
+
+**V8 Architecture 4-kernel (ADR-003, 2026-03-29) :**
+```
+# Kernel 1: Feature Engineering (CPU, ~1h)
+cp scripts/cloud/kernel-metadata-fe.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+# → Output: features/train.parquet, valid.parquet, test.parquet
+
+# Kernel 2: XGBoost canary (CPU, ~1h) — fast feedback
+cp scripts/cloud/kernel-metadata-xgboost.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+# → Analyse résultats, ajuster si besoin
+
+# Kernel 3+4: CatBoost + LightGBM (CPU, ~9-10h) — en parallèle
+cp scripts/cloud/kernel-metadata-catboost.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+cp scripts/cloud/kernel-metadata-lightgbm.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+git checkout -- scripts/cloud/kernel-metadata.json
+```
+**CPU uniquement** — 0 GPU quota (Kaggle CPU illimité, 12h/session).
+Modèle détecté via `KAGGLE_KERNEL_RUN_SLUG` (slug contient xgboost/catboost/lightgbm).
+**Checkpoints** après chaque modèle (timeout protection).
+n_estimators=50K, early_stopping=200.
 
 ## Documentation
 
-- `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
+- `docs/project/V8_MODEL_COMPARISON.md` - **LIRE EN PRIORITÉ** — Comparaison exhaustive 3 modèles, SHAP, features, résidus, blend test, ceiling
+- `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md` - Roadmap 5 phases → prod
+- `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md` - Plan Phase 1 residual (Tasks 1-3 DONE, 4-6 SUPERSEDED)
+- `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` - Plan Phase 1b SHAP + calibration (ACTIF)
+- `docs/postmortem/2026-03-22-training-v8-divergence.md` - Postmortem training V8
+- `docs/architecture/ADR-002-inference-feature-construction.md` - Feature store decision
+- `docs/requirements/FEATURE_DOMAIN_LOGIC.md` - **LIRE EN PRIORITE** — Logique metier features, differentiels, litterature multisports
+- `docs/requirements/FEATURE_SPECIFICATION.md` - Spec formelle features (types, plages, ISO 5259)
+- `docs/superpowers/specs/2026-03-27-differential-features-design.md` - Spec differentiels (24 features)
+- `docs/superpowers/plans/2026-03-27-differential-features.md` - Plan impl differentiels (Tasks 1-8)
+- `docs/bilan-v8-fe-complete.md` - Bilan FE V8 (196→220 cols avec differentiels)
+- `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` - LLM co-authorship (ISO 42001)
 - `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
+- `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md` - Spec V8 MultiClass
 - `docs/superpowers/specs/2026-03-17-data-refresh-pipeline-design.md` - Spec data refresh
 - `docs/superpowers/specs/2026-03-18-kaggle-cloud-training-design.md` - Spec Kaggle training
-- `docs/superpowers/plans/2026-03-17-data-refresh-pipeline.md` - Plan data refresh
-- `docs/superpowers/plans/2026-03-18-kaggle-cloud-training.md` - Plan Kaggle training
+- `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
 
 ## Contraintes Training
 
 - **Séquentiel obligatoire** : 15.4 GB RAM, train set ~7 GB → un modèle à la fois avec `gc.collect()` entre chaque
 - `scripts/training/parallel.py` est déjà séquentiel malgré son nom (refactoré en jan 2026)
 - **Split temporel** (pas k-fold random) : les règles FFE évoluent au fil des saisons (scoring 2pts jeunes U12+, catégories d'âge, seuils Elo E/N/F), k-fold mélangerait des ères réglementaires différentes
+- **CRITIQUE : historique DOIT inclure la saison courante** — sinon 61 features equipe (standings, club, noyau) sont 100% NaN sur valid/test. Fix commit XX. Postmortem: `docs/postmortem/2026-03-28-split-temporal-nan-features.md`
 - **@TODO Rolling Window** : comparer training 2012-2026 vs 2002-2026
   - 2012+ : features réglementaires plus cohérentes (scoring, catégories modernes)
   - 2002+ : historique long utile pour profiling clubs, comportements récurrents, H2H
   - Test : entraîner sur 2012+ d'abord, comparer AUC vs modèle actuel (2002+)
 - **Training cloud Kaggle CatBoost V7** (OBSOLÈTE, 2026-03-19) : GPU P100, 29 GB RAM
-  - AUC=0.8276 INVALIDE (leakage score_dom/ext + target bug forfaits 2.0)
+  - AUC=0.8276 INVALIDE (leakage score_dom/ext + target bug: 2.0=victoire jeunes traitée comme forfait)
   - Corrigé localement (commit 05b19a7) : leakage fixé, eval_metric=Logloss, hyperparams améliorés
   - **Remplacé par V8 MultiClass** (en cours)
 - **Training cloud Kaggle AutoGluon** (EN COURS, 2026-03-20) : T4x2 GPU, AutoGluon 1.5.0
@@ -292,7 +363,8 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
 **Remplace V7 binaire** (4 bugs critiques + 8 bugs logique features)
 
 ### Décisions validées
-- **Target** : loss=0, draw=1, win=2. Forfaits (2.0) exclus de TOUT (target + features)
+- **Target** : loss=0, draw=1, win=2. TARGET_MAP = {0.0:0, 0.5:1, 1.0:2, 2.0:2}. resultat_blanc=2.0 = victoire jeunes FFE (J02 §4.1: 2pts éch. non-U10, 62K parties), mapped to win
+- **Forfeits** : identifiés par `type_resultat` (forfait_blanc 43K, forfait_noir 42K, double_forfait 3K, non_joue 209K), PAS par resultat_blanc. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
 - **Loss** : CatBoost `MultiClass`, XGBoost `multi:softprob`, LightGBM `multiclass`
 - **Eval** : MultiClass log loss + RPS (Ranked Probability Score, standard ordinal)
 - **Sortie** : P(win), P(draw), P(loss) → CE calcule E[score] = P(win) + 0.5×P(draw)
@@ -304,7 +376,7 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
 2. `score_blancs/noirs` : séparer home/away (color confondant avec domicile)
 3. Features joueur : stratifier par type_competition (national 20.9% draws ≠ régional 9.6%)
 4. Features joueur : rolling 3 saisons au lieu de global career
-5. Forfaits (2.0) : exclure de TOUS les calculs de rates
+5. Forfaits : filter by `type_resultat` (not resultat_blanc). resultat_blanc=2.0 = victoire jeunes, recode as win
 
 ### Nouvelles features (draw + club-level)
 - **8 draw features** (8 cols) : avg_elo, elo_proximity, draw_rate_prior, draw_rate_joueur×2, draw_rate_h2h, draw_rate_equipe×2
@@ -314,6 +386,76 @@ python -m scripts.cloud.promote_model --version v20260318_120000  # Promotion IS
 ### Spec complète
 - `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
 - Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
+
+### V8 Training Findings (2026-03-22→30)
+- **v1-v3 échoués** (path, divergence, hyperparams) — postmortem dans `docs/postmortem/`
+- **v5 : PREMIÈRE VICTOIRE** — CatBoost 0.886, LightGBM 0.885 < Elo baseline 0.92
+- **v10 : MEILLEUR v1** — LightGBM 0.877 (test), gate 8/9 (E[score] régression isotonic)
+- **v15 : FIRST CLEAN DATA** — data fix + dynamic white advantage + rsm + SHAP + dual calibration
+- **v18 : FIRST ALL-PASS** — XGBoost 0.574 log_loss, 15/15 gates PASS, -34% vs Elo
+- **v18 RÉSULTATS** : log_loss 0.574 (-34.4%), RPS 0.090 (-35.2%), E[score] MAE 0.250 (-32.8%), T=0.928, 197/201 features actives
+- **DÉCOUVERTE v10** : 166/177 features à importance 0 = **artefact CatBoost PredictionValuesChange**
+  - XGBoost utilise **109 features**, LightGBM **50 features** (même données)
+  - Root cause : CatBoost manque `rsm` (feature subsampling) — oblivious trees depth=4
+  - CatBoost SHAP natif (`type='ShapValues'`) résout le problème
+- **CONTAMINATION DATA (2026-03-25, CORRIGÉ)** : resultat_blanc=2.0 (62K victoires jeunes) exclu à tort + 295K vrais forfeits inclus. Tous v1-v13 entraînés sur données contaminées. Fix: filter `type_resultat`, recode 2.0→win (commit 56a58e7). FE v2 vérifié. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
+- **Dynamic white advantage (2026-03-25)** : +35 fixe remplacé par lookup Elo-level (+8.5 à +32.4), vérifié sur 1.44M parties FFE (commit cc8f2db)
+- **CatBoost rsm=0.3 (2026-03-25)** : rsm incompatible GPU (`pairwise only`) → CPU forcé. ~60s vs 12s GPU, négligeable (commit 378b97a)
+- **Dual calibration (2026-03-26)** : temperature scaling vs isotonic comparés dans le même kernel, winner par quality gate (commit 37ad4ec)
+- **Residual learning** : `compute_elo_init_scores()` → `Pool(baseline=)` / `base_margin` / `init_score`
+- **Eval cohérente** : `predict_with_init()` pour CatBoost/XGBoost/LightGBM (audit C2)
+- **Quality gate** : 9 conditions, condition 9 = `mean_p_draw > 1%` (pas recall_draw)
+- **Resume XGBoost (2026-04-01)** : 50K→86.5K rounds (v5), val=0.5126, modèle CONVERGÉ
+- **3 timeouts resume (v2-v4)** : TreeSHAP 231K=5h, permutation 4h — fixé subsample 20K (26min)
+- **`EarlyStopping(save_best=True)`** : OBLIGATOIRE, `xgb.train()` retourne last pas best
+- **`TrainingCheckPoint(interval=5000)`** : OBLIGATOIRE pour kernels >4h
+- **Resume v5 COMPLETE (2026-04-02)** : test 0.566 (-35.2% vs Elo), RPS 0.089, E[score] MAE 0.247, T=0.971, 197/197 features
+- **CatBoost v3 + LightGBM v3 LANCÉS (2026-04-02)** : CPU, checkpoints, NaN audit, sys.path fix
+- **Entry points DOIVENT setup sys.path** : crash ModuleNotFoundError sans (v1 CatBoost, 2026-04-02)
+- **NaN audit per split OBLIGATOIRE** dans `train_kaggle.py` (raise ValueError si >99% NaN)
+- **`default_hyperparameters()` dans `kaggle_constants.py`** (SRP refactor, was in kaggle_trainers.py)
+- **CatBoost v3 COMPLETE (2026-04-03)** : test 0.590 (-39.6% vs Elo), T=0.935, ALL GATES PASS, 50K NON CONVERGÉ
+- **LightGBM v3 TIMEOUT (2026-04-03)** : 50K iters val=0.536, 3 bugs (save_model, SHAP, perm timeout)
+- **LightGBM v4 COMPLETE training (2026-04-03)** : 65K total, val=0.520, model SAUVÉ (fix booster_.save_model), post-training TIMEOUT
+- **LightGBM v5 RUNNING (2026-04-04)** : resume 65K→105K, lr=0.005, à [73900] val=0.518
+- **CatBoost v4 RUNNING (2026-04-04)** : from scratch lr=0.01, iterations=150K, early_stopping=200
+- **3 bugs fixés (2026-04-03)** : `booster_.save_model()` LGBMClassifier, TreeExplainer SHAP fallback, permutation skip single-model
+- **Quality gates AVANT SHAP (2026-04-04)** : fix dans train_kaggle.py — root cause des 3 timeouts post-training (v3/v4/v4-post)
+- **CatBoost init_model + Pool(baseline=) INTERDIT** : "Specifying baseline for training continuation is not supported"
+- **CatBoost snapshot exige MÊME params** (iterations, lr, tout) — pas de changement lr via snapshot
+- **LightGBM init_model** : n_estimators = ADDITIONAL, compteur `env.iteration` continue depuis init
+- **LightGBM 65K model text (343MB)** : startup 3h22m (Dataset construction + parsing text)
+- **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
+- **NE JAMAIS utiliser PredictionValuesChange seul** — comparer importance cross-modèles + SHAP
+- **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
+- **NE JAMAIS lancer TreeSHAP/permutation sur le test set complet** — subsample 20K, benchmark AVANT
+- **NE JAMAIS écrire un budget temps sans calcul** — "~1-2h" mensonger = timeout garanti
+- **NE JAMAIS estimer sans données empiriques du MÊME setup** — 3 estimations fausses (startup, iter speed, n_estimators)
+- **NE JAMAIS combiner CatBoost init_model + Pool(baseline=)** — erreur fatale, utiliser snapshot ou from scratch
+- **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
+- **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
+- **TOUJOURS calculer le budget post-training AVANT d'écrire le script** (TreeSHAP + calibration + diagnostics)
+- **TOUJOURS mettre quality gates AVANT SHAP** dans le pipeline post-training
+- **TOUJOURS appliquer les findings d'un modèle aux autres** (lr=0.01 XGBoost → CatBoost/LightGBM)
+
+### Init Score Alpha — Prior Strength (v16, 2026-03-26)
+- `init_score_alpha=0.7` dans `config["global"]` (override: `ALICE_INIT_ALPHA`)
+- Réduit la dominance Elo : init_scores *= alpha avant training
+- Théorie : temperature scaling sur init logits (T=1/alpha), Guo et al. 2017
+- v15 : modèles convergent en 89-133 iters → prior trop fort → alpha < 1 donne plus de marge aux features
+- **Sweep prévu** : [0.5, 0.7, 0.9] via env var
+
+### Inference REQUIERT init_scores + alpha (C1 — Phase 2)
+- Les modèles entraînés avec residual learning ont besoin des init_scores à l'inférence
+- `draw_rate_lookup.parquet` sauvé comme artefact (45 cells)
+- L'inference service doit : compute_elo_baseline → compute_elo_init_scores → `*= alpha` → predict_with_init
+- **Alpha stocké dans metadata.json** (`config.global.init_score_alpha`) pour reproductibilité
+
+### Lacunes versioning ISO 5259/42001 (@TODO Phase 2/5)
+- Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel
+- Pas de hash du dataset uploadé (upload_all_data ne log pas le hash)
+- Artefacts training (reports/) non versionnés — local seulement
+- DVC recommandé (docs/devops/ML_MODEL_VERSIONING_STANDARDS.md) mais non implémenté
 
 ## V9 CE multi-équipe (@TODO après V8)
 
@@ -346,6 +488,18 @@ Objectif modulable par l'utilisateur
 - Max 3 mutés par équipe par saison (A02 3.7.g)
 - Joueur peut descendre (renforcer) mais pas monter sans conditions
 - Ordre Elo par équipe (100pts A02 3.6.e)
+
+## Architecture Prod (validée 2026-03-23)
+
+```
+Vercel (chess-app Next.js) → fetch() HTTPS → Oracle VM (FastAPI + ML, 24GB ARM)
+  - Modèle CatBoost chargé en RAM au startup depuis HF Hub
+  - Feature store (parquets pré-calculés) sur disque local
+  - Inference ~10ms, pas de cold start
+  - Oracle Always Free: 4 OCPUs ARM, 24 GB RAM, 200 GB disk
+```
+
+Spec complète : `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md`
 
 ## @TODO - Phase C : Pipeline CI automatisé
 

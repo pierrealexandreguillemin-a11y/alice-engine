@@ -84,18 +84,19 @@ class TestComputeFeaturesForSplit:
         df_split = pd.DataFrame(
             {
                 "saison": [2024],
-                "type_resultat": ["1-0"],
+                "type_resultat": ["victoire_blanc"],
             }
         )
         df_history = pd.DataFrame(
             {
                 "saison": [2023],
-                "type_resultat": ["1-0"],
+                "type_resultat": ["victoire_blanc"],
                 "blanc_elo": [1500],
             }
         )
 
         with (
+            patch("scripts.features.draw_priors.compute_draw_priors", return_value=df_split),
             patch("scripts.feature_engineering.extract_all_features") as mock_extract,
             patch("scripts.feature_engineering.merge_all_features") as mock_merge,
             patch("scripts.feature_engineering._add_direct_features"),
@@ -115,10 +116,13 @@ class TestComputeFeaturesForSplit:
         """Respecte le flag include_advanced."""
         from scripts.feature_engineering import compute_features_for_split
 
-        df_split = pd.DataFrame({"saison": [2024], "type_resultat": ["0-1"]})
-        df_history = pd.DataFrame({"saison": [2023], "type_resultat": ["0-1"]})
+        df_split = pd.DataFrame({"saison": [2024], "type_resultat": ["victoire_noir"]})
+        df_history = pd.DataFrame(
+            {"saison": [2023], "type_resultat": ["victoire_noir"], "blanc_elo": [1500]}
+        )
 
         with (
+            patch("scripts.features.draw_priors.compute_draw_priors", return_value=df_split),
             patch("scripts.feature_engineering.extract_all_features") as mock_extract,
             patch("scripts.feature_engineering.merge_all_features") as mock_merge,
             patch("scripts.feature_engineering._add_direct_features"),

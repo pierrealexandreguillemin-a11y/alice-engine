@@ -56,11 +56,10 @@ AG_BAG_FOLDS = 5
 AG_STACK_LEVELS = 2
 AG_MEMORY_LIMIT = 24  # GB — leave ~5 GB headroom on Kaggle 29 GB RAM
 AG_SEED = 42
-AUC_FLOOR = 0.70
+LL_CEILING = 1.10  # Must beat naive log(3) ~ 1.099
 HF_REPO_ID = "Pierrax/alice-engine"
 AG_NUM_GPUS = 1
-# All models use ag_args_fit for GPU — AutoGluon's unified API
-AG_GPU_HYPERPARAMETERS: dict[str, Any] = {
+AG_GPU_HYPERPARAMETERS: dict[str, Any] = {  # ag_args_fit: AutoGluon's unified GPU API
     "GBM": [{"ag_args_fit": {"num_gpus": 1}}],
     "CAT": [{"ag_args_fit": {"num_gpus": 1}}],
     "XGB": [{"ag_args_fit": {"num_gpus": 1}}],
@@ -73,7 +72,6 @@ DATA_CANDIDATES = [
     Path("data/features"),
 ]
 OUTPUT_DIR = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))
-
 
 # --- Data ---
 
@@ -93,7 +91,13 @@ def load_and_clean(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame
     for name, df in [("train", train), ("valid", valid), ("test", test)]:
         before = len(df)
         df = df.drop_duplicates(subset=DEDUP_KEYS).copy()
-        df[LABEL] = (df[LABEL_SOURCE] == 1.0).astype(int)
+        if "type_resultat" in df.columns:
+            df = df[
+                ~df["type_resultat"].isin(
+                    {"non_joue", "forfait_blanc", "forfait_noir", "double_forfait"}
+                )
+            ]
+        df[LABEL] = df[LABEL_SOURCE].map({0.0: 0, 0.5: 1, 1.0: 2, 2.0: 2}).astype(int)
         drop = [c for c in METADATA_COLS if c in df.columns]
         df = df.drop(columns=drop)
         logger.info("%s: %d -> %d rows, %d features", name, before, len(df), len(df.columns) - 1)
@@ -114,9 +118,6 @@ def build_lineage(train: pd.DataFrame, valid: pd.DataFrame, test: pd.DataFrame) 
     }
 
 
-# --- Training ---
-
-
 def train_autogluon(
     train_data: pd.DataFrame,
     tuning_data: pd.DataFrame,
@@ -129,7 +130,7 @@ def train_autogluon(
     model_dir = out_dir / "autogluon_model"
     predictor = TabularPredictor(
         label=LABEL,
-        eval_metric="roc_auc",
+        eval_metric="log_loss",
         path=str(model_dir),
         verbosity=2,
     )
@@ -151,16 +152,17 @@ def train_autogluon(
 
 
 def evaluate(predictor: Any, test_data: pd.DataFrame) -> dict:
-    """Compute test metrics."""
-    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score  # noqa: PLC0415
+    """Compute multiclass test metrics (3-class: loss/draw/win)."""
+    import numpy as np  # noqa: PLC0415
+    from sklearn.metrics import accuracy_score, f1_score, log_loss  # noqa: PLC0415
 
-    y_true = test_data[LABEL]
-    y_proba = predictor.predict_proba(test_data.drop(columns=LABEL))[predictor.positive_class]
-    y_pred = (y_proba >= 0.5).astype(int)
+    y_true = test_data[LABEL].values
+    y_proba = predictor.predict_proba(test_data.drop(columns=LABEL)).values  # (n, 3)
+    y_pred = np.argmax(y_proba, axis=1)
     return {
-        "test_auc": float(roc_auc_score(y_true, y_proba)),
+        "test_log_loss": float(log_loss(y_true, y_proba)),
         "test_accuracy": float(accuracy_score(y_true, y_pred)),
-        "test_f1": float(f1_score(y_true, y_pred, zero_division=0)),
+        "test_f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
         "test_samples": len(y_true),
     }
 
@@ -239,17 +241,17 @@ def main() -> None:
     # 3. Evaluate
     metrics = evaluate(predictor, test)
     logger.info(
-        "AUC=%.4f Acc=%.4f F1=%.4f",
-        metrics["test_auc"],
+        "LogLoss=%.4f Acc=%.4f F1=%.4f",
+        metrics["test_log_loss"],
         metrics["test_accuracy"],
-        metrics["test_f1"],
+        metrics["test_f1_macro"],
     )
 
-    # 4. ISO diagnostics (pass baseline_auc for consistency)
+    # 4. ISO diagnostics
     save_predictions(predictor, test, LABEL, out_dir)
     save_diagnostics(predictor, test, LABEL, leaderboard, out_dir)
     robustness = test_robustness(
-        predictor, test, LABEL, seed=AG_SEED, baseline_auc=metrics["test_auc"]
+        predictor, test, LABEL, seed=AG_SEED, baseline_auc=metrics.get("test_log_loss", 1.0)
     )
     fairness = test_fairness(predictor, test, LABEL)
     logger.info("Robustness: %s | Fairness: %s", robustness["status"], fairness["status"])
@@ -273,7 +275,7 @@ def main() -> None:
         str(leaderboard.iloc[0]["model"]),
         version,
         config,
-        AUC_FLOOR,
+        LL_CEILING,
     )
     for fname, data in [
         ("metadata.json", model_card),
@@ -287,10 +289,13 @@ def main() -> None:
     if model_card["quality_gate"]["passed"]:
         push_to_hf(out_dir, version)
     else:
-        logger.error("Quality gate FAILED: AUC %.4f < %.2f", metrics["test_auc"], AUC_FLOOR)
+        logger.error("Quality gate FAILED: LL %.4f > %.2f", metrics["test_log_loss"], LL_CEILING)
 
     logger.info(
-        "Done. Version=%s AUC=%.4f Best=%s", version, metrics["test_auc"], model_card["best_model"]
+        "Done. Version=%s LL=%.4f Best=%s",
+        version,
+        metrics["test_log_loss"],
+        model_card["best_model"],
     )
 
 

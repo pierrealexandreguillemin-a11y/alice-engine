@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-resume-xgboost-v5",
+  "title": "alice-resume-xgboost-v5",
+  "code_file": "resume_xgboost.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["pguillemin/alice-code", "pguillemin/alice-xgboost-checkpoint"],
+  "competition_sources": [],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}

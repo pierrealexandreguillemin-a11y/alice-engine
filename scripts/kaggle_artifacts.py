@@ -44,11 +44,36 @@ def build_lineage(
         "valid": _entry("valid", valid),
         "test": _entry("test", test),
         "feature_count": len(train.columns) - 1,
-        "target_distribution": {
-            "positive_ratio": float((train[label_column] == 1.0).mean()),
-            "total_samples": len(train),
-        },
+        "target_distribution": _class_distribution(train, label_column),
         "created_at": datetime.now(tz=UTC).isoformat(),
+    }
+
+
+def _class_distribution(df: pd.DataFrame, label_column: str) -> dict:
+    """Class distribution excluding non-played games (via type_resultat)."""
+    clean = (
+        df[
+            ~df["type_resultat"].isin(
+                {"non_joue", "forfait_blanc", "forfait_noir", "double_forfait"}
+            )
+        ]
+        if "type_resultat" in df.columns
+        else df
+    )
+    return {
+        "class_distribution": {
+            "loss": float((clean[label_column] == 0.0).mean())
+            if label_column in clean.columns
+            else 0,
+            "draw": float((clean[label_column] == 0.5).mean())
+            if label_column in clean.columns
+            else 0,
+            "win": float((clean[label_column] == 1.0).mean())
+            if label_column in clean.columns
+            else 0,
+        },
+        "total_samples": len(clean),
+        "forfaits_excluded": int(len(df) - len(clean)),
     }
 
 
@@ -94,7 +119,7 @@ def build_model_card(
         "status": "CANDIDATE", "environment": env, "data_lineage": lineage,
         "artifacts": artifacts, "metrics": metrics, "feature_importance": importance,
         "hyperparameters": config,
-        "best_model": {"name": gate.get("best_model"), "auc": gate.get("best_auc")},
+        "best_model": {"name": gate.get("best_model"), "log_loss": gate.get("best_log_loss")},
         "quality_gate_result": gate,
         "limitations": ["Trained on FFE interclub data only", "Not suitable for tournament games",
                         "LightGBM: CPU only (pip package lacks GPU/OpenCL support on Kaggle)"],
@@ -112,7 +137,7 @@ def _artifact_entry(name: str, path: Path) -> dict:
 
 
 def fetch_champion_auc() -> float | None:
-    """Fetch best_model.auc from latest metadata.json on HF Hub."""
+    """Fetch best_model.auc from latest metadata.json on HF Hub (legacy)."""
     try:
         from huggingface_hub import hf_hub_download  # noqa: PLC0415
 
@@ -124,6 +149,22 @@ def fetch_champion_auc() -> float | None:
         return auc if auc > 0 else None
     except Exception:
         logger.warning("Could not fetch champion AUC — first run assumed.")
+        return None
+
+
+def fetch_champion_ll() -> float | None:
+    """Fetch best_log_loss from latest metadata.json on HF Hub (multiclass gate)."""
+    try:
+        from huggingface_hub import hf_hub_download  # noqa: PLC0415
+
+        path = hf_hub_download(HF_REPO_ID, "metadata.json", repo_type="model")
+        with open(path) as fh:
+            data = json.load(fh)
+        gate = data.get("quality_gate_result", {})
+        ll = float(gate.get("best_log_loss", 0.0)) if gate else 0.0
+        return ll if ll > 0 else None
+    except Exception:
+        logger.warning("Could not fetch champion log_loss — first run assumed.")
         return None
 
 

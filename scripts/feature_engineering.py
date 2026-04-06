@@ -107,14 +107,16 @@ def compute_features_for_split(
         f"{len(df_history):,}",
     )
 
-    df_history_played = df_history[
-        ~df_history["type_resultat"].isin(
-            ["non_joue", "forfait_blanc", "forfait_noir", "double_forfait"]
-        )
-    ]
+    from scripts.features.draw_priors import compute_draw_priors
+    from scripts.features.helpers import filter_played_games
+
+    df_history_played = filter_played_games(df_history)
 
     features = extract_all_features(df_history, df_history_played, include_advanced)
     result = merge_all_features(df_split.copy(), features, include_advanced)
+
+    # Draw priors: avg_elo, elo_proximity, draw_rate_prior (ISO 5259)
+    result = compute_draw_priors(result, df_history_played)
 
     _add_direct_features(result, data_dir=data_dir or DEFAULT_DATA_DIR)
     _add_contextual_features(result, df_history_played)
@@ -156,6 +158,11 @@ def _add_contextual_features(result: pd.DataFrame, df_history_played: pd.DataFra
     extract_adversaire_niveau(result, standings)
     # match_important needs zone_enjeu columns already merged
     extract_match_important(result)
+
+    # Differential features (last step — needs all individual features computed)
+    from scripts.features.differentials import compute_differentials  # noqa: PLC0415
+
+    result = compute_differentials(result)
 
 
 def run_feature_engineering_v2(
@@ -207,9 +214,11 @@ def run_feature_engineering_v2(
         data_dir=data_dir,
     )
 
-    # Valid: features calculées sur historique AVANT la saison valid (no leakage)
+    # Valid: include current season (same behavior as train — postmortem 2026-03-28)
+    # Without current season: 61 features 100% NaN on eval (standings, club, noyau)
+    # Intra-season leakage accepted: standings merge by ronde, club features are seasonal
     logger.info("\n  --- VALID ---")
-    valid_history = df[df["saison"] < valid_raw["saison"].min()]
+    valid_history = df[df["saison"] <= valid_raw["saison"].max()]
     valid = compute_features_for_split(
         df_split=valid_raw,
         df_history=valid_history,
@@ -218,9 +227,9 @@ def run_feature_engineering_v2(
         data_dir=data_dir,
     )
 
-    # Test: features calculées sur tout l'historique (avant test)
+    # Test: include current season (same behavior as train — postmortem 2026-03-28)
     logger.info("\n  --- TEST ---")
-    test_history = df[df["saison"] <= test_raw["saison"].min() - 1]
+    test_history = df[df["saison"] <= test_raw["saison"].max()]
     test = compute_features_for_split(
         df_split=test_raw,
         df_history=test_history,

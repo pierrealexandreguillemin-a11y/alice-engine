@@ -170,6 +170,7 @@ repos:
           --ignore-vuln, CVE-2026-33230,         # nltk 3.9.3 - no fix available
           --ignore-vuln, CVE-2026-33231,         # nltk 3.9.3 - no fix available
           --ignore-vuln, CVE-2026-25990,         # pillow 11.3 - autogluon caps <12
+          --ignore-vuln, CVE-2026-4539,          # pygments 2.19.2 - 2.20.0 breaks pymdownx
         ]
         language: system
         pass_filenames: false
