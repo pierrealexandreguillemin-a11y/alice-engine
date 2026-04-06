@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-resume-lightgbm-v5",
+  "title": "alice-resume-lightgbm-v5",
+  "code_file": "resume_lightgbm_v5.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["pguillemin/alice-code", "pguillemin/alice-lgbm-v4-model"],
+  "competition_sources": [],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}

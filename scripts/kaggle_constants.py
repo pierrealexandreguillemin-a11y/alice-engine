@@ -43,7 +43,7 @@ def default_hyperparameters() -> dict:
         },
         "catboost": {
             "iterations": 50000, "depth": 4, "border_count": 128,
-            "learning_rate": 0.005, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
+            "learning_rate": 0.03, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
             "random_strength": 3, "bagging_temperature": 1, "model_size_reg": 0.5,
             "rsm": 0.3,  # Feature subsampling — MANDATORY >50 features (v10 bug: 11/177 sans rsm)
             "thread_count": 4, "task_type": "CPU",  # rsm incompatible GPU (CatBoost: pairwise only)
@@ -61,7 +61,7 @@ def default_hyperparameters() -> dict:
         },
         "lightgbm": {
             "n_estimators": 50000, "num_leaves": 15, "max_depth": 4,
-            "learning_rate": 0.003, "objective": "multiclass", "num_class": 3,
+            "learning_rate": 0.03, "objective": "multiclass", "num_class": 3,
             "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_samples": 200,
             "min_gain_to_split": 0.01, "subsample": 0.7, "colsample_bytree": 0.5,
             "n_jobs": 4, "random_state": 42,

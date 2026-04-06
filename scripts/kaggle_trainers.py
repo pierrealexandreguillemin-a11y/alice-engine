@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import gc  # noqa: E401
 import logging
+import os
 import time
 from typing import Any
 
 import numpy as np
-import pandas as pd  # noqa: TCH002 — used at runtime, not just type-checking
+import pandas as pd  # noqa: TCH002 — used at runtime
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,7 @@ from scripts.kaggle_constants import (  # noqa: E402
     CATEGORICAL_FEATURES,
     LABEL_COLUMN,
     LEAKY_COLUMNS,
-    MODEL_EXTENSIONS,  # noqa: F401 — re-exported for train_kaggle.py
-    default_hyperparameters,  # noqa: F401 — re-exported for train_kaggle.py
+    MODEL_EXTENSIONS,  # noqa: F401 — re-exported
 )
 
 
@@ -212,7 +212,7 @@ def _train_lightgbm(
         lgb_p["device"] = "cpu"
         es = params.get("early_stopping_rounds", 50)
         ckpt_dir = "/kaggle/working/checkpoints"
-        __import__("os").makedirs(ckpt_dir, exist_ok=True)
+        os.makedirs(ckpt_dir, exist_ok=True)
         cbs = [
             lgb_lib.early_stopping(es),
             lgb_lib.log_evaluation(100),
@@ -224,6 +224,10 @@ def _train_lightgbm(
             "eval_metric": "multi_logloss",
             "callbacks": cbs,
         }
+        init_model = os.environ.get("ALICE_INIT_MODEL")
+        if init_model:
+            fit_kw["init_model"] = init_model
+            logger.info("Resume from checkpoint: %s", init_model)
         if init_scores_train is not None:
             fit_kw["init_score"] = init_scores_train
         if init_scores_valid is not None:
@@ -290,7 +294,11 @@ def _checkpoint_model(
     ext = (model_extensions or {}).get(name, ".bin")
     path = out_dir / f"{name.lower()}_checkpoint{ext}"
     try:
-        model.save_model(str(path))
+        # LGBMClassifier doesn't have save_model — use booster_ (GitHub #4841)
+        if hasattr(model, "booster_"):
+            model.booster_.save_model(str(path))
+        else:
+            model.save_model(str(path))
         logger.info("Checkpoint: %s saved to %s", name, path)
     except Exception as e:
         logger.warning("Checkpoint failed for %s: %s", name, e)

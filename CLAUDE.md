@@ -17,7 +17,24 @@ Les nulles = 12.6% des parties, varient de 4.9% (Elo<1200) à 45.8% (Elo>2400). 
 
 **Contraintes métier** : les compositions sont soumises simultanément sur place (A02 Art. 3.6.a) — le capitaine ne connaît PAS la composition adverse.
 
-## État actuel (mars 2026)
+## État actuel (avril 2026)
+
+### V8 MILESTONE ATTEINT (2026-04-06)
+
+3 modèles convergés, ALL GATES PASS. **Phase 1 terminée.**
+
+| Modèle | Test log_loss | vs Elo | Early stop | Taille |
+|--------|---------------|--------|-----------|--------|
+| **XGBoost v5** | **0.566** | **-42%** | 86.5K (lr=0.005) | 427 MB |
+| LightGBM v7 | 0.572 | -41% | 16.1K (lr=0.03) | 86 MB |
+| CatBoost v6 | 0.575 | -41% | 37K (lr=0.03) | 23 MB |
+
+**Champion : XGBoost v5.** Blend test (90/5/5 optimal) = pas de gain d'ensemble.
+**Doc de référence : `docs/project/V8_MODEL_COMPARISON.md`** (métriques, SHAP, features, résidus).
+**AutoGluon évalué et écarté** — pas de support init_score, régresserait sans residual learning.
+**Plafond features estimé ~80-90%** — gain résiduel ~0.01-0.02 via feature engineering (Phase 3).
+
+### Couches système
 
 | Couche | Statut | Fichiers |
 |--------|--------|----------|
@@ -303,6 +320,7 @@ n_estimators=50K, early_stopping=200.
 
 ## Documentation
 
+- `docs/project/V8_MODEL_COMPARISON.md` - **LIRE EN PRIORITÉ** — Comparaison exhaustive 3 modèles, SHAP, features, résidus, blend test, ceiling
 - `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md` - Roadmap 5 phases → prod
 - `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md` - Plan Phase 1 residual (Tasks 1-3 DONE, 4-6 SUPERSEDED)
 - `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` - Plan Phase 1b SHAP + calibration (ACTIF)
@@ -396,14 +414,29 @@ n_estimators=50K, early_stopping=200.
 - **Entry points DOIVENT setup sys.path** : crash ModuleNotFoundError sans (v1 CatBoost, 2026-04-02)
 - **NaN audit per split OBLIGATOIRE** dans `train_kaggle.py` (raise ValueError si >99% NaN)
 - **`default_hyperparameters()` dans `kaggle_constants.py`** (SRP refactor, was in kaggle_trainers.py)
+- **CatBoost v3 COMPLETE (2026-04-03)** : test 0.590 (-39.6% vs Elo), T=0.935, ALL GATES PASS, 50K NON CONVERGÉ
+- **LightGBM v3 TIMEOUT (2026-04-03)** : 50K iters val=0.536, 3 bugs (save_model, SHAP, perm timeout)
+- **LightGBM v4 COMPLETE training (2026-04-03)** : 65K total, val=0.520, model SAUVÉ (fix booster_.save_model), post-training TIMEOUT
+- **LightGBM v5 RUNNING (2026-04-04)** : resume 65K→105K, lr=0.005, à [73900] val=0.518
+- **CatBoost v4 RUNNING (2026-04-04)** : from scratch lr=0.01, iterations=150K, early_stopping=200
+- **3 bugs fixés (2026-04-03)** : `booster_.save_model()` LGBMClassifier, TreeExplainer SHAP fallback, permutation skip single-model
+- **Quality gates AVANT SHAP (2026-04-04)** : fix dans train_kaggle.py — root cause des 3 timeouts post-training (v3/v4/v4-post)
+- **CatBoost init_model + Pool(baseline=) INTERDIT** : "Specifying baseline for training continuation is not supported"
+- **CatBoost snapshot exige MÊME params** (iterations, lr, tout) — pas de changement lr via snapshot
+- **LightGBM init_model** : n_estimators = ADDITIONAL, compteur `env.iteration` continue depuis init
+- **LightGBM 65K model text (343MB)** : startup 3h22m (Dataset construction + parsing text)
 - **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
 - **NE JAMAIS utiliser PredictionValuesChange seul** — comparer importance cross-modèles + SHAP
 - **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
 - **NE JAMAIS lancer TreeSHAP/permutation sur le test set complet** — subsample 20K, benchmark AVANT
 - **NE JAMAIS écrire un budget temps sans calcul** — "~1-2h" mensonger = timeout garanti
+- **NE JAMAIS estimer sans données empiriques du MÊME setup** — 3 estimations fausses (startup, iter speed, n_estimators)
+- **NE JAMAIS combiner CatBoost init_model + Pool(baseline=)** — erreur fatale, utiliser snapshot ou from scratch
 - **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
 - **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
 - **TOUJOURS calculer le budget post-training AVANT d'écrire le script** (TreeSHAP + calibration + diagnostics)
+- **TOUJOURS mettre quality gates AVANT SHAP** dans le pipeline post-training
+- **TOUJOURS appliquer les findings d'un modèle aux autres** (lr=0.01 XGBoost → CatBoost/LightGBM)
 
 ### Init Score Alpha — Prior Strength (v16, 2026-03-26)
 - `init_score_alpha=0.7` dans `config["global"]` (override: `ALICE_INIT_ALPHA`)

@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/pre_check.py",
+            "command": "python C:/Dev/Alice-Engine/.claude/hooks/pre_check.py",
             "timeout": 30
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/pipeline_gate.py",
+            "command": "python C:/Dev/Alice-Engine/.claude/hooks/pipeline_gate.py",
             "timeout": 30
           }
         ]
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/inject_pipeline.py",
+            "command": "python C:/Dev/Alice-Engine/.claude/hooks/inject_pipeline.py",
             "timeout": 10
           }
         ]
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/stop_summary.py",
+            "command": "python C:/Dev/Alice-Engine/.claude/hooks/stop_summary.py",
             "timeout": 10
           }
         ]

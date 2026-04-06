@@ -277,12 +277,8 @@ def main() -> None:
         model_extensions=MODEL_EXTENSIONS,
         model_filter=model_filter,
     )
-    # Step 0.5: SHAP + permutation importance on freshly trained models (ISO 25059)
-    from scripts.kaggle_shap import compute_shap_importance  # noqa: PLC0415
-
-    compute_shap_importance(results, X_test, y_test, init_scores_test, out_dir)
-
     # Step 1: Dual calibration — temperature scaling vs isotonic (same kernel)
+    # Quality gates FIRST, then SHAP (skill: "gates FIRST, SHAP can be skipped in emergency")
     from scripts.kaggle_diagnostics import (  # noqa: PLC0415
         calibrate_models,
         calibrate_models_isotonic,
@@ -353,6 +349,13 @@ def main() -> None:
 
         with open(out_dir / "metadata.json", "w") as fh:
             json.dump(metadata, fh, indent=2, default=str)
+
+    # SHAP AFTER gates+save (skill: "gates FIRST, SHAP can be skipped in emergency")
+    # Permutation excluded for resume kernels (skill: 197×5×17s = 4h39m timeout risk)
+    from scripts.kaggle_shap import compute_shap_importance  # noqa: PLC0415
+
+    compute_shap_importance(results, X_test, y_test, init_scores_test, out_dir)
+
     logger.info(
         "Done. Status=%s Best=%s LogLoss=%.4f",
         metadata["status"],

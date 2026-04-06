@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-resume-catboost-v4",
+  "title": "alice-resume-catboost-v4",
+  "code_file": "resume_catboost_v4.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["pguillemin/alice-code"],
+  "competition_sources": [],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}

@@ -688,7 +688,53 @@ checkpoint uploaded as dataset `alice-xgboost-checkpoint`, evaluated in separate
 - HF Hub push failed (Kaggle Secrets connection error) — manual push needed
 
 **Conclusion** : XGBoost CONVERGÉ à 86K rounds, val=0.5126, test=0.566. All gates PASS.
-Prochaine étape : CatBoost + LightGBM training pour comparaison cross-modèles.
+
+### 9.15 CatBoost v3 — Single-Model (2026-04-02→03)
+
+| Metric | Valid | Test | vs Elo |
+|--------|-------|------|--------|
+| log_loss | 0.5468 | **0.5895** | -39.6% |
+| RPS | 0.0864 | 0.0919 | — |
+| E[score] MAE | 0.2483 | 0.2553 | — |
+| Temperature | — | T=0.935 | — |
+| Rounds | 50K (no early stop) | — | 8h11m |
+
+SHAP top: draw_rate_home_dom (1.28), draw_rate_noir (0.63), draw_rate_blanc (0.62).
+**NON CONVERGÉ** — val encore en descente à 50K. Resume nécessaire.
+Artefacts : `C:/Users/pierr/Downloads/catboost-v3-output/v20260402_131322/`
+
+### 9.16 LightGBM v3→v5 — Resume Chain (2026-04-02→04)
+
+| Version | Date | Init | lr | Total | val | Status |
+|---------|------|------|----|-------|-----|--------|
+| v3 | 04-02 | scratch | 0.003 | 50K | 0.5364 | TIMEOUT (3 bugs) |
+| v4 | 04-03 | 15K ckpt | 0.005 | 65K | 0.5204 | Training DONE, post TIMEOUT |
+| v5 | 04-04 | 65K model | 0.005 | ~90K? | ~0.518? | RUNNING |
+
+**3 bugs fixés (session 2026-04-03→04) :**
+1. `_checkpoint_model()` : `model.booster_.save_model()` pour LGBMClassifier (GitHub #4841)
+2. `kaggle_shap.py` : TreeExplainer fallback quand CatBoost absent + random subsample
+3. `train_kaggle.py` : quality gates AVANT SHAP (root cause 3 timeouts post-training)
+
+**Permutation skip** pour single-model kernels (197×5×17s = 4h39m timeout garanti).
+
+### 9.17 CatBoost v4 — From Scratch lr=0.01 (2026-04-04)
+
+From scratch imposé : CatBoost interdit `init_model` + `Pool(baseline=)` ensemble.
+lr=0.01 (2x v3), iterations=150K cap, early_stopping=200. Convergence attendue ~40-50K.
+Snapshot natif (10 min) pour recovery si timeout. **RUNNING.**
+
+### 9.18 Comparaison cross-modèles (en attente)
+
+| Model | lr | Total | Valid | Test | Convergé | Status |
+|-------|-----|-------|-------|------|----------|--------|
+| XGBoost v5 | 0.005 | 86.5K | 0.5126 | **0.566** | **Oui** | DONE |
+| CatBoost v3 | 0.005 | 50K | 0.5468 | 0.590 | Non | Superseded by v4 |
+| CatBoost v4 | 0.01 | ~45K? | ??? | ??? | ??? | RUNNING |
+| LightGBM v4 | 0.005 | 65K | 0.5204 | ??? | Non | Model sauvé |
+| LightGBM v5 | 0.005 | ~90K? | ~0.518? | ??? | ??? | RUNNING |
+
+Sélection champion après convergence des 3 modèles + artefacts ISO complets.
 
 ### 9.10 Lacunes identifiées
 
