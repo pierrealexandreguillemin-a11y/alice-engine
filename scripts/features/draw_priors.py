@@ -108,7 +108,7 @@ def compute_draw_priors(
     )
 
     logger.info(
-        "compute_draw_priors: %d rows, global_rate=%.3f, " "null_priors=%d",
+        "compute_draw_priors: %d rows, global_rate=%.3f, null_priors=%d",
         len(result),
         global_rate,
         result["draw_rate_prior"].isna().sum(),
@@ -246,14 +246,14 @@ def _add_elo_bands(df: pd.DataFrame) -> pd.DataFrame:
     result["elo_band"] = pd.cut(
         result["avg_elo_tmp"],
         bins=ELO_BINS,
-        labels=[f"{ELO_BINS[i]}-{ELO_BINS[i+1]}" for i in range(len(ELO_BINS) - 1)],
+        labels=[f"{ELO_BINS[i]}-{ELO_BINS[i + 1]}" for i in range(len(ELO_BINS) - 1)],
         right=False,
     ).astype(str)
 
     result["diff_band"] = pd.cut(
         abs_diff,
         bins=DIFF_BINS,
-        labels=[f"{DIFF_BINS[i]}-{DIFF_BINS[i+1]}" for i in range(len(DIFF_BINS) - 1)],
+        labels=[f"{DIFF_BINS[i]}-{DIFF_BINS[i + 1]}" for i in range(len(DIFF_BINS) - 1)],
         right=False,
     ).astype(str)
 
