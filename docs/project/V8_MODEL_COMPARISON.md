@@ -356,7 +356,9 @@ All ECE values are well below the 0.05 quality gate threshold, confirming that a
 - [ ] Begin ALI (Adversarial Lineup Inference) development
 - [ ] Wire CE multi-team optimizer (V9)
 
-## 11. Ensemble Blend Test (local, 2026-04-06)
+## 11. Ensemble & Stacking Evaluation (2026-04-07)
+
+### 11.1 Weighted Average Blend (initial test, 2026-04-06)
 
 Blend of 3 models' calibrated test predictions (231,532 samples). No GPU required.
 
@@ -367,11 +369,61 @@ Blend of 3 models' calibrated test predictions (231,532 samples). No GPU require
 | XGB-heavy | 50/25/25 | 0.56672 | +0.07% (worse) |
 | **Grid search best** | **90/5/5** | **0.56590** | **-0.02%** |
 
-**Verdict: blending adds nothing.** Optimal blend is 90% XGBoost = use XGBoost alone.
-Models are too correlated (same features, same residual learning, same algorithm family).
+Weighted average adds nothing. Models too correlated (same features, same residual learning).
 
-Note: blend was done on calibrated probabilities without recalibration of the ensemble.
-A proper ISO-compliant blend would recalibrate on valid set, but the result (90% XGB) makes this moot.
+### 11.2 Stacking Meta-Learner Evaluation (2026-04-07)
+
+Following state-of-the-art audit (scikit-learn StackingClassifier concepts, Karaaslan & Erbay 2025), evaluated LogisticRegression and MLP meta-learners on the 9-column meta-feature matrix (3 models × 3 probability classes). Meta-learner trained on valid set (70,647 samples), evaluated on test set (231,532 samples).
+
+**Methods tested:**
+- Stack_LR: LogisticRegression(multinomial, C=1.0) on calibrated probas
+- Stack_LR_cal: LR + isotonic recalibration
+- Stack_MLP: MLPClassifier(16 hidden, early_stopping) on calibrated probas
+- Stack_MLP_cal: MLP + isotonic recalibration
+- Stack_LR_raw: LR on raw (uncalibrated) base model probas
+
+**Full Results (test set, 231,532 samples):**
+
+| Method | log_loss | RPS | E[score] MAE | Brier | ECE draw | Draw bias | Accuracy | F1 macro |
+|--------|----------|-----|-------------|-------|----------|-----------|----------|----------|
+| XGBoost_v5 | **0.56604** | **0.08912** | 0.24739 | **0.34139** | 0.01555 | +0.01460 | 0.7463 | **0.6991** |
+| LightGBM_v7 | 0.57207 | 0.08992 | 0.24871 | 0.34540 | 0.01834 | +0.01767 | 0.7435 | 0.6966 |
+| CatBoost_v6 | 0.57525 | 0.08994 | 0.24968 | 0.34424 | 0.01430 | +0.01271 | 0.7460 | 0.6976 |
+| Blend_90_5_5 | 0.56590 | 0.08909 | 0.24754 | 0.34125 | 0.01578 | +0.01466 | **0.7465** | 0.6993 |
+| Stack_LR | 0.60414 | 0.09134 | 0.24633 | 0.35237 | 0.03011 | +0.01422 | 0.7456 | 0.6971 |
+| Stack_LR_cal | 0.59032 | 0.09040 | 0.25706 | 0.35038 | 0.03380 | +0.03182 | 0.7437 | 0.6998 |
+| Stack_MLP | 0.58250 | 0.09063 | 0.24460 | 0.34659 | 0.01591 | +0.01209 | 0.7458 | 0.6991 |
+| **Stack_MLP_cal** | 0.57335 | **0.08970** | **0.24254** | 0.34307 | **0.01233** | **+0.01113** | 0.7459 | 0.6987 |
+| Stack_LR_raw | 0.60282 | 0.09125 | 0.24617 | 0.35196 | 0.02979 | +0.01436 | 0.7456 | 0.6972 |
+
+### 11.3 Decision Gate
+
+The Composition Engine uses `E[score] = P(win) + 0.5 * P(draw)` directly, so **E[score] MAE is the primary decision metric**, not log_loss.
+
+| Metric | XGBoost v5 | Stack_MLP_cal | Delta | Significant? |
+|--------|-----------|---------------|-------|--------------|
+| **E[score] MAE** | 0.24739 | **0.24254** | **-0.00485 (-2.0%)** | **YES (> 0.001)** |
+| log_loss | **0.56604** | 0.57335 | +0.00731 (+1.3%) | Tradeoff |
+| ECE draw | 0.01555 | **0.01233** | -0.00322 (-20.7%) | Better |
+| Draw bias | +0.01460 | **+0.01113** | -0.00347 (-23.8%) | Better |
+
+**Stack_MLP_cal wins on the metric that matters** (E[score] MAE, -2.0%) and on draw calibration (-21% ECE, -24% bias). XGBoost wins on discriminative metrics (log_loss, Brier). This is expected: the MLP meta-learner learns to combine CatBoost's superior calibration with XGBoost's discriminative power, at the cost of slightly compressed probability distributions.
+
+### 11.4 Recommendation Update
+
+**Serving strategy: 3 models + MLP meta-learner (Stack_MLP_cal)**
+
+The stacking evaluation reverses the initial "XGBoost alone" conclusion. The MLP meta-learner trained on calibrated predictions from all 3 models produces better E[score] predictions for the CE, with tighter draw calibration.
+
+**Production implications:**
+- Load 3 models at startup (~536 MB total: XGBoost 427 MB + LightGBM 86 MB + CatBoost 23 MB)
+- Inference: 3 predict calls + MLP forward pass + isotonic calibration
+- Oracle VM (24 GB RAM) handles this comfortably
+- Fallback: XGBoost alone if memory constrained
+
+**Methodology note:** Meta-learner was trained on valid set (70,647 samples) and evaluated on held-out test set (231,532 samples). No data leakage — valid and test sets are temporally separated.
+
+Script: `scripts/evaluate_stacking.py`. Results: `reports/stacking_evaluation.json`.
 
 ## 12. Error Subgroup Analysis (local, 2026-04-06)
 
