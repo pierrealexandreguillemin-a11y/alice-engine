@@ -36,23 +36,33 @@ tu le dis immédiatement.
 8. Présenter bilan → **ATTENDRE validation user**
 9. Push seulement APRÈS validation explicite
 
-## NORMES ISO
+## NORMES ISO (14 normes, TOUTES obligatoires)
 
-14 normes applicables. Détails : `docs/iso/ISO_STANDARDS_REFERENCE.md`
+Référence complète : `docs/iso/ISO_STANDARDS_REFERENCE.md`
+Mapping fichiers↔normes : `docs/iso/ISO_MAPPING.md`
+Statut implémentation : `docs/iso/IMPLEMENTATION_STATUS.md`
 
-**Générales :** ISO 25010, 27001, 27034, 5055, 42010, 29119, 15289
-**ML/AI :** ISO 42001, 23894, 5259, 25059, 24029, 24027
+### Générales (7)
+| # | Norme | Exigence ALICE | Vérification |
+|---|-------|----------------|--------------|
+| 1 | **ISO 5055** | Max 300 lignes/fichier, 50/fonction, complexité ≤ B, SRP | `radon`, `xenon`, `wc -l` |
+| 2 | **ISO 27001** | Secrets en env vars, audit logs MongoDB, SHA-256 checksums | Gitleaks, Bandit |
+| 3 | **ISO 27034** | Pydantic validation entrées, input sanitization | Ruff, Bandit |
+| 4 | **ISO 25010** | Qualité système (fiabilité, performance, sécurité) | Tests + benchmarks |
+| 5 | **ISO 29119** | Docstring structuré (ID, Version, Count), fixtures, classes | Pytest + coverage >70% |
+| 6 | **ISO 42010** | ADR documentés, architecture tracée | `docs/architecture/` |
+| 7 | **ISO 15289** | Documentation cycle de vie, MkDocs build | `mkdocs build --strict` |
 
-### Règles code (ISO 5055)
-- Max 300 lignes/fichier, 50 lignes/fonction, complexité ≤ B
-- SRP : 1 fichier = 1 responsabilité. Refactorer si dépassé.
-
-### Sécurité (ISO 27034)
-- Pydantic pour toute validation. Jamais de secrets en clair.
-
-### Tests (ISO 29119)
-- Docstring structuré : Document ID, Version, Tests count
-- Fixtures réutilisables, tests groupés par classe thématique
+### ML/AI (7)
+| # | Norme | Exigence ALICE | Artefact |
+|---|-------|----------------|----------|
+| 8 | **ISO 42001** | Model Card, traçabilité hyperparams, explicabilité | `metadata.json`, SHAP |
+| 9 | **ISO 42005** | Impact assessment (modèle guide vraies décisions) | `docs/iso/AI_RISK_ASSESSMENT.md` |
+| 10 | **ISO 23894** | Risk management AI, mitigation biais | `docs/iso/AI_RISK_REGISTER.md` |
+| 11 | **ISO 5259** | Data quality, lineage, validation schemas | Pandera, `compute_data_lineage()` |
+| 12 | **ISO 25059** | Quality model, benchmarks, quality gates | `check_quality_gates()` 15 conditions |
+| 13 | **ISO 24029** | Robustesse (bruit, adversarial, stabilité) | `scripts/robustness/` |
+| 14 | **ISO 24027** | Biais/fairness per-group calibration | `scripts/monitoring/bias_tracker.py` |
 
 ## BUT DU PROJET
 
