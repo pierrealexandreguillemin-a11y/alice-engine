@@ -149,9 +149,28 @@ def _package_all(tmp_path: Path) -> None:
     cloud_dir = dst_scripts / "cloud"
     cloud_dir.mkdir(exist_ok=True)
     (cloud_dir / "__init__.py").touch()
-    for cloud_module in ["autogluon_diagnostics.py", "autogluon_model_card.py", "train_kaggle.py"]:
-        shutil.copy2(src_scripts / "cloud" / cloud_module, cloud_dir / cloud_module)
-    logger.info("Copied autogluon_diagnostics.py + autogluon_model_card.py + train_kaggle.py")
+    cloud_modules = [
+        "autogluon_diagnostics.py",
+        "autogluon_model_card.py",
+        "train_kaggle.py",
+        "optuna_kaggle.py",
+    ]
+    for cloud_module in cloud_modules:
+        src = src_scripts / "cloud" / cloud_module
+        if src.exists():
+            shutil.copy2(src, cloud_dir / cloud_module)
+    logger.info(
+        "Copied cloud modules: %s",
+        [m for m in cloud_modules if (src_scripts / "cloud" / m).exists()],
+    )
+
+    # Config (hyperparameters.yaml needed by Optuna kernels)
+    config_src = PROJECT_ROOT / "config" / "hyperparameters.yaml"
+    if config_src.exists():
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(exist_ok=True)
+        shutil.copy2(config_src, config_dir / "hyperparameters.yaml")
+        logger.info("Copied config/hyperparameters.yaml")
 
     # Schemas
     shutil.copytree(
