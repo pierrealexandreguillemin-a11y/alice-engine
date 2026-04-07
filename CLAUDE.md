@@ -34,6 +34,24 @@ Les nulles = 12.6% des parties, varient de 4.9% (Elo<1200) à 45.8% (Elo>2400). 
 **AutoGluon évalué et écarté** — pas de support init_score, régresserait sans residual learning.
 **Plafond features estimé ~80-90%** — gain résiduel ~0.01-0.02 via feature engineering (Phase 3).
 
+### V9 Optuna Pipeline (2026-04-07, EN COURS)
+
+V8 hyperparamètres étaient tunés manuellement (~18 itérations Kaggle).
+Optuna Bayesian optimization lancée — postmortem: `docs/postmortem/2026-04-07-skipped-optuna-tuning.md`.
+
+**Pipeline V9 (11 étapes séquentielles, 9 kernels Kaggle) :**
+1. ✅ Spec + search spaces audités (fabricants XGBoost/CatBoost/LightGBM)
+2. ✅ Code Optuna multiclass (`scripts/cloud/optuna_kaggle.py`) + 5 tests
+3. ⏳ Kernel Optuna XGBoost canary (v1 RUNNING)
+4. ○ Kernel Optuna CatBoost (après benchmark trial 1)
+5. ○ Kernel Optuna LightGBM (après benchmark trial 1)
+6-8. ○ Training Final (3 kernels, best params)
+9-11. ○ OOF Stacking + Meta-learner + ISO reports
+
+**init_score_alpha ∈ [0.3, 0.8]** dans le search space joint (était fixé 0.7).
+**Metric optimisation : `multi_logloss`** (pas AUC binaire).
+**Spec complète : `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md`**
+
 ### Couches système
 
 | Couche | Statut | Fichiers |
@@ -193,7 +211,14 @@ scripts/
 │   ├── kernel-metadata-xgboost.json    # Config XGBoost seul (CPU, canary)
 │   ├── kernel-metadata-catboost.json   # Config CatBoost seul (CPU, SHAP)
 │   ├── kernel-metadata-lightgbm.json   # Config LightGBM seul (CPU, best)
-│   └── kernel-metadata-autogluon.json  # Config Kaggle AutoGluon kernel
+│   ├── kernel-metadata-autogluon.json  # Config Kaggle AutoGluon kernel
+│   ├── optuna_kaggle.py          # V9 Optuna multiclass objectives + main
+│   ├── optuna_xgboost.py         # Entry point Optuna XGBoost
+│   ├── optuna_catboost.py        # Entry point Optuna CatBoost
+│   ├── optuna_lightgbm.py        # Entry point Optuna LightGBM
+│   ├── kernel-metadata-optuna-xgboost.json   # Kernel config
+│   ├── kernel-metadata-optuna-catboost.json   # Kernel config
+│   └── kernel-metadata-optuna-lightgbm.json   # Kernel config
 ├── kaggle_trainers.py      # ML training logic (CatBoost/XGBoost/LightGBM)
 ├── kaggle_metrics.py       # Multiclass metrics + predict_with_init + quality gates
 ├── kaggle_artifacts.py     # Model persistence + HF Hub push
@@ -318,6 +343,22 @@ Modèle détecté via `KAGGLE_KERNEL_RUN_SLUG` (slug contient xgboost/catboost/l
 **Checkpoints** après chaque modèle (timeout protection).
 n_estimators=50K, early_stopping=200.
 
+**V9 Architecture Optuna (2026-04-07) :**
+```bash
+# Kernel Optuna XGBoost canary (CPU, 12h)
+cp scripts/cloud/kernel-metadata-optuna-xgboost.json scripts/cloud/kernel-metadata.json
+kaggle kernels push -p scripts/cloud/
+git checkout -- scripts/cloud/kernel-metadata.json
+# → Output: best_params_xgboost.json, optuna_xgboost.db, trial_history_xgboost.csv
+
+# Kernel Optuna CatBoost + LightGBM (après benchmark trial 1)
+# Même pattern avec kernel-metadata-optuna-catboost.json / lightgbm
+```
+**Search spaces audités contre docs fabricants** (XGBoost, CatBoost, LightGBM).
+**init_score_alpha ∈ [0.3, 0.8]** dans search space joint.
+**SQLite storage** pour resume si timeout.
+**Pruning callbacks** (`optuna_integration`, PAS `optuna.integration` — v4 breaking change).
+
 ## Documentation
 
 - `docs/project/V8_MODEL_COMPARISON.md` - **LIRE EN PRIORITÉ** — Comparaison exhaustive 3 modèles, SHAP, features, résidus, blend test, ceiling
@@ -337,6 +378,10 @@ n_estimators=50K, early_stopping=200.
 - `docs/superpowers/specs/2026-03-17-data-refresh-pipeline-design.md` - Spec data refresh
 - `docs/superpowers/specs/2026-03-18-kaggle-cloud-training-design.md` - Spec Kaggle training
 - `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
+- `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md` - Spec V9 Optuna pipeline (11 étapes)
+- `docs/superpowers/specs/2026-04-07-phase2-serving-design.md` - Spec Phase 2 serving (RÉVISÉE: Optuna d'abord)
+- `docs/postmortem/2026-04-07-skipped-optuna-tuning.md` - Postmortem Optuna skippé
+- `docs/superpowers/plans/2026-04-07-optuna-v9-implementation.md` - Plan implémentation Optuna
 
 ## Contraintes Training
 
@@ -437,6 +482,10 @@ n_estimators=50K, early_stopping=200.
 - **TOUJOURS calculer le budget post-training AVANT d'écrire le script** (TreeSHAP + calibration + diagnostics)
 - **TOUJOURS mettre quality gates AVANT SHAP** dans le pipeline post-training
 - **TOUJOURS appliquer les findings d'un modèle aux autres** (lr=0.01 XGBoost → CatBoost/LightGBM)
+- **NE JAMAIS déclarer un modèle "champion" sans Optuna** — hyperparams manuels ≠ optimisés
+- **NE JAMAIS utiliser `optuna.integration`** — depuis v4.0, c'est `optuna_integration` (package séparé)
+- **TOUJOURS vérifier que le dataset Kaggle contient les fichiers importés** avant push kernel
+- **TOUJOURS utiliser SQLite storage Optuna** (pas pickle) — resume-safe après timeout
 
 ### Init Score Alpha — Prior Strength (v16, 2026-03-26)
 - `init_score_alpha=0.7` dans `config["global"]` (override: `ALICE_INIT_ALPHA`)
