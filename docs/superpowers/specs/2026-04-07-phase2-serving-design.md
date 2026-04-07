@@ -140,7 +140,6 @@ Each contains columns: `pred_loss`, `pred_draw`, `pred_win`, `true_label`.
    - Target: true_label (0=loss, 1=draw, 2=win)
    - Meta-learner: `LogisticRegression(multi_class='multinomial', max_iter=1000)`
    - Also test: `MLPClassifier(hidden_layer_sizes=(16,), max_iter=500)`
-   - 5-fold CV on valid set to avoid overfitting
 
 2. **Evaluate on test set** (231,532 samples):
    - Metrics: log_loss, RPS, E[score] MAE, ECE per class, draw calibration bias
@@ -156,15 +155,29 @@ Each contains columns: `pred_loss`, `pred_draw`, `pred_win`, `true_label`.
    - If not → serve XGBoost alone, document conclusion with evidence
    - E[score] MAE is the metric that matters for the CE (not log_loss)
 
-### 2.3 Serving Implications
+### 2.3 Results (2026-04-07)
+
+**DECISION: Stack_MLP_cal WINS — serve 3 models + MLP meta-learner.**
+
+| Metric | XGBoost v5 | Stack_MLP_cal | Delta |
+|--------|-----------|---------------|-------|
+| **E[score] MAE** | 0.24739 | **0.24254** | **-0.00485 (-2.0%)** |
+| log_loss | **0.56604** | 0.57335 | +0.00731 (+1.3%) |
+| ECE draw | 0.01555 | **0.01233** | -0.00322 (-20.7%) |
+| Draw bias | +0.01460 | **+0.01113** | -0.00347 (-23.8%) |
+
+E[score] MAE gain = +0.00485 > 0.001 threshold = **SIGNIFICANT**.
+Full results: `reports/stacking_evaluation.json`, `docs/project/V8_MODEL_COMPARISON.md` Section 11.
+Script: `scripts/evaluate_stacking.py`.
+
+### 2.4 Serving Implications (DECIDED)
 
 | Stacking result | Serving strategy | Startup cost | Inference cost |
 |----------------|-----------------|-------------|----------------|
-| No gain | XGBoost only (427 MB) | ~2s | 1 predict call |
-| Gain | 3 models + meta-learner (~536 MB) | ~5s | 3 predict + LR |
-| Gain but CatBoost enough | CatBoost + XGBoost (450 MB) | ~3s | 2 predict + LR |
+| ~~No gain~~ | ~~XGBoost only (427 MB)~~ | ~~2s~~ | ~~1 predict call~~ |
+| **Gain (chosen)** | **3 models + MLP meta-learner (~536 MB)** | **~5s** | **3 predict + MLP + isotonic** |
 
-Oracle VM has 24 GB RAM — all options fit comfortably.
+Oracle VM has 24 GB RAM — 536 MB fits comfortably.
 
 ---
 
