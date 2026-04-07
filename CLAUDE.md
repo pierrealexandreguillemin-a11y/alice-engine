@@ -361,27 +361,14 @@ git checkout -- scripts/cloud/kernel-metadata.json
 
 ## Documentation
 
-- `docs/project/V8_MODEL_COMPARISON.md` - **LIRE EN PRIORITÉ** — Comparaison exhaustive 3 modèles, SHAP, features, résidus, blend test, ceiling
-- `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md` - Roadmap 5 phases → prod
-- `docs/superpowers/plans/2026-03-23-residual-learning-phase1.md` - Plan Phase 1 residual (Tasks 1-3 DONE, 4-6 SUPERSEDED)
-- `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` - Plan Phase 1b SHAP + calibration (ACTIF)
-- `docs/postmortem/2026-03-22-training-v8-divergence.md` - Postmortem training V8
-- `docs/architecture/ADR-002-inference-feature-construction.md` - Feature store decision
-- `docs/requirements/FEATURE_DOMAIN_LOGIC.md` - **LIRE EN PRIORITE** — Logique metier features, differentiels, litterature multisports
-- `docs/requirements/FEATURE_SPECIFICATION.md` - Spec formelle features (types, plages, ISO 5259)
-- `docs/superpowers/specs/2026-03-27-differential-features-design.md` - Spec differentiels (24 features)
-- `docs/superpowers/plans/2026-03-27-differential-features.md` - Plan impl differentiels (Tasks 1-8)
-- `docs/bilan-v8-fe-complete.md` - Bilan FE V8 (196→220 cols avec differentiels)
-- `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` - LLM co-authorship (ISO 42001)
-- `docs/iso/ISO_STANDARDS_REFERENCE.md` - Normes ISO applicables
-- `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md` - Spec V8 MultiClass
-- `docs/superpowers/specs/2026-03-17-data-refresh-pipeline-design.md` - Spec data refresh
-- `docs/superpowers/specs/2026-03-18-kaggle-cloud-training-design.md` - Spec Kaggle training
-- `docs/PYTHON-HOOKS-SETUP.md` - Setup complet avec correspondances chess-app
-- `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md` - Spec V9 Optuna pipeline (11 étapes)
-- `docs/superpowers/specs/2026-04-07-phase2-serving-design.md` - Spec Phase 2 serving (RÉVISÉE: Optuna d'abord)
-- `docs/postmortem/2026-04-07-skipped-optuna-tuning.md` - Postmortem Optuna skippé
-- `docs/superpowers/plans/2026-04-07-optuna-v9-implementation.md` - Plan implémentation Optuna
+**Index complet : `.claude/rules/docs-index.md`** (65 docs organisés par domaine)
+
+Docs critiques (lire en priorité) :
+- `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md` - **ACTIF** V9 Optuna (11 étapes)
+- `docs/project/V8_MODEL_COMPARISON.md` - Comparaison 3 modèles + stacking
+- `docs/requirements/FEATURE_DOMAIN_LOGIC.md` - Logique métier features
+- `docs/requirements/QUALITY_GATES.md` - Gates F1-F12 / T1-T12
+- `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md` - Roadmap 5 phases
 
 ## Contraintes Training
 
@@ -403,108 +390,31 @@ git checkout -- scripts/cloud/kernel-metadata.json
   - **NOTE** : P100 incompatible CUDA 12.8/PyTorch 2.9 → TOUJOURS utiliser T4x2
   - **NOTE** : NN_TORCH doit être en CPU (num_gpus=0) tant que P100 est assigné
 
-## V8 MultiClass 3-way (EN COURS, 2026-03-21)
+## V8/V9 Training Rules
 
-**Remplace V7 binaire** (4 bugs critiques + 8 bugs logique features)
+**Historique complet V8 : `.claude/rules/v8-training-findings.md`**
 
-### Décisions validées
-- **Target** : loss=0, draw=1, win=2. TARGET_MAP = {0.0:0, 0.5:1, 1.0:2, 2.0:2}. resultat_blanc=2.0 = victoire jeunes FFE (J02 §4.1: 2pts éch. non-U10, 62K parties), mapped to win
-- **Forfeits** : identifiés par `type_resultat` (forfait_blanc 43K, forfait_noir 42K, double_forfait 3K, non_joue 209K), PAS par resultat_blanc. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
-- **Loss** : CatBoost `MultiClass`, XGBoost `multi:softprob`, LightGBM `multiclass`
-- **Eval** : MultiClass log loss + RPS (Ranked Probability Score, standard ordinal)
-- **Sortie** : P(win), P(draw), P(loss) → CE calcule E[score] = P(win) + 0.5×P(draw)
-- **Calibration** : Isotonic par classe + renormalisation. Pas de class weights (dégrade calibration)
-- **Quality gate** : log loss < baselines, E[score] MAE < Elo baseline, RPS < baselines, ECE < 0.05, calibration P(draw) ±2%
-
-### Bugs logique corrigés dans features
-1. `clutch_factor` : remplacer `|score_dom-score_ext|<=1` par `zone_enjeu IN (montee,danger)`
-2. `score_blancs/noirs` : séparer home/away (color confondant avec domicile)
-3. Features joueur : stratifier par type_competition (national 20.9% draws ≠ régional 9.6%)
-4. Features joueur : rolling 3 saisons au lieu de global career
-5. Forfaits : filter by `type_resultat` (not resultat_blanc). resultat_blanc=2.0 = victoire jeunes, recode as win
-
-### Nouvelles features (draw + club-level)
-- **8 draw features** (8 cols) : avg_elo, elo_proximity, draw_rate_prior, draw_rate_joueur×2, draw_rate_h2h, draw_rate_equipe×2
-- **8 club/vases features** (16 cols) : joueur_promu/relegue, player_team_elo_gap, stabilite_effectif, elo_moyen_evolution, team_rank_in_club, reinforcement_rate, club_nb_teams
-- **Toutes features rolling** (données antérieures), stratifiées par niveau de compétition
-
-### Spec complète
-- `docs/superpowers/specs/2026-03-21-multiclass-v8-design.md`
-- Mémoire : `memory/project_multiclass_v8_design.md` (COMPLÈTE — lire en priorité)
-
-### V8 Training Findings (2026-03-22→30)
-- **v1-v3 échoués** (path, divergence, hyperparams) — postmortem dans `docs/postmortem/`
-- **v5 : PREMIÈRE VICTOIRE** — CatBoost 0.886, LightGBM 0.885 < Elo baseline 0.92
-- **v10 : MEILLEUR v1** — LightGBM 0.877 (test), gate 8/9 (E[score] régression isotonic)
-- **v15 : FIRST CLEAN DATA** — data fix + dynamic white advantage + rsm + SHAP + dual calibration
-- **v18 : FIRST ALL-PASS** — XGBoost 0.574 log_loss, 15/15 gates PASS, -34% vs Elo
-- **v18 RÉSULTATS** : log_loss 0.574 (-34.4%), RPS 0.090 (-35.2%), E[score] MAE 0.250 (-32.8%), T=0.928, 197/201 features actives
-- **DÉCOUVERTE v10** : 166/177 features à importance 0 = **artefact CatBoost PredictionValuesChange**
-  - XGBoost utilise **109 features**, LightGBM **50 features** (même données)
-  - Root cause : CatBoost manque `rsm` (feature subsampling) — oblivious trees depth=4
-  - CatBoost SHAP natif (`type='ShapValues'`) résout le problème
-- **CONTAMINATION DATA (2026-03-25, CORRIGÉ)** : resultat_blanc=2.0 (62K victoires jeunes) exclu à tort + 295K vrais forfeits inclus. Tous v1-v13 entraînés sur données contaminées. Fix: filter `type_resultat`, recode 2.0→win (commit 56a58e7). FE v2 vérifié. Postmortem: `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md`
-- **Dynamic white advantage (2026-03-25)** : +35 fixe remplacé par lookup Elo-level (+8.5 à +32.4), vérifié sur 1.44M parties FFE (commit cc8f2db)
-- **CatBoost rsm=0.3 (2026-03-25)** : rsm incompatible GPU (`pairwise only`) → CPU forcé. ~60s vs 12s GPU, négligeable (commit 378b97a)
-- **Dual calibration (2026-03-26)** : temperature scaling vs isotonic comparés dans le même kernel, winner par quality gate (commit 37ad4ec)
-- **Residual learning** : `compute_elo_init_scores()` → `Pool(baseline=)` / `base_margin` / `init_score`
-- **Eval cohérente** : `predict_with_init()` pour CatBoost/XGBoost/LightGBM (audit C2)
-- **Quality gate** : 9 conditions, condition 9 = `mean_p_draw > 1%` (pas recall_draw)
-- **Resume XGBoost (2026-04-01)** : 50K→86.5K rounds (v5), val=0.5126, modèle CONVERGÉ
-- **3 timeouts resume (v2-v4)** : TreeSHAP 231K=5h, permutation 4h — fixé subsample 20K (26min)
-- **`EarlyStopping(save_best=True)`** : OBLIGATOIRE, `xgb.train()` retourne last pas best
-- **`TrainingCheckPoint(interval=5000)`** : OBLIGATOIRE pour kernels >4h
-- **Resume v5 COMPLETE (2026-04-02)** : test 0.566 (-35.2% vs Elo), RPS 0.089, E[score] MAE 0.247, T=0.971, 197/197 features
-- **CatBoost v3 + LightGBM v3 LANCÉS (2026-04-02)** : CPU, checkpoints, NaN audit, sys.path fix
-- **Entry points DOIVENT setup sys.path** : crash ModuleNotFoundError sans (v1 CatBoost, 2026-04-02)
-- **NaN audit per split OBLIGATOIRE** dans `train_kaggle.py` (raise ValueError si >99% NaN)
-- **`default_hyperparameters()` dans `kaggle_constants.py`** (SRP refactor, was in kaggle_trainers.py)
-- **CatBoost v3 COMPLETE (2026-04-03)** : test 0.590 (-39.6% vs Elo), T=0.935, ALL GATES PASS, 50K NON CONVERGÉ
-- **LightGBM v3 TIMEOUT (2026-04-03)** : 50K iters val=0.536, 3 bugs (save_model, SHAP, perm timeout)
-- **LightGBM v4 COMPLETE training (2026-04-03)** : 65K total, val=0.520, model SAUVÉ (fix booster_.save_model), post-training TIMEOUT
-- **LightGBM v5 RUNNING (2026-04-04)** : resume 65K→105K, lr=0.005, à [73900] val=0.518
-- **CatBoost v4 RUNNING (2026-04-04)** : from scratch lr=0.01, iterations=150K, early_stopping=200
-- **3 bugs fixés (2026-04-03)** : `booster_.save_model()` LGBMClassifier, TreeExplainer SHAP fallback, permutation skip single-model
-- **Quality gates AVANT SHAP (2026-04-04)** : fix dans train_kaggle.py — root cause des 3 timeouts post-training (v3/v4/v4-post)
-- **CatBoost init_model + Pool(baseline=) INTERDIT** : "Specifying baseline for training continuation is not supported"
-- **CatBoost snapshot exige MÊME params** (iterations, lr, tout) — pas de changement lr via snapshot
-- **LightGBM init_model** : n_estimators = ADDITIONAL, compteur `env.iteration` continue depuis init
-- **LightGBM 65K model text (343MB)** : startup 3h22m (Dataset construction + parsing text)
+### Règles JAMAIS/TOUJOURS (issues de V8, applicables V9)
 - **NE JAMAIS entraîner sans residual learning** quand une baseline forte existe (Elo en échecs)
 - **NE JAMAIS utiliser PredictionValuesChange seul** — comparer importance cross-modèles + SHAP
 - **NE JAMAIS sélectionner features par importance d'un modèle raté** — utiliser logique domaine
 - **NE JAMAIS lancer TreeSHAP/permutation sur le test set complet** — subsample 20K, benchmark AVANT
 - **NE JAMAIS écrire un budget temps sans calcul** — "~1-2h" mensonger = timeout garanti
-- **NE JAMAIS estimer sans données empiriques du MÊME setup** — 3 estimations fausses (startup, iter speed, n_estimators)
-- **NE JAMAIS combiner CatBoost init_model + Pool(baseline=)** — erreur fatale, utiliser snapshot ou from scratch
-- **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
-- **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
-- **TOUJOURS calculer le budget post-training AVANT d'écrire le script** (TreeSHAP + calibration + diagnostics)
-- **TOUJOURS mettre quality gates AVANT SHAP** dans le pipeline post-training
-- **TOUJOURS appliquer les findings d'un modèle aux autres** (lr=0.01 XGBoost → CatBoost/LightGBM)
+- **NE JAMAIS estimer sans données empiriques du MÊME setup**
+- **NE JAMAIS combiner CatBoost init_model + Pool(baseline=)** — erreur fatale
 - **NE JAMAIS déclarer un modèle "champion" sans Optuna** — hyperparams manuels ≠ optimisés
 - **NE JAMAIS utiliser `optuna.integration`** — depuis v4.0, c'est `optuna_integration` (package séparé)
+- **TOUJOURS calculer init_scores AVANT le filtrage features** (blanc_elo/noir_elo nécessaires)
+- **TOUJOURS ajouter `rsm=0.3-0.5`** pour CatBoost avec >50 features
+- **TOUJOURS calculer le budget post-training AVANT d'écrire le script**
+- **TOUJOURS mettre quality gates AVANT SHAP** dans le pipeline post-training
 - **TOUJOURS vérifier que le dataset Kaggle contient les fichiers importés** avant push kernel
 - **TOUJOURS utiliser SQLite storage Optuna** (pas pickle) — resume-safe après timeout
 
-### Init Score Alpha — Prior Strength (v16, 2026-03-26)
-- `init_score_alpha=0.7` dans `config["global"]` (override: `ALICE_INIT_ALPHA`)
-- Réduit la dominance Elo : init_scores *= alpha avant training
-- Théorie : temperature scaling sur init logits (T=1/alpha), Guo et al. 2017
-- v15 : modèles convergent en 89-133 iters → prior trop fort → alpha < 1 donne plus de marge aux features
-- **Sweep prévu** : [0.5, 0.7, 0.9] via env var
-
-### Inference REQUIERT init_scores + alpha (C1 — Phase 2)
-- Les modèles entraînés avec residual learning ont besoin des init_scores à l'inférence
+### Inference REQUIERT init_scores + alpha
+- `compute_elo_baseline → compute_elo_init_scores → *= alpha → predict_with_init`
 - `draw_rate_lookup.parquet` sauvé comme artefact (45 cells)
-- L'inference service doit : compute_elo_baseline → compute_elo_init_scores → `*= alpha` → predict_with_init
-- **Alpha stocké dans metadata.json** (`config.global.init_score_alpha`) pour reproductibilité
-
-### Lacunes versioning ISO 5259/42001 (@TODO Phase 2/5)
-- Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel
-- Pas de hash du dataset uploadé (upload_all_data ne log pas le hash)
-- Artefacts training (reports/) non versionnés — local seulement
-- DVC recommandé (docs/devops/ML_MODEL_VERSIONING_STANDARDS.md) mais non implémenté
+- Alpha stocké dans `metadata.json` (`config.global.init_score_alpha`)
 
 ## V9 CE multi-équipe (@TODO après V8)
 
