@@ -1,9 +1,100 @@
 # Phase 2 — Serving Architecture & Ensemble Evaluation
 
 **Date:** 2026-04-07
-**Status:** DRAFT — pending stacking evaluation
-**Scope:** Evaluate ensemble stacking before wiring, then design serving layer
-**Prerequisite:** V8 milestone complete (3 models converged, ALL PASS)
+**Status:** REVISED — Optuna required before wiring (postmortem 2026-04-07)
+**Scope:** Optuna hyperparameter tuning → Final training → Stacking OOF → Wiring
+**Prerequisite:** V8 features complete (197 features, FE kernel output)
+
+---
+
+## 0. Optuna Hyperparameter Tuning (PREREQUISITE — added 2026-04-07)
+
+### 0.1 Gap Identified
+
+Optuna was planned as Phase 2 of the ML methodology
+(METHODOLOGIE_ML_TRAINING.md §2.3) but never executed on V8 models.
+All 3 models use manual hyperparameters from ~18 Kaggle iterations.
+Postmortem: `docs/postmortem/2026-04-07-skipped-optuna-tuning.md`.
+
+The V8 models pass quality gates but are NOT optimized. Gain potential
+from Optuna is UNKNOWN — not "marginal", simply unknown.
+
+### 0.2 Pipeline Revised
+
+```
+Kernel FE (exists) → Optuna XGBoost (CPU 12h)
+                   → Optuna CatBoost (CPU 12h)   → Training Final → Stacking OOF → Wiring
+                   → Optuna LightGBM (CPU 12h)
+```
+
+### 0.3 Search Spaces (audited against fabricant docs)
+
+**All ranges verified against official documentation. Sources inline.**
+
+**XGBoost** — [xgboost.readthedocs.io/parameter.html](https://xgboost.readthedocs.io/en/stable/parameter.html):
+
+```python
+alpha = trial.suggest_float("init_score_alpha", 0.3, 0.8)       # residual prior strength
+max_depth = trial.suggest_int("max_depth", 3, 8)                 # default=6
+eta = trial.suggest_float("eta", 1e-3, 0.1, log=True)            # default=0.3
+reg_lambda = trial.suggest_float("reg_lambda", 0.1, 20.0, log=True)  # default=1
+reg_alpha = trial.suggest_float("reg_alpha", 1e-3, 1.0, log=True)    # default=0
+subsample = trial.suggest_float("subsample", 0.5, 1.0)           # "typically >= 0.5"
+colsample_bytree = trial.suggest_float("colsample_bytree", 0.3, 1.0) # range (0,1]
+min_child_weight = trial.suggest_int("min_child_weight", 20, 200)     # default=1
+# Fixed: n_estimators=50000, early_stopping=200, objective=multi:softprob
+```
+
+**CatBoost** — [catboost.ai/docs/parameter-tuning](https://catboost.ai/docs/en/concepts/parameter-tuning):
+
+```python
+alpha = trial.suggest_float("init_score_alpha", 0.3, 0.8)
+depth = trial.suggest_int("depth", 4, 10)                        # "optimal 4-10"
+learning_rate = trial.suggest_float("learning_rate", 1e-3, 0.1, log=True)  # default=0.03
+l2_leaf_reg = trial.suggest_float("l2_leaf_reg", 0.1, 20.0, log=True)      # default=3
+rsm = trial.suggest_float("rsm", 0.2, 0.8)                      # MANDATORY >50 features
+random_strength = trial.suggest_float("random_strength", 0.5, 5.0)  # scoring randomness
+min_data_in_leaf = trial.suggest_int("min_data_in_leaf", 20, 200)
+# Fixed: iterations=50000, early_stopping=200, loss=MultiClass, task_type=CPU
+```
+
+**LightGBM** — [lightgbm.readthedocs.io/Parameters-Tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html):
+
+```python
+alpha = trial.suggest_float("init_score_alpha", 0.3, 0.8)
+max_depth = trial.suggest_int("max_depth", 3, 8)
+num_leaves = trial.suggest_int("num_leaves", 7, 63)              # CLAMP: min(val, 2^depth-1)
+learning_rate = trial.suggest_float("learning_rate", 1e-3, 0.1, log=True)  # default=0.1
+reg_lambda = trial.suggest_float("reg_lambda", 0.1, 20.0, log=True)        # default=0
+feature_fraction = trial.suggest_float("feature_fraction", 0.3, 1.0)
+bagging_fraction = trial.suggest_float("bagging_fraction", 0.5, 1.0)
+min_child_samples = trial.suggest_int("min_child_samples", 20, 200)  # default=20
+# Fixed: n_estimators=50000, early_stopping=200, objective=multiclass, bagging_freq=1
+```
+
+### 0.4 Design Decisions
+
+- **Metric:** optimize `multi_logloss` (loss native). Évaluer `E[score] MAE` post-hoc.
+  Standard: séparer loss d'optimisation et métrique de décision business.
+- **init_score_alpha [0.3, 0.8]** dans le search space joint. TPESampler modélise
+  les interactions alpha×lr×depth. Optimiser séparément serait sous-optimal.
+- **n_estimators fixe + early stopping** : le nombre d'itérations n'est pas un
+  hyperparamètre — c'est l'early stopping qui décide de la convergence.
+- **Phase 1+2 dans un run** : TPESampler explore large (10 startup trials) puis affine.
+  Observer temps/trial sur les 10 premiers pour valider le budget 12h.
+- **CPU only** : CatBoost rsm incompatible GPU. XGBoost/LightGBM GPU non testé V8.
+
+### 0.5 References
+
+- XGBoost params: https://xgboost.readthedocs.io/en/stable/parameter.html
+- XGBoost tuning guide: https://xgboost.readthedocs.io/en/stable/tutorials/param_tuning.html
+- CatBoost tuning: https://catboost.ai/docs/en/concepts/parameter-tuning
+- CatBoost common params: https://catboost.ai/docs/en/references/training-parameters/common
+- LightGBM params: https://lightgbm.readthedocs.io/en/latest/Parameters.html
+- LightGBM tuning: https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html
+- Optuna TPESampler: https://optuna.readthedocs.io/en/stable/reference/samplers/generated/optuna.samplers.TPESampler.html
+- CatBoost Optuna tutorial: https://github.com/catboost/tutorials/blob/master/hyperparameters_tuning/hyperparameters_tuning_using_optuna_and_hyperopt.ipynb
+- Postmortem: docs/postmortem/2026-04-07-skipped-optuna-tuning.md
 
 ---
 
