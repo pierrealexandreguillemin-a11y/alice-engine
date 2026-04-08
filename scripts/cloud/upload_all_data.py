@@ -172,6 +172,13 @@ def _package_all(tmp_path: Path) -> None:
         shutil.copy2(config_src, config_dir / "hyperparameters.yaml")
         logger.info("Copied config/hyperparameters.yaml")
 
+    # Optuna study DBs (resume across Kaggle sessions)
+    optuna_dir = PROJECT_ROOT / "optuna_studies"
+    if optuna_dir.exists():
+        for db_file in optuna_dir.glob("optuna_*.db"):
+            shutil.copy2(db_file, tmp_path / db_file.name)
+            logger.info("Copied Optuna study: %s", db_file.name)
+
     # Schemas
     shutil.copytree(
         PROJECT_ROOT / "schemas", tmp_path / "schemas", ignore=shutil.ignore_patterns("__pycache__")

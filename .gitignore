@@ -102,6 +102,7 @@ lightgbm_info/
 xgboost_info/
 mlflow.db
 mlruns/
+optuna_studies/*.db
 
 # ============================================
 # Trained Models (binary artifacts)

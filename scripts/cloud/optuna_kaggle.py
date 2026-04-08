@@ -312,6 +312,27 @@ def main() -> None:
     )
 
     db_path = out_dir / f"optuna_{model_name}.db"
+
+    # Resume from previous session: copy .db from dataset input to working dir.
+    # Kaggle clears /kaggle/working/ on each run — the only way to persist a
+    # study across sessions is to upload the .db as part of a dataset, then
+    # copy it back before creating the RDBStorage.
+    if not db_path.exists():
+        for candidate in [
+            Path(f"/kaggle/input/datasets/pguillemin/alice-code/optuna_{model_name}.db"),
+            Path(f"/kaggle/input/alice-code/optuna_{model_name}.db"),
+            Path(f"/kaggle/input/datasets/pguillemin/alice-optuna-db/optuna_{model_name}.db"),
+            Path(f"/kaggle/input/alice-optuna-db/optuna_{model_name}.db"),
+        ]:
+            if candidate.exists():
+                import shutil
+
+                shutil.copy2(candidate, db_path)
+                logger.info("Resumed study DB from %s", candidate)
+                break
+        else:
+            logger.info("No previous study DB found — starting fresh")
+
     # HyperbandPruner is optimal for TPE (Optuna benchmarks) but requires
     # 4 brackets × 10 n_startup_trials = 40 trials minimum — impractical
     # with ~3-4 trials/12h session.  MedianPruner(n_startup_trials=1) lets
