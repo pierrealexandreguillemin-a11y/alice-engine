@@ -229,7 +229,7 @@ optuna:
   # XGBoost — https://xgboost.readthedocs.io/en/stable/parameter.html
   xgboost_search_space:
     max_depth: {low: 3, high: 8}                       # int, default=6
-    eta: {low: 0.001, high: 0.1, log: true}            # float, default=0.3
+    eta: {low: 0.01, high: 0.1, log: true}             # float, default=0.3 — was 0.001, raised: trial 1 eta=0.001 → 21K rounds/9h no convergence
     reg_lambda: {low: 0.1, high: 20.0, log: true}      # float, default=1
     reg_alpha: {low: 0.001, high: 1.0, log: true}      # float, default=0
     subsample: {low: 0.5, high: 1.0}                   # float, default=1

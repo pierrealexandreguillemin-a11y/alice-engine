@@ -312,12 +312,28 @@ def main() -> None:
     )
 
     db_path = out_dir / f"optuna_{model_name}.db"
+    # HyperbandPruner is optimal for TPE (Optuna benchmarks) but requires
+    # 4 brackets × 10 n_startup_trials = 40 trials minimum — impractical
+    # with ~3-4 trials/12h session.  MedianPruner(n_startup_trials=1) lets
+    # pruning kick in from the 2nd trial.  n_warmup_steps=500 avoids
+    # premature pruning before the learning curve stabilises.
+    pruner = optuna.pruners.MedianPruner(n_startup_trials=1, n_warmup_steps=500)
+    heartbeat_interval = 60
+    grace_period = 3 * heartbeat_interval
+    failed_trial_cb = optuna.storages.RetryFailedTrialCallback(max_retry=0)
+    storage = optuna.storages.RDBStorage(
+        url=f"sqlite:///{db_path}",
+        heartbeat_interval=heartbeat_interval,
+        grace_period=grace_period,
+        failed_trial_callback=failed_trial_cb,
+    )
     study = optuna.create_study(
         study_name=f"alice_{model_name}_v9",
-        storage=f"sqlite:///{db_path}",
+        storage=storage,
         load_if_exists=True,
         direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=42),
+        pruner=pruner,
     )
     optuna_config = config.get("optuna", {})
     n_trials = optuna_config.get("n_trials", 100)
