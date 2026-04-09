@@ -300,7 +300,7 @@ def create_lightgbm_objective_v9(
         try:
             from optuna_integration import LightGBMPruningCallback
 
-            pruning_cb = LightGBMPruningCallback(trial, metric="multi_logloss")
+            pruning_cb = LightGBMPruningCallback(trial, metric="multi_logloss", valid_name="valid")
             callbacks = [lgb.early_stopping(200), lgb.log_evaluation(0), pruning_cb]
         except ImportError:
             callbacks = [lgb.early_stopping(200), lgb.log_evaluation(0)]
