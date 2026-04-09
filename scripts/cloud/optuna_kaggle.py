@@ -394,12 +394,13 @@ def main() -> None:
         else:
             logger.info("No previous study DB found — starting fresh")
 
-    # HyperbandPruner is optimal for TPE (Optuna benchmarks) but requires
-    # 4 brackets × 10 n_startup_trials = 40 trials minimum — impractical
-    # with ~3-4 trials/12h session.  MedianPruner(n_startup_trials=1) lets
-    # pruning kick in from the 2nd trial.  n_warmup_steps=500 avoids
-    # premature pruning before the learning curve stabilises.
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=1, n_warmup_steps=500)
+    # NopPruner: pruning DISABLED.
+    # MedianPruner was too aggressive — 17/18 trials pruned at iter 500 on
+    # XGBoost v5 (flat landscape, delta best-worst = 0.01).
+    # Pruning was needed when eta ∈ [0.001, 0.1] (trial 1 v1: eta=0.001, 9h).
+    # Now eta is FIXED at 0.05 → every trial converges in ~3h.
+    # 4 trials/12h session × 3h each = pruning saves nothing.
+    pruner = optuna.pruners.NopPruner()
     heartbeat_interval = 60
     grace_period = 3 * heartbeat_interval
     failed_trial_cb = optuna.storages.RetryFailedTrialCallback(max_retry=0)
@@ -410,11 +411,9 @@ def main() -> None:
         failed_trial_callback=failed_trial_cb,
     )
     # TPESampler with reduced startup: n_startup_trials=4 (= n_params).
-    # GPSampler was considered but INCOMPATIBLE with MedianPruner —
-    # GP ignores pruned trials (no objective value), causing it to
-    # re-propose params in pruned zones (Optuna GitHub #5481, #6057).
-    # TPE uses pruned trials via consider_pruned_trials=True (default),
-    # making it the correct choice for pruning-heavy studies.
+    # GPSampler was evaluated but rejected — incompatible with pruning
+    # (Optuna #5481). With NopPruner, GP would work, but TPE is safer
+    # for resume across sessions (mixed param spaces from old trials).
     sampler = optuna.samplers.TPESampler(seed=42, n_startup_trials=4)
     study = optuna.create_study(
         study_name=f"alice_{model_name}_v9",

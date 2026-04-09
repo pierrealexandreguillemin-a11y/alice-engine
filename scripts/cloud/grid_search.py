@@ -1,12 +1,13 @@
-"""Grid search on 200K subsample — the pragmatic approach.
+"""Grid search on 200K subsample — one model per kernel.
 
-108 combos × 3 models × ~30s/combo = ~3-4h total on CPU.
-Validates Optuna V9 findings with exhaustive coverage.
+109 combos × ~330s/combo ≈ 10h on CPU (fits 12h session).
+Each combo saved to CSV immediately — no data loss on timeout.
 
 References
 ----------
 - Bergstra & Bengio 2012: ranking stable between subsample and full data
 - Probst et al. 2019: 2-3 params drive most tunability for GBDTs
+- Benchmarked 2026-04-09: 320s/combo on 200K rows XGBoost CPU
 """
 
 from __future__ import annotations
@@ -107,6 +108,12 @@ V8_LIGHTGBM = {
 }
 
 
+def _append_result(row: dict, csv_path: Path) -> None:
+    """Append one result row to CSV. Creates file with header if first row."""
+    df_row = pd.DataFrame([row])
+    df_row.to_csv(csv_path, mode="a", header=not csv_path.exists(), index=False)
+
+
 def _grid_combos(shared: dict, model_grid: dict) -> list[dict]:
     """Generate all combinations of shared + model-specific params."""
     all_keys = list(shared.keys()) + list(model_grid.keys())
@@ -124,14 +131,14 @@ def run_xgboost_grid(
     X_valid: pd.DataFrame,
     y_valid: pd.Series,
     init_valid: np.ndarray,
+    csv_path: Path | None = None,
 ) -> list[dict]:
     """Run XGBoost grid search on subsample."""
     import xgboost as xgb
 
     combos = _grid_combos(SHARED_GRID, XGBOOST_GRID)
-    # Add V8 baseline as first combo
     combos.insert(0, V8_XGBOOST)
-    logger.info("XGBoost: %d combos", len(combos))
+    logger.info("XGBoost: %d combos (each ~330s on 200K rows = ~10h total)", len(combos))
 
     dvalid = xgb.DMatrix(X_valid, label=y_valid)
     results = []
@@ -168,6 +175,8 @@ def run_xgboost_grid(
             **combo,
         }
         results.append(row)
+        if csv_path:
+            _append_result(row, csv_path)
         del booster, dtrain
         gc.collect()
 
@@ -186,13 +195,14 @@ def run_catboost_grid(
     X_valid: pd.DataFrame,
     y_valid: pd.Series,
     init_valid: np.ndarray,
+    csv_path: Path | None = None,
 ) -> list[dict]:
     """Run CatBoost grid search on subsample."""
     from catboost import CatBoostClassifier, Pool
 
     combos = _grid_combos(SHARED_GRID, CATBOOST_GRID)
     combos.insert(0, V8_CATBOOST)
-    logger.info("CatBoost: %d combos", len(combos))
+    logger.info("CatBoost: %d combos (each ~400s on 200K rows = ~12h total)", len(combos))
 
     results = []
     for i, combo in enumerate(combos):
@@ -225,6 +235,8 @@ def run_catboost_grid(
             **combo,
         }
         results.append(row)
+        if csv_path:
+            _append_result(row, csv_path)
         del model, train_pool, valid_pool
         gc.collect()
 
@@ -243,13 +255,14 @@ def run_lightgbm_grid(
     X_valid: pd.DataFrame,
     y_valid: pd.Series,
     init_valid: np.ndarray,
+    csv_path: Path | None = None,
 ) -> list[dict]:
     """Run LightGBM grid search on subsample."""
     import lightgbm as lgb
 
     combos = _grid_combos(SHARED_GRID, LIGHTGBM_GRID)
     combos.insert(0, V8_LIGHTGBM)
-    logger.info("LightGBM: %d combos", len(combos))
+    logger.info("LightGBM: %d combos (each ~250s on 200K rows = ~8h total)", len(combos))
 
     results = []
     for i, combo in enumerate(combos):
@@ -286,6 +299,8 @@ def run_lightgbm_grid(
             **combo,
         }
         results.append(row)
+        if csv_path:
+            _append_result(row, csv_path)
         del booster, dtrain, dvalid
         gc.collect()
 
@@ -298,7 +313,11 @@ def run_lightgbm_grid(
 
 
 def main() -> None:
-    """Run grid search for all 3 models on 200K subsample."""
+    """Run grid search for one model on 200K subsample.
+
+    Model selected via ALICE_MODEL env var (xgboost/catboost/lightgbm).
+    ~109 combos × ~330s/combo ≈ 10h on CPU. One model per 12h kernel.
+    """
     from scripts.baselines import compute_init_scores_from_features
     from scripts.cloud.train_kaggle import _load_features, _setup_kaggle_imports
     from scripts.features.draw_priors import build_draw_rate_lookup
@@ -306,6 +325,7 @@ def main() -> None:
 
     _setup_kaggle_imports()
 
+    model_name = os.environ.get("ALICE_MODEL", "xgboost")
     out_dir = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -326,104 +346,82 @@ def main() -> None:
     init_valid = compute_init_scores_from_features(X_valid, draw_lookup)
     logger.info("Init scores ready")
 
-    # Run all 3 grids
-    all_results = []
+    grid_fn = {
+        "xgboost": run_xgboost_grid,
+        "catboost": run_catboost_grid,
+        "lightgbm": run_lightgbm_grid,
+    }
+    if model_name not in grid_fn:
+        msg = f"Unknown model: {model_name}. Expected: {list(grid_fn)}"
+        raise ValueError(msg)
 
+    csv_path = out_dir / f"grid_search_{model_name}.csv"
     logger.info("=" * 60)
-    logger.info("XGBOOST GRID SEARCH")
+    logger.info(
+        "%s GRID SEARCH — results saved to %s after EACH combo", model_name.upper(), csv_path
+    )
     logger.info("=" * 60)
-    all_results.extend(run_xgboost_grid(X_train, y_train, init_train, X_valid, y_valid, init_valid))
-
-    logger.info("=" * 60)
-    logger.info("CATBOOST GRID SEARCH")
-    logger.info("=" * 60)
-    all_results.extend(
-        run_catboost_grid(X_train, y_train, init_train, X_valid, y_valid, init_valid)
+    all_results = grid_fn[model_name](
+        X_train,
+        y_train,
+        init_train,
+        X_valid,
+        y_valid,
+        init_valid,
+        csv_path=csv_path,
     )
 
-    logger.info("=" * 60)
-    logger.info("LIGHTGBM GRID SEARCH")
-    logger.info("=" * 60)
-    all_results.extend(
-        run_lightgbm_grid(X_train, y_train, init_train, X_valid, y_valid, init_valid)
-    )
-
-    # Save all results
+    # Save results
     df = pd.DataFrame(all_results)
-    results_path = out_dir / "grid_search_results.csv"
+    results_path = out_dir / f"grid_search_{model_name}.csv"
     df.to_csv(results_path, index=False)
     logger.info("Saved %d results to %s", len(df), results_path)
 
-    # Report best per model
+    # Report best
+    df_sorted = df.sort_values("logloss")
+    best = df_sorted.iloc[0]
+    v8_rows = df[df["is_v8_baseline"]]
+    v8_logloss = float(v8_rows.iloc[0]["logloss"]) if len(v8_rows) > 0 else float("nan")
+
     logger.info("=" * 60)
-    logger.info("BEST PARAMS PER MODEL")
-    logger.info("=" * 60)
-    best_per_model = {}
-    for model_name in ["xgboost", "catboost", "lightgbm"]:
-        model_df = df[df["model"] == model_name].sort_values("logloss")
-        best = model_df.iloc[0]
-        v8 = model_df[model_df["is_v8_baseline"]].iloc[0]
+    logger.info(
+        "%s: BEST=%.5f | V8=%.5f | delta=%.5f",
+        model_name,
+        best["logloss"],
+        v8_logloss,
+        best["logloss"] - v8_logloss,
+    )
+    param_keys = [
+        k
+        for k in best.index
+        if k not in ["model", "combo_idx", "logloss", "best_iter", "duration_s", "is_v8_baseline"]
+    ]
+    for rank, (_, row) in enumerate(df_sorted.head(5).iterrows()):
+        params = {k: row[k] for k in param_keys}
         logger.info(
-            "%s: BEST=%.5f (combo %d) | V8=%.5f | delta=%.5f",
-            model_name,
-            best["logloss"],
-            best["combo_idx"],
-            v8["logloss"],
-            best["logloss"] - v8["logloss"],
+            "  #%d: %.5f %s%s",
+            rank + 1,
+            row["logloss"],
+            params,
+            " (V8)" if row["is_v8_baseline"] else "",
         )
-        # Log top 5
-        for rank, (_, row) in enumerate(model_df.head(5).iterrows()):
-            params = {
-                k: row[k]
-                for k in row.index
-                if k
-                not in [
-                    "model",
-                    "combo_idx",
-                    "logloss",
-                    "best_iter",
-                    "duration_s",
-                    "is_v8_baseline",
-                ]
-            }
-            logger.info(
-                "  #%d: %.5f %s%s",
-                rank + 1,
-                row["logloss"],
-                params,
-                " (V8)" if row["is_v8_baseline"] else "",
-            )
 
-        best_per_model[model_name] = {
-            "best_logloss": float(best["logloss"]),
-            "best_params": {
-                k: best[k]
-                for k in best.index
-                if k
-                not in [
-                    "model",
-                    "combo_idx",
-                    "logloss",
-                    "best_iter",
-                    "duration_s",
-                    "is_v8_baseline",
-                ]
-            },
-            "best_iter": int(best["best_iter"]),
-            "v8_logloss": float(v8["logloss"]),
-            "n_combos": len(model_df),
-            "total_time_s": float(model_df["duration_s"].sum()),
-        }
-
-    # Save best params
-    best_path = out_dir / "grid_search_best_params.json"
-    best_path.write_text(json.dumps(best_per_model, indent=2))
+    best_out = {
+        "model": model_name,
+        "best_logloss": float(best["logloss"]),
+        "best_params": {
+            k: float(best[k]) if isinstance(best[k], np.floating) else best[k] for k in param_keys
+        },
+        "best_iter": int(best["best_iter"]),
+        "v8_logloss": v8_logloss,
+        "n_combos": len(df),
+        "total_time_s": float(df["duration_s"].sum()),
+    }
+    best_path = out_dir / f"grid_best_{model_name}.json"
+    best_path.write_text(json.dumps(best_out, indent=2))
     logger.info("Saved best params to %s", best_path)
 
-    # Summary
     total_time = df["duration_s"].sum()
-    logger.info("=" * 60)
     logger.info(
         "TOTAL: %d combos in %.0f min (%.1f h)", len(df), total_time / 60, total_time / 3600
     )
-    logger.info("=" * 60)

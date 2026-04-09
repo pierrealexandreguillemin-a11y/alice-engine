@@ -151,7 +151,8 @@ bagging_freq=1 (must be >0 to activate bagging_fraction).
 ### 4.1 Infrastructure
 
 - **Storage:** SQLite (`/kaggle/working/optuna_{model}.db`) for resume
-- **Sampler:** TPESampler(seed=42, n_startup_trials=4) — 4 random then Bayesian, uses pruned trials
+- **Sampler:** TPESampler(seed=42, n_startup_trials=4) — 4 random then Bayesian
+- **Pruner:** NopPruner (disabled) — eta fixed at 0.05, no catastrophic trials possible
 - **Pruning:** `optuna_integration.XGBoostPruningCallback` / CatBoost / LightGBM
 - **Metric:** minimize `multi_logloss` (eval metric on valid set)
 - **Timeout:** 39600s (11h — 1h margin for save + logs)
