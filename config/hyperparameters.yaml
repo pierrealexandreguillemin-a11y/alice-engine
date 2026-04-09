@@ -216,47 +216,67 @@ optuna:
   n_trials: 100                 # Target trials (timeout may cut short)
   timeout: 39600                # 11h (1h margin on 12h Kaggle)
 
-  # V9 MULTICLASS SEARCH SPACES (audited against fabricant docs 2026-04-07)
+  # V9 SEARCH SPACES — reduced from 7-8 to 4 params per model (2026-04-08)
+  #
+  # METHODOLOGY:
+  # 1. fANOVA on 23 XGBoost trials: subsample=27%, colsample=18%, alpha=18%,
+  #    reg_lambda=18%, reg_alpha=11%, min_child_weight=8%, max_depth=0%
+  # 2. Probst et al. 2019 (JMLR): reg_alpha/reg_lambda = low tunability
+  # 3. van Rijn & Hutter 2018 (KDD): subsample #2, min_child_weight #3
+  # 4. Bergstra & Bengio 2012: 4 params × 5-10x = 20-40 trials sufficient
+  #
+  # SAMPLER: TPESampler(n_startup_trials=4) — GP was incompatible with pruning
+  # (Optuna #5481: GP ignores pruned trials). TPE uses them via consider_pruned_trials.
+  #
   # Source: docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md §3
 
-  # Shared across all models
   shared:
     init_score_alpha:
-      low: 0.3
+      low: 0.5
       high: 0.8
-      # Residual prior strength. Custom param (Guo 2017 temperature scaling).
+      # ALICE-specific residual prior (Guo 2017). Tightened from [0.3, 0.8]:
+      # fANOVA + correlation show alpha<0.5 = systematically worse.
 
-  # XGBoost — https://xgboost.readthedocs.io/en/stable/parameter.html
+  # --- XGBoost ---
+  # TUNED: 4 params (fANOVA-validated + literature)
   xgboost_search_space:
-    max_depth: {low: 3, high: 8}                       # int, default=6
-    eta: {low: 0.01, high: 0.1, log: true}             # float, default=0.3 — was 0.001, raised: trial 1 eta=0.001 → 21K rounds/9h no convergence
-    reg_lambda: {low: 0.1, high: 20.0, log: true}      # float, default=1
-    reg_alpha: {low: 0.001, high: 1.0, log: true}      # float, default=0
-    subsample: {low: 0.5, high: 1.0}                   # float, default=1
-    colsample_bytree: {low: 0.3, high: 1.0}            # float, default=1
-    min_child_weight: {low: 20, high: 200}              # int, default=1
-    # Fixed: n_estimators=50000, early_stopping=200, objective=multi:softprob
+    subsample: {low: 0.6, high: 0.8}            # fANOVA 27% #1, r=-0.864
+    colsample_bytree: {low: 0.5, high: 1.0}     # fANOVA 18% #2, r=-0.614
+    min_child_weight: {low: 50, high: 200}       # van Rijn 2018 #3, interaction with depth
+  # FIXED: 4 params (low importance per fANOVA + literature)
+  xgboost_fixed:
+    max_depth: 8          # fANOVA 0%, all 6 trials converged to 8
+    eta: 0.05             # r=+0.055, coupled with early_stopping
+    reg_lambda: 4.0       # r=-0.112, Probst 2019: low tunability
+    reg_alpha: 0.01       # fANOVA 11%, Probst 2019: quasi-nul
+    # Also fixed: n_estimators=50000, early_stopping=200, objective=multi:softprob
 
-  # CatBoost — https://catboost.ai/docs/en/concepts/parameter-tuning
+  # --- CatBoost ---
+  # TUNED: 4 params (literature-driven, no empirical data yet)
   catboost_search_space:
-    depth: {low: 4, high: 10}                           # int, "optimal 4-10"
-    learning_rate: {low: 0.001, high: 0.1, log: true}   # float, default=0.03
-    l2_leaf_reg: {low: 0.1, high: 20.0, log: true}      # float, default=3
-    rsm: {low: 0.2, high: 0.8}                          # float, MANDATORY >50 features
-    random_strength: {low: 0.5, high: 5.0}              # float, default=1
-    min_data_in_leaf: {low: 20, high: 200}              # int
-    # Fixed: iterations=50000, early_stopping=200, loss=MultiClass, task_type=CPU
+    depth: {low: 4, high: 10}                    # Oblivious trees: THE complexity param
+    rsm: {low: 0.2, high: 0.8}                   # MANDATORY >50 features, ~colsample
+    min_data_in_leaf: {low: 20, high: 200}        # Interaction with depth
+  # FIXED: 3 params
+  catboost_fixed:
+    learning_rate: 0.05   # Coupled with early_stopping (Probst 2019)
+    l2_leaf_reg: 4.0      # Low tunability (Probst 2019)
+    random_strength: 2.0  # CatBoost-specific, low priority
+    # Also fixed: iterations=50000, early_stopping=200, loss=MultiClass, task_type=CPU
 
-  # LightGBM — https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html
+  # --- LightGBM ---
+  # TUNED: 4 params (literature-driven, no empirical data yet)
   lightgbm_search_space:
-    max_depth: {low: 3, high: 8}                        # int, default=-1
-    num_leaves: {low: 7, high: 63}                      # int, CLAMP: min(val, 2^depth-1)
-    learning_rate: {low: 0.001, high: 0.1, log: true}   # float, default=0.1
-    reg_lambda: {low: 0.1, high: 20.0, log: true}       # float, default=0
-    feature_fraction: {low: 0.3, high: 1.0}             # float
-    bagging_fraction: {low: 0.5, high: 1.0}             # float, requires bagging_freq=1
-    min_child_samples: {low: 20, high: 200}             # int, default=20
-    # Fixed: n_estimators=50000, early_stopping=200, objective=multiclass, bagging_freq=1
+    num_leaves: {low: 15, high: 255}             # Leaf-wise: THE complexity param, clamped 2^depth-1
+    feature_fraction: {low: 0.3, high: 1.0}      # ~colsample_bytree (van Rijn 2018 #5)
+    bagging_fraction: {low: 0.5, high: 1.0}      # ~subsample (van Rijn 2018 #2)
+  # FIXED: 4 params
+  lightgbm_fixed:
+    max_depth: 8          # Safety cap (XGBoost converged to 8)
+    learning_rate: 0.05   # Coupled with early_stopping (Probst 2019)
+    reg_lambda: 4.0       # Low tunability (Probst 2019, van Rijn 2018)
+    min_child_samples: 100  # Moderate importance, fixing reduces dim
+    # Also fixed: n_estimators=50000, early_stopping=200, objective=multiclass, bagging_freq=1
 
 # =============================================================================
 # METRICS THRESHOLDS (ISO 25010 / 25059)

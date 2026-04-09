@@ -48,61 +48,102 @@ STACKING + ISO (local)
   Step 11: ISO reports                 [GATE 11: full ISO pipeline]
 ```
 
-## 3. Search Spaces (audited against fabricant docs)
+## 3. Search Spaces (reduced 8→4 params, 2026-04-08)
+
+### 3.0 Methodology (added 2026-04-08)
+
+Original spec had 7-8 params per model — copied from tutorials without
+budget analysis. Reduced to 4 params per model based on:
+
+1. **fANOVA** on 23 XGBoost trials: max_depth=0%, subsample=27%,
+   colsample=18%, init_alpha=18%, reg_lambda=18%, reg_alpha=11%
+2. **Probst et al. 2019** (JMLR): reg_alpha/reg_lambda = low tunability
+3. **van Rijn & Hutter 2018** (KDD): learning_rate #1 (moot with ES),
+   subsample #2, min_child_weight #3
+4. **Bergstra & Bengio 2012**: 4 params × 5-10x = 20-40 trials sufficient
+5. **Budget**: 4 trials/12h session → 8 params required 80-160 trials (impossible)
+
+Sampler kept as **TPESampler** with reduced startup:
+- GPSampler was evaluated but INCOMPATIBLE with MedianPruner —
+  GP ignores pruned trials, re-proposes in bad zones (Optuna #5481, #6057)
+- TPESampler(n_startup_trials=4): 4 = n_params, Bayesian from trial 5
+- consider_pruned_trials=True (default) — TPE learns from pruned zones
+- With 4 params (was 8), startup phase is 1 session instead of 2.5
 
 ### 3.1 Shared parameter
 
 | Parameter | Range | Source |
 |-----------|-------|--------|
-| init_score_alpha | [0.3, 0.8] float | Custom — residual prior strength (Guo 2017) |
+| init_score_alpha | [0.5, 0.8] float | Custom — tightened from [0.3, 0.8]: fANOVA + correlation show alpha<0.5 = worse |
 
-### 3.2 XGBoost
+### 3.2 XGBoost (4 tuned + 4 fixed)
 
 Source: [xgboost.readthedocs.io/parameter.html](https://xgboost.readthedocs.io/en/stable/parameter.html)
 
-| Parameter | Range | Type | Default | Fabricant guidance |
-|-----------|-------|------|---------|--------------------|
-| max_depth | [3, 8] | int | 6 | "increasing makes more complex, likely to overfit" |
-| eta | [1e-3, 0.1] | float, log | 0.3 | range [0,1] |
-| reg_lambda | [0.1, 20] | float, log | 1 | "increasing makes more conservative" |
-| reg_alpha | [1e-3, 1.0] | float, log | 0 | L1 regularization |
-| subsample | [0.5, 1.0] | float | 1 | "typically >= 0.5" |
-| colsample_bytree | [0.3, 1.0] | float | 1 | range (0,1] |
-| min_child_weight | [20, 200] | int | 1 | "larger = more conservative" |
+**Tuned (4 params):**
 
-Fixed: n_estimators=50000, early_stopping=200, objective=multi:softprob.
+| Parameter | Range | Type | Justification |
+|-----------|-------|------|---------------|
+| subsample | [0.6, 0.8] | float | fANOVA 27% #1, r=-0.864 |
+| colsample_bytree | [0.5, 1.0] | float | fANOVA 18% #2, r=-0.614 |
+| min_child_weight | [50, 200] | int | van Rijn 2018 #3, interaction with depth |
 
-### 3.3 CatBoost
+**Fixed (4 params):**
+
+| Parameter | Value | Justification |
+|-----------|-------|---------------|
+| max_depth | 8 | fANOVA 0%, all 6 trials converged to 8 |
+| eta | 0.05 | r=+0.055, coupled with early_stopping=200 |
+| reg_lambda | 4.0 | r=-0.112, Probst 2019: low tunability |
+| reg_alpha | 0.01 | fANOVA 11%, Probst 2019: quasi-nul |
+
+Also fixed: n_estimators=50000, early_stopping=200, objective=multi:softprob.
+
+### 3.3 CatBoost (4 tuned + 3 fixed)
 
 Source: [catboost.ai/docs/parameter-tuning](https://catboost.ai/docs/en/concepts/parameter-tuning)
 
-| Parameter | Range | Type | Default | Fabricant guidance |
-|-----------|-------|------|---------|--------------------|
-| depth | [4, 10] | int | 6 | "optimal 4-10, 6-10 recommended" |
-| learning_rate | [1e-3, 0.1] | float, log | auto/0.03 | — |
-| l2_leaf_reg | [0.1, 20] | float, log | 3 | "any positive, try different values" |
-| rsm | [0.2, 0.8] | float | 1 | MANDATORY >50 features |
-| random_strength | [0.5, 5.0] | float | 1 | "controls randomness for scoring" |
-| min_data_in_leaf | [20, 200] | int | 1 | Depthwise policy |
+**Tuned (4 params):**
 
-Fixed: iterations=50000, early_stopping=200, loss=MultiClass, task_type=CPU.
+| Parameter | Range | Type | Justification |
+|-----------|-------|------|---------------|
+| depth | [4, 10] | int | Oblivious trees: THE complexity param |
+| rsm | [0.2, 0.8] | float | MANDATORY >50 features, ~colsample |
+| min_data_in_leaf | [20, 200] | int | Interaction with depth |
+
+**Fixed (3 params):**
+
+| Parameter | Value | Justification |
+|-----------|-------|---------------|
+| learning_rate | 0.05 | Coupled with early_stopping (Probst 2019) |
+| l2_leaf_reg | 4.0 | Low tunability (Probst 2019) |
+| random_strength | 2.0 | CatBoost-specific, low priority |
+
+Also fixed: iterations=50000, early_stopping=200, loss=MultiClass, task_type=CPU.
 CatBoost rsm incompatible GPU. CatBoostPruningCallback incompatible GPU (issue #3550).
 
-### 3.4 LightGBM
+### 3.4 LightGBM (4 tuned + 4 fixed)
 
 Source: [lightgbm.readthedocs.io/Parameters-Tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html)
 
-| Parameter | Range | Type | Default | Fabricant guidance |
-|-----------|-------|------|---------|--------------------|
-| max_depth | [3, 8] | int | -1 | "limit to deal with over-fitting" |
-| num_leaves | [7, 63] | int | 31 | CLAMP: min(val, 2^max_depth-1) |
-| learning_rate | [1e-3, 0.1] | float, log | 0.1 | — |
-| reg_lambda | [0.1, 20] | float, log | 0 | "use for regularization" |
-| feature_fraction | [0.3, 1.0] | float | 1 | "use feature sub-sampling" |
-| bagging_fraction | [0.5, 1.0] | float | 1 | Requires bagging_freq=1 |
-| min_child_samples | [20, 200] | int | 20 | — |
+**Tuned (4 params):**
 
-Fixed: n_estimators=50000, early_stopping=200, objective=multiclass,
+| Parameter | Range | Type | Justification |
+|-----------|-------|------|---------------|
+| num_leaves | [15, 255] | int | Leaf-wise: THE complexity param (clamped 2^depth-1) |
+| feature_fraction | [0.3, 1.0] | float | ~colsample_bytree (van Rijn 2018 #5) |
+| bagging_fraction | [0.5, 1.0] | float | ~subsample (van Rijn 2018 #2) |
+
+**Fixed (4 params):**
+
+| Parameter | Value | Justification |
+|-----------|-------|---------------|
+| max_depth | 8 | Safety cap (XGBoost converged to 8) |
+| learning_rate | 0.05 | Coupled with early_stopping (Probst 2019) |
+| reg_lambda | 4.0 | Low tunability (Probst 2019, van Rijn 2018) |
+| min_child_samples | 100 | Moderate importance, fixing reduces dim |
+
+Also fixed: n_estimators=50000, early_stopping=200, objective=multiclass,
 bagging_freq=1 (must be >0 to activate bagging_fraction).
 
 ## 4. Optuna Kernel Architecture (Steps 1-3)
@@ -110,7 +151,7 @@ bagging_freq=1 (must be >0 to activate bagging_fraction).
 ### 4.1 Infrastructure
 
 - **Storage:** SQLite (`/kaggle/working/optuna_{model}.db`) for resume
-- **Sampler:** TPESampler(seed=42) — 10 startup trials (exploration), then Bayesian
+- **Sampler:** TPESampler(seed=42, n_startup_trials=4) — 4 random then Bayesian, uses pruned trials
 - **Pruning:** `optuna_integration.XGBoostPruningCallback` / CatBoost / LightGBM
 - **Metric:** minimize `multi_logloss` (eval metric on valid set)
 - **Timeout:** 39600s (11h — 1h margin for save + logs)
@@ -184,7 +225,7 @@ init_scores computed ONCE before the study, alpha applied per trial.
 | Gate | Condition | Rationale |
 |------|-----------|-----------|
 | G1 | best_logloss < 0.9766 (Elo baseline) | Model must beat baseline |
-| G2 | n_trials_completed >= 10 | Minimum benchmark data |
+| G2 | n_trials_completed >= 5 AND n_trials_total >= 15 | Bergstra 2012: 4 params × 5x = 20 trials. Pruned trials cover exploration. |
 | G3 | all params within fabricant ranges | No out-of-bounds |
 | G4 | trial 1 time logged | Benchmark for budget planning |
 

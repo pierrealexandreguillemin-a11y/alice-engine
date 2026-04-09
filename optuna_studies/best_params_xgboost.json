@@ -1,0 +1,19 @@
+{
+  "model": "xgboost",
+  "best_logloss": 0.5115836867420857,
+  "best_params": {
+    "init_score_alpha": 0.6723304497253678,
+    "max_depth": 8,
+    "eta": 0.04608519033439825,
+    "reg_lambda": 3.236855345540769,
+    "reg_alpha": 0.010680638283174629,
+    "subsample": 0.6975337768549552,
+    "colsample_bytree": 0.6308998046605641,
+    "min_child_weight": 132
+  },
+  "n_trials_completed": 6,
+  "n_trials_pruned": 16,
+  "total_time_s": 40564.6,
+  "gate_pass": true,
+  "elo_baseline_logloss": 0.9766
+}

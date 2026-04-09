@@ -64,12 +64,24 @@ def create_xgboost_objective_v9(
     init_valid: np.ndarray,
     config: dict,
 ) -> Any:
-    """Create XGBoost multiclass Optuna objective with residual learning."""
+    """Create XGBoost multiclass Optuna objective with residual learning.
+
+    Search space: 4 params (reduced from 8 after fANOVA + literature audit).
+    Fixed: max_depth=8, eta=0.05, reg_lambda=4.0, reg_alpha=0.01
+    Tuned: init_score_alpha, subsample, colsample_bytree, min_child_weight
+
+    Literature:
+    - Probst et al. 2019 (JMLR): reg_alpha/reg_lambda = low tunability
+    - van Rijn & Hutter 2018 (KDD): subsample #2, colsample #5
+    - fANOVA on 23 XGBoost trials: max_depth=0%, subsample=27%, colsample=18%
+    - Bergstra & Bengio 2012: 4 params × 5-10x = 20-40 trials sufficient
+    """
     import xgboost as xgb
 
     space = config.get("optuna", {}).get("xgboost_search_space", {})
     shared = config.get("optuna", {}).get("shared", {})
     alpha_cfg = shared.get("init_score_alpha", {})
+    fixed = config.get("optuna", {}).get("xgboost_fixed", {})
 
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dvalid = xgb.DMatrix(X_valid, label=y_valid)
@@ -77,20 +89,27 @@ def create_xgboost_objective_v9(
     def objective(trial: Any) -> float:
         alpha = trial.suggest_float(
             "init_score_alpha",
-            alpha_cfg.get("low", 0.3),
+            alpha_cfg.get("low", 0.5),
             alpha_cfg.get("high", 0.8),
         )
         params = {
             "objective": "multi:softprob",
             "num_class": 3,
             "eval_metric": "mlogloss",
-            "max_depth": _get_search_param(trial, "max_depth", space, 3, 8, "int"),
-            "eta": _get_search_param(trial, "eta", space, 0.001, 0.1, "float", log=True),
-            "lambda": _get_search_param(trial, "reg_lambda", space, 0.1, 20.0, log=True),
-            "alpha": _get_search_param(trial, "reg_alpha", space, 0.001, 1.0, log=True),
-            "subsample": _get_search_param(trial, "subsample", space, 0.5, 1.0),
-            "colsample_bytree": _get_search_param(trial, "colsample_bytree", space, 0.3, 1.0),
-            "min_child_weight": _get_search_param(trial, "min_child_weight", space, 20, 200, "int"),
+            # FIXED — fANOVA 0% + all 6 trials = 8 (Probst 2019: #4 importance)
+            "max_depth": fixed.get("max_depth", 8),
+            # FIXED — r=+0.055, coupled with early_stopping (Probst 2019: #1 but moot with ES)
+            "eta": fixed.get("eta", 0.05),
+            # FIXED — r=-0.112, fANOVA 17.9% but literature LOW (Probst 2019)
+            "lambda": fixed.get("reg_lambda", 4.0),
+            # FIXED — fANOVA 10.7%, literature quasi-nul (Probst 2019, van Rijn 2018)
+            "alpha": fixed.get("reg_alpha", 0.01),
+            # TUNED — fANOVA 27% #1, r=-0.864 #1 (van Rijn 2018: #2)
+            "subsample": _get_search_param(trial, "subsample", space, 0.6, 0.8),
+            # TUNED — fANOVA 18.4% #2, r=-0.614 (van Rijn 2018: #5)
+            "colsample_bytree": _get_search_param(trial, "colsample_bytree", space, 0.5, 1.0),
+            # TUNED — fANOVA 7.6% #6 but van Rijn 2018 #3 + interaction with depth
+            "min_child_weight": _get_search_param(trial, "min_child_weight", space, 50, 200, "int"),
             "tree_method": "hist",
             "seed": 42,
             "nthread": int(os.environ.get("ALICE_NTHREAD", "4")),
@@ -133,28 +152,46 @@ def create_catboost_objective_v9(
     init_valid: np.ndarray,
     config: dict,
 ) -> Any:
-    """Create CatBoost multiclass Optuna objective with residual learning."""
+    """Create CatBoost multiclass Optuna objective with residual learning.
+
+    Search space: 4 params (literature-driven, no empirical data yet).
+    Fixed: learning_rate=0.05, l2_leaf_reg=4.0, random_strength=2.0
+    Tuned: init_score_alpha, depth, rsm, min_data_in_leaf
+
+    Literature:
+    - Probst et al. 2019: learning_rate + n_estimators = #1-2 (moot with ES)
+    - CatBoost oblivious trees: depth IS the primary complexity param (keep)
+    - rsm MANDATORY >50 features (v10 finding: 11/177 without rsm)
+    - l2_leaf_reg, random_strength: low tunability (Probst 2019)
+    """
     from catboost import CatBoostClassifier, Pool
 
     space = config.get("optuna", {}).get("catboost_search_space", {})
     shared = config.get("optuna", {}).get("shared", {})
     alpha_cfg = shared.get("init_score_alpha", {})
+    fixed = config.get("optuna", {}).get("catboost_fixed", {})
 
     def objective(trial: Any) -> float:
         alpha = trial.suggest_float(
             "init_score_alpha",
-            alpha_cfg.get("low", 0.3),
+            alpha_cfg.get("low", 0.5),
             alpha_cfg.get("high", 0.8),
         )
         params = {
             "loss_function": "MultiClass",
             "eval_metric": "MultiClass",
             "iterations": 50000,
+            # TUNED — oblivious trees: depth = THE complexity param
             "depth": _get_search_param(trial, "depth", space, 4, 10, "int"),
-            "learning_rate": _get_search_param(trial, "learning_rate", space, 0.001, 0.1, log=True),
-            "l2_leaf_reg": _get_search_param(trial, "l2_leaf_reg", space, 0.1, 20.0, log=True),
+            # FIXED — coupled with early_stopping (Probst 2019: #1 but moot with ES)
+            "learning_rate": fixed.get("learning_rate", 0.05),
+            # FIXED — low tunability (Probst 2019), median of reasonable range
+            "l2_leaf_reg": fixed.get("l2_leaf_reg", 4.0),
+            # TUNED — MANDATORY >50 features, equivalent to colsample_bytree
             "rsm": _get_search_param(trial, "rsm", space, 0.2, 0.8),
-            "random_strength": _get_search_param(trial, "random_strength", space, 0.5, 5.0),
+            # FIXED — CatBoost-specific, low priority per literature
+            "random_strength": fixed.get("random_strength", 2.0),
+            # TUNED — interaction with depth for leaf-level regularization
             "min_data_in_leaf": _get_search_param(trial, "min_data_in_leaf", space, 20, 200, "int"),
             "task_type": "CPU",
             "random_seed": 42,
@@ -165,8 +202,15 @@ def create_catboost_objective_v9(
         train_pool = Pool(X_train, y_train, baseline=(init_train * alpha))
         valid_pool = Pool(X_valid, y_valid, baseline=(init_valid * alpha))
 
-        model = CatBoostClassifier(**params)
-        model.fit(train_pool, eval_set=valid_pool)
+        try:
+            from optuna_integration import CatBoostPruningCallback
+
+            pruning_cb = CatBoostPruningCallback(trial, metric="MultiClass")
+            model = CatBoostClassifier(**params)
+            model.fit(train_pool, eval_set=valid_pool, callbacks=[pruning_cb])
+        except ImportError:
+            model = CatBoostClassifier(**params)
+            model.fit(train_pool, eval_set=valid_pool)
 
         # Discover metric key (unverified for multiclass eval_metric)
         val_scores = model.get_best_score().get("validation", {})
@@ -192,21 +236,35 @@ def create_lightgbm_objective_v9(
     init_valid: np.ndarray,
     config: dict,
 ) -> Any:
-    """Create LightGBM multiclass Optuna objective with residual learning."""
+    """Create LightGBM multiclass Optuna objective with residual learning.
+
+    Search space: 4 params (literature-driven, no empirical data yet).
+    Fixed: max_depth=8, learning_rate=0.05, reg_lambda=4.0, min_child_samples=100
+    Tuned: init_score_alpha, num_leaves, feature_fraction, bagging_fraction
+
+    Literature:
+    - LightGBM is leaf-wise: num_leaves IS the primary complexity param
+    - Probst 2019: learning_rate #1 (moot with ES), reg_lambda LOW
+    - van Rijn 2018: subsample #2 → bagging_fraction, colsample → feature_fraction
+    - max_depth=8 as safety cap (clamps num_leaves to max 255)
+    """
     import lightgbm as lgb
 
     space = config.get("optuna", {}).get("lightgbm_search_space", {})
     shared = config.get("optuna", {}).get("shared", {})
     alpha_cfg = shared.get("init_score_alpha", {})
+    fixed = config.get("optuna", {}).get("lightgbm_fixed", {})
 
     def objective(trial: Any) -> float:
         alpha = trial.suggest_float(
             "init_score_alpha",
-            alpha_cfg.get("low", 0.3),
+            alpha_cfg.get("low", 0.5),
             alpha_cfg.get("high", 0.8),
         )
-        max_depth = _get_search_param(trial, "max_depth", space, 3, 8, "int")
-        raw_leaves = _get_search_param(trial, "num_leaves", space, 7, 63, "int")
+        # FIXED — safety cap, XGBoost converged to 8 (transferable heuristic)
+        max_depth = fixed.get("max_depth", 8)
+        # TUNED — leaf-wise = THE complexity param (clamp to 2^depth-1)
+        raw_leaves = _get_search_param(trial, "num_leaves", space, 15, 255, "int")
         num_leaves = min(raw_leaves, 2**max_depth - 1)
 
         params = {
@@ -215,14 +273,17 @@ def create_lightgbm_objective_v9(
             "metric": "multi_logloss",
             "max_depth": max_depth,
             "num_leaves": num_leaves,
-            "learning_rate": _get_search_param(trial, "learning_rate", space, 0.001, 0.1, log=True),
-            "reg_lambda": _get_search_param(trial, "reg_lambda", space, 0.1, 20.0, log=True),
+            # FIXED — coupled with early_stopping (Probst 2019: #1 but moot with ES)
+            "learning_rate": fixed.get("learning_rate", 0.05),
+            # FIXED — low tunability (Probst 2019, van Rijn 2018)
+            "reg_lambda": fixed.get("reg_lambda", 4.0),
+            # TUNED — equivalent colsample_bytree (van Rijn 2018: #5, fANOVA XGB: 18.4%)
             "feature_fraction": _get_search_param(trial, "feature_fraction", space, 0.3, 1.0),
+            # TUNED — equivalent subsample (van Rijn 2018: #2, fANOVA XGB: 27%)
             "bagging_fraction": _get_search_param(trial, "bagging_fraction", space, 0.5, 1.0),
             "bagging_freq": 1,
-            "min_child_samples": _get_search_param(
-                trial, "min_child_samples", space, 20, 200, "int"
-            ),
+            # FIXED — moderate importance but fixing reduces search space
+            "min_child_samples": fixed.get("min_child_samples", 100),
             "seed": 42,
             "verbose": -1,
             "n_jobs": int(os.environ.get("ALICE_NTHREAD", "4")),
@@ -348,12 +409,19 @@ def main() -> None:
         grace_period=grace_period,
         failed_trial_callback=failed_trial_cb,
     )
+    # TPESampler with reduced startup: n_startup_trials=4 (= n_params).
+    # GPSampler was considered but INCOMPATIBLE with MedianPruner —
+    # GP ignores pruned trials (no objective value), causing it to
+    # re-propose params in pruned zones (Optuna GitHub #5481, #6057).
+    # TPE uses pruned trials via consider_pruned_trials=True (default),
+    # making it the correct choice for pruning-heavy studies.
+    sampler = optuna.samplers.TPESampler(seed=42, n_startup_trials=4)
     study = optuna.create_study(
         study_name=f"alice_{model_name}_v9",
         storage=storage,
         load_if_exists=True,
         direction="minimize",
-        sampler=optuna.samplers.TPESampler(seed=42),
+        sampler=sampler,
         pruner=pruner,
     )
     optuna_config = config.get("optuna", {})
@@ -373,6 +441,17 @@ def main() -> None:
     logger.info("Optuna complete: %d trials in %.0fs", len(study.trials), elapsed)
     logger.info("Best logloss: %.5f", study.best_value)
     logger.info("Best params: %s", study.best_params)
+
+    # fANOVA parameter importance (post-hoc analysis for diagnostics)
+    n_complete = len([t for t in study.trials if t.state.name == "COMPLETE"])
+    if n_complete >= 4:
+        try:
+            importances = optuna.importance.get_param_importances(study)
+            logger.info("=== fANOVA Parameter Importances ===")
+            for name, val in importances.items():
+                logger.info("  %s: %.1f%%", name, val * 100)
+        except Exception:
+            logger.warning("fANOVA failed (not enough trials or mixed params)")
 
     gate_pass = study.best_value < ELO_BASELINE_LOGLOSS
     logger.info(
