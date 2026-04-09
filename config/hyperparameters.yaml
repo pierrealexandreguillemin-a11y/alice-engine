@@ -214,7 +214,7 @@ stacking:
 # =============================================================================
 optuna:
   n_trials: 100                 # Target trials (timeout may cut short)
-  timeout: 39600                # 11h (1h margin on 12h Kaggle)
+  timeout: 36000                # 10h — 2h margin for post-processing + save
 
   # V9 SEARCH SPACES — reduced from 7-8 to 4 params per model (2026-04-08)
   #

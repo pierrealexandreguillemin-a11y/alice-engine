@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 SUBSAMPLE = 200_000
 SEED = 42
 ELO_BASELINE = 0.9766
+MAX_RUNTIME_S = 36000  # 10h — 2h margin for post-processing on 12h Kaggle
+_GLOBAL_START: float = 0  # Set in main(), checked in each grid loop
 
 # Grid — 4 params, same as Optuna V9 reduced search space
 SHARED_GRID = {
@@ -144,6 +146,11 @@ def run_xgboost_grid(
     results = []
 
     for i, combo in enumerate(combos):
+        if time.time() - _GLOBAL_START > MAX_RUNTIME_S:
+            logger.info(
+                "TIME LIMIT %ds reached at combo %d/%d — stopping", MAX_RUNTIME_S, i, len(combos)
+            )
+            break
         alpha = combo["init_score_alpha"]
         params = {**XGBOOST_FIXED}
         params["subsample"] = combo["subsample"]
@@ -206,6 +213,11 @@ def run_catboost_grid(
 
     results = []
     for i, combo in enumerate(combos):
+        if time.time() - _GLOBAL_START > MAX_RUNTIME_S:
+            logger.info(
+                "TIME LIMIT %ds reached at combo %d/%d — stopping", MAX_RUNTIME_S, i, len(combos)
+            )
+            break
         alpha = combo["init_score_alpha"]
         params = {**CATBOOST_FIXED}
         params["depth"] = combo["depth"]
@@ -266,6 +278,11 @@ def run_lightgbm_grid(
 
     results = []
     for i, combo in enumerate(combos):
+        if time.time() - _GLOBAL_START > MAX_RUNTIME_S:
+            logger.info(
+                "TIME LIMIT %ds reached at combo %d/%d — stopping", MAX_RUNTIME_S, i, len(combos)
+            )
+            break
         alpha = combo["init_score_alpha"]
         num_leaves = min(combo["num_leaves"], 2 ** LIGHTGBM_FIXED["max_depth"] - 1)
         params = {**LIGHTGBM_FIXED, "num_leaves": num_leaves}
@@ -324,6 +341,9 @@ def main() -> None:
     from scripts.kaggle_trainers import prepare_features
 
     _setup_kaggle_imports()
+
+    global _GLOBAL_START  # noqa: PLW0603
+    _GLOBAL_START = time.time()
 
     model_name = os.environ.get("ALICE_MODEL", "xgboost")
     out_dir = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))

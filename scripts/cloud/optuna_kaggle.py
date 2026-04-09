@@ -425,7 +425,9 @@ def main() -> None:
     )
     optuna_config = config.get("optuna", {})
     n_trials = optuna_config.get("n_trials", 100)
-    timeout = optuna_config.get("timeout", 39600)
+    # 10h (not 11h) — leave 2h margin for post-processing (fANOVA, JSON, CSV)
+    # and Kaggle session cleanup. 12h limit - 10h training - 2h margin.
+    timeout = optuna_config.get("timeout", 36000)
 
     logger.info(
         "Starting Optuna: model=%s, n_trials=%d, timeout=%ds",
