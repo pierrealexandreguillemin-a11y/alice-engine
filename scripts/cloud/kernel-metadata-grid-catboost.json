@@ -1,7 +1,7 @@
 {
-  "id": "pguillemin/alice-grid-lightgbm-v9",
-  "title": "alice-grid-lightgbm-v9",
-  "code_file": "grid_lightgbm_entry.py",
+  "id": "pguillemin/alice-grid-catboost-v9",
+  "title": "alice-grid-catboost-v9",
+  "code_file": "grid_catboost_entry.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
