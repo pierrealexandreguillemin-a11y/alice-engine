@@ -50,7 +50,7 @@ Replace the entire `optuna:` section (lines 215-254) with:
 ```yaml
 optuna:
   n_trials: 100                 # Target trials (timeout may cut short)
-  timeout: 39600                # 11h (1h margin on 12h Kaggle)
+  timeout: 36000                # 11h (1h margin on 12h Kaggle)
 
   # V9 MULTICLASS SEARCH SPACES (audited against fabricant docs 2026-04-07)
   # Source: docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md §3
@@ -543,7 +543,7 @@ def main() -> None:
     )
     optuna_config = config.get("optuna", {})
     n_trials = optuna_config.get("n_trials", 100)
-    timeout = optuna_config.get("timeout", 39600)
+    timeout = optuna_config.get("timeout", 36000)
 
     logger.info("Starting Optuna: model=%s, n_trials=%d, timeout=%ds", model_name, n_trials, timeout)
     t0 = time.time()

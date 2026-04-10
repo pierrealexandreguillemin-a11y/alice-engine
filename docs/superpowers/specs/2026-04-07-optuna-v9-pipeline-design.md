@@ -48,103 +48,161 @@ STACKING + ISO (local)
   Step 11: ISO reports                 [GATE 11: full ISO pipeline]
 ```
 
-## 3. Search Spaces (reduced 8→4 params, 2026-04-08)
+## 3. Search Spaces (revised 2026-04-10 with empirical data)
 
-### 3.0 Methodology (added 2026-04-08)
+### 3.0 Methodology
 
-Original spec had 7-8 params per model — copied from tutorials without
-budget analysis. Reduced to 4 params per model based on:
+**v1 (2026-04-08):** Reduced 7-8 → 4 params per model based on fANOVA,
+Probst 2019, van Rijn 2018, Bergstra 2012, and budget constraints.
 
-1. **fANOVA** on 23 XGBoost trials: max_depth=0%, subsample=27%,
-   colsample=18%, init_alpha=18%, reg_lambda=18%, reg_alpha=11%
-2. **Probst et al. 2019** (JMLR): reg_alpha/reg_lambda = low tunability
-3. **van Rijn & Hutter 2018** (KDD): learning_rate #1 (moot with ES),
-   subsample #2, min_child_weight #3
-4. **Bergstra & Bengio 2012**: 4 params × 5-10x = 20-40 trials sufficient
-5. **Budget**: 4 trials/12h session → 8 params required 80-160 trials (impossible)
+**v2 (2026-04-10):** Revised after empirical results from 5 kernels
+(3 Optuna + 2 Grid) + WebSearch against fabricant docs. Key corrections:
 
-Sampler kept as **TPESampler** with reduced startup:
-- GPSampler was evaluated but INCOMPATIBLE with MedianPruner —
-  GP ignores pruned trials, re-proposes in bad zones (Optuna #5481, #6057)
-- TPESampler(n_startup_trials=4): 4 = n_params, Bayesian from trial 5
-- consider_pruned_trials=True (default) — TPE learns from pruned zones
-- With 4 params (was 8), startup phase is 1 session instead of 2.5
+1. **Probst 2019 scope:** Study covers glmnet, rpart, kknn, svm, ranger,
+   XGBoost ONLY. CatBoost and LightGBM NOT studied. All "Probst 2019"
+   citations for CatBoost/LightGBM params are INVALID and removed.
+   Source: [JMLR 20(2019)1-32](https://www.jmlr.org/papers/v20/18-444.html)
+
+2. **CatBoost min_data_in_leaf:** ZERO effect on oblivious trees (confirmed
+   empirically: grid search 3 values → identical logloss at 6th decimal).
+   Absent from official CatBoost Optuna tutorial. Replaced by l2_leaf_reg,
+   which is listed as primary tuning parameter in official docs.
+   Source: [catboost.ai/parameter-tuning](https://catboost.ai/docs/en/concepts/parameter-tuning),
+   [CatBoost Optuna tutorial](https://github.com/catboost/tutorials/blob/master/hyperparameters_tuning/hyperparameters_tuning_using_optuna_and_hyperopt.ipynb)
+
+3. **LightGBM bagging_fraction:** 1.4% fANOVA importance (quasi-nul).
+   Replaced by min_child_samples, qualified "very important for leaf-wise"
+   by official LightGBM docs.
+   Source: [lightgbm.readthedocs.io/Parameters-Tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html)
+
+4. **LightGBM alpha range:** Best trial alpha=0.504 at boundary [0.5, 0.8].
+   Extended to [0.4, 0.8] for LightGBM only. XGBoost data confirms alpha<0.5
+   is worse for XGBoost (trial 6: alpha=0.33 → 0.5179 vs best 0.5092),
+   but no LightGBM data exists below 0.5.
+
+5. **fANOVA results (2026-04-10):**
+   - XGBoost v6 (13 trials, 4 params): subsample=36.6%, mcw=25.8%,
+     colsample=21.9%, alpha=15.7% — balanced, all params contribute
+   - LightGBM (12 trials, 4 params): alpha=92.6%, feature_fraction=5.2%,
+     bagging_fraction=1.4%, num_leaves=0.8% — alpha dominates
+   - CatBoost (3 trials, 4 params): unreliable, insufficient data
+
+Sampler: **TPESampler(n_startup_trials=4, seed=42)**
+Pruner: **NopPruner** (eta fixed at 0.05, paysage plat confirmé delta=0.009)
 
 ### 3.1 Shared parameter
 
-| Parameter | Range | Source |
-|-----------|-------|--------|
-| init_score_alpha | [0.5, 0.8] float | Custom — tightened from [0.3, 0.8]: fANOVA + correlation show alpha<0.5 = worse |
+| Parameter | Range | Per-model override | Source |
+|-----------|-------|--------------------|--------|
+| init_score_alpha | [0.5, 0.8] | LightGBM: [0.4, 0.8] | XGB: top5 center 0.58-0.62. LGB: best=0.504 at boundary |
 
-### 3.2 XGBoost (4 tuned + 4 fixed)
+### 3.2 XGBoost (4 tuned + 4 fixed) — VALIDATED
 
 Source: [xgboost.readthedocs.io/parameter.html](https://xgboost.readthedocs.io/en/stable/parameter.html)
 
+**Status:** PASS G1-G4. 19 completed trials + 88 grid combos. High confidence.
+
 **Tuned (4 params):**
 
-| Parameter | Range | Type | Justification |
-|-----------|-------|------|---------------|
-| subsample | [0.6, 0.8] | float | fANOVA 27% #1, r=-0.864 |
-| colsample_bytree | [0.5, 1.0] | float | fANOVA 18% #2, r=-0.614 |
-| min_child_weight | [50, 200] | int | van Rijn 2018 #3, interaction with depth |
+| Parameter | Range | Type | fANOVA v6 | Grid trend | Optuna best |
+|-----------|-------|------|-----------|------------|-------------|
+| subsample | [0.6, 0.8] | float | 36.6% #1 | 0.8>0.7>0.6 | 0.747 (center) |
+| colsample_bytree | [0.5, 1.0] | float | 21.9% #3 | 0.9>0.7>0.5 | 0.870 (center) |
+| min_child_weight | [50, 200] | int | 25.8% #2 | 50>100>200 | 67 (center) |
 
 **Fixed (4 params):**
 
 | Parameter | Value | Justification |
 |-----------|-------|---------------|
-| max_depth | 8 | fANOVA 0%, all 6 trials converged to 8 |
-| eta | 0.05 | r=+0.055, coupled with early_stopping=200 |
-| reg_lambda | 4.0 | r=-0.112, Probst 2019: low tunability |
-| reg_alpha | 0.01 | fANOVA 11%, Probst 2019: quasi-nul |
+| max_depth | 8 | fANOVA 0% (v3-v5), 13 v6 trials all use 8 |
+| eta | 0.05 | Coupled with early_stopping=200 |
+| reg_lambda | 4.0 | Probst 2019 (valid for XGBoost): low tunability |
+| reg_alpha | 0.01 | Probst 2019 (valid for XGBoost): quasi-nul |
 
 Also fixed: n_estimators=50000, early_stopping=200, objective=multi:softprob.
 
-### 3.3 CatBoost (4 tuned + 3 fixed)
+### 3.3 CatBoost (4 tuned + 3 fixed) — REVISED 2026-04-10
 
 Source: [catboost.ai/docs/parameter-tuning](https://catboost.ai/docs/en/concepts/parameter-tuning)
 
+**Status:** FAIL G2 (3 completed < 5 required). Requires fresh study with corrected space.
+
 **Tuned (4 params):**
 
-| Parameter | Range | Type | Justification |
-|-----------|-------|------|---------------|
-| depth | [4, 10] | int | Oblivious trees: THE complexity param |
-| rsm | [0.2, 0.8] | float | MANDATORY >50 features, ~colsample |
-| min_data_in_leaf | [20, 200] | int | Interaction with depth |
+| Parameter | Range | Type | Justification | Empirical |
+|-----------|-------|------|---------------|-----------|
+| depth | [4, 10] | int | Official doc: "optimal 4-10" | Grid: 6>4>8>10. Optuna(3): 8 best (unreliable) |
+| rsm | [0.2, 0.7] | float | MANDATORY >50 features | Grid mean: 0.7≈0.5>0.3 |
+| l2_leaf_reg | [1, 15] | float | **NEW.** Official: "first params to tune" alongside depth. [1,10] tutorial range, extended to 15 for depth≥8 (more leaves→more regularization needed). V8 used 10 at depth=4 | No empirical data yet |
+
+~~min_data_in_leaf~~ **REMOVED:** zero effect on oblivious trees (grid: 3 values, identical logloss). Absent from official CatBoost Optuna tutorial.
 
 **Fixed (3 params):**
 
 | Parameter | Value | Justification |
 |-----------|-------|---------------|
-| learning_rate | 0.05 | Coupled with early_stopping (Probst 2019) |
-| l2_leaf_reg | 4.0 | Low tunability (Probst 2019) |
+| learning_rate | 0.05 | Coupled with early_stopping=200 |
 | random_strength | 2.0 | CatBoost-specific, low priority |
+| min_data_in_leaf | 200 | No effect on oblivious trees, kept at V8 default |
 
 Also fixed: iterations=50000, early_stopping=200, loss=MultiClass, task_type=CPU.
 CatBoost rsm incompatible GPU. CatBoostPruningCallback incompatible GPU (issue #3550).
 
-### 3.4 LightGBM (4 tuned + 4 fixed)
+### 3.4 LightGBM (4 tuned + 4 fixed) — REVISED 2026-04-10
 
 Source: [lightgbm.readthedocs.io/Parameters-Tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html)
 
+**Status:** FAIL G2 (12 total < 15 required). Requires fresh study with corrected space.
+
 **Tuned (4 params):**
 
-| Parameter | Range | Type | Justification |
-|-----------|-------|------|---------------|
-| num_leaves | [15, 255] | int | Leaf-wise: THE complexity param (clamped 2^depth-1) |
-| feature_fraction | [0.3, 1.0] | float | ~colsample_bytree (van Rijn 2018 #5) |
-| bagging_fraction | [0.5, 1.0] | float | ~subsample (van Rijn 2018 #2) |
+| Parameter | Range | Type | Justification | Empirical |
+|-----------|-------|------|---------------|-----------|
+| num_leaves | [15, 255] | int | Leaf-wise: THE complexity param (clamped 2^depth-1) | Top3: 15, 16, 24. Large values (>100) worse |
+| feature_fraction | [0.3, 1.0] | float | ~colsample_bytree (van Rijn 2018 #5) | fANOVA 5.2%, best=0.683 |
+| min_child_samples | [50, 500] | int | **NEW.** Official doc: "very important to prevent over-fitting in leaf-wise tree". "Hundreds or thousands for large dataset" (1.1M rows) | No empirical data yet (was fixed at 100) |
+
+~~bagging_fraction~~ **REMOVED:** 1.4% fANOVA importance. Kept as fixed at 0.8 (near-optimal from Optuna best=0.801).
 
 **Fixed (4 params):**
 
 | Parameter | Value | Justification |
 |-----------|-------|---------------|
-| max_depth | 8 | Safety cap (XGBoost converged to 8) |
-| learning_rate | 0.05 | Coupled with early_stopping (Probst 2019) |
-| reg_lambda | 4.0 | Low tunability (Probst 2019, van Rijn 2018) |
-| min_child_samples | 100 | Moderate importance, fixing reduces dim |
+| max_depth | 8 | Safety cap for leaf-wise growth |
+| learning_rate | 0.05 | Coupled with early_stopping=200 |
+| reg_lambda | 4.0 | van Rijn 2018: moderate importance |
+| bagging_fraction | 0.8 | 1.4% fANOVA, Optuna best=0.801, fixed near-optimal |
 
 Also fixed: n_estimators=50000, early_stopping=200, objective=multiclass,
 bagging_freq=1 (must be >0 to activate bagging_fraction).
+
+### 3.5 Empirical Results Summary (2026-04-10)
+
+**Optuna results (full data, validation set 70647 rows):**
+
+| Model | Trials complete | Best logloss | vs Elo 0.9766 | G1 | G2 |
+|-------|----------------|-------------|---------------|----|----|
+| XGBoost v6 | 19 (36 total) | 0.5092 | -47.9% | PASS | PASS |
+| CatBoost v2 | 3 (4 total, timeout) | 0.5261 | -46.1% | PASS | FAIL |
+| LightGBM v5 | 12 (12 total) | 0.5325 | -45.5% | PASS | FAIL |
+
+**Grid search results (200K subsample, validation set 70647 rows):**
+
+| Model | Combos done | Best logloss | vs V8 baseline |
+|-------|-------------|-------------|----------------|
+| XGBoost v2 | 88/109 | 0.5545 | -1.1% |
+| CatBoost v1 | 32/145 (12 distinct) | 0.5639 | -0.4% |
+
+Grid kernels had ERROR status due to `json.dumps(numpy.int64)` bug — CSV saved
+correctly via incremental save. Fix: `int()` cast in grid_search.py:441.
+
+**Key findings:**
+- alpha optimal ~0.5-0.6 across all 3 models (V8 used 0.7) → less Elo weight
+  = more feature discovery for ALICE CE
+- XGBoost colsample_bytree optimal 0.85-0.9 (V8 used 0.5) → biggest lever
+- CatBoost min_data_in_leaf has ZERO effect (oblivious trees)
+- LightGBM paysage dominé par alpha (92.6% fANOVA), other params marginal
+- Grid + Optuna convergent for XGBoost (high confidence)
 
 ## 4. Optuna Kernel Architecture (Steps 1-3)
 
@@ -155,7 +213,7 @@ bagging_freq=1 (must be >0 to activate bagging_fraction).
 - **Pruner:** NopPruner (disabled) — eta fixed at 0.05, no catastrophic trials possible
 - **Pruning:** `optuna_integration.XGBoostPruningCallback` / CatBoost / LightGBM
 - **Metric:** minimize `multi_logloss` (eval metric on valid set)
-- **Timeout:** 39600s (11h — 1h margin for save + logs)
+- **Timeout:** 36000s (10h — 2h margin for post-processing + save)
 - **n_trials:** 100 target, timeout decides actual count
 
 ### 4.2 Packages (Optuna >= 4.0 breaking change)

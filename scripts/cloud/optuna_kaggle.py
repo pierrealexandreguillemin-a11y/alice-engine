@@ -154,15 +154,20 @@ def create_catboost_objective_v9(
 ) -> Any:
     """Create CatBoost multiclass Optuna objective with residual learning.
 
-    Search space: 4 params (literature-driven, no empirical data yet).
-    Fixed: learning_rate=0.05, l2_leaf_reg=4.0, random_strength=2.0
-    Tuned: init_score_alpha, depth, rsm, min_data_in_leaf
+    Search space: 4 params (revised 2026-04-10 with empirical data).
+    Fixed: learning_rate=0.05, random_strength=2.0, min_data_in_leaf=200
+    Tuned: init_score_alpha, depth, rsm, l2_leaf_reg
 
-    Literature:
-    - Probst et al. 2019: learning_rate + n_estimators = #1-2 (moot with ES)
-    - CatBoost oblivious trees: depth IS the primary complexity param (keep)
-    - rsm MANDATORY >50 features (v10 finding: 11/177 without rsm)
-    - l2_leaf_reg, random_strength: low tunability (Probst 2019)
+    Changes from v1 (2026-04-10):
+    - min_data_in_leaf REMOVED from search: ZERO effect on oblivious trees
+      (grid search: 3 values → identical logloss). Absent from official tutorial.
+    - l2_leaf_reg ADDED to search: official doc says "first params to tune"
+      alongside depth. [1,15] = tutorial [1,10] + headroom for depth≥8.
+    - Probst 2019 citations REMOVED: study covers XGBoost only, not CatBoost.
+
+    Sources:
+    - CatBoost tuning: https://catboost.ai/docs/en/concepts/parameter-tuning
+    - CatBoost Optuna tutorial: github.com/catboost/tutorials (l2_leaf_reg tuned, min_data_in_leaf absent)
     """
     from catboost import CatBoostClassifier, Pool
 
@@ -181,18 +186,19 @@ def create_catboost_objective_v9(
             "loss_function": "MultiClass",
             "eval_metric": "MultiClass",
             "iterations": 50000,
-            # TUNED — oblivious trees: depth = THE complexity param
+            # TUNED — oblivious trees: depth = THE complexity param (official: "optimal 4-10")
             "depth": _get_search_param(trial, "depth", space, 4, 10, "int"),
-            # FIXED — coupled with early_stopping (Probst 2019: #1 but moot with ES)
+            # FIXED — coupled with early_stopping
             "learning_rate": fixed.get("learning_rate", 0.05),
-            # FIXED — low tunability (Probst 2019), median of reasonable range
-            "l2_leaf_reg": fixed.get("l2_leaf_reg", 4.0),
+            # TUNED — official: "first params to tune" alongside depth.
+            # [1,15]: tutorial [1,10] extended for depth≥8 (more leaves→more regularization)
+            "l2_leaf_reg": _get_search_param(trial, "l2_leaf_reg", space, 1.0, 15.0),
             # TUNED — MANDATORY >50 features, equivalent to colsample_bytree
-            "rsm": _get_search_param(trial, "rsm", space, 0.2, 0.8),
-            # FIXED — CatBoost-specific, low priority per literature
+            "rsm": _get_search_param(trial, "rsm", space, 0.2, 0.7),
+            # FIXED — CatBoost-specific, low priority
             "random_strength": fixed.get("random_strength", 2.0),
-            # TUNED — interaction with depth for leaf-level regularization
-            "min_data_in_leaf": _get_search_param(trial, "min_data_in_leaf", space, 20, 200, "int"),
+            # FIXED — ZERO effect on oblivious trees (grid: 3 values, identical logloss)
+            "min_data_in_leaf": fixed.get("min_data_in_leaf", 200),
             "task_type": "CPU",
             "random_seed": 42,
             "verbose": 0,
@@ -238,15 +244,21 @@ def create_lightgbm_objective_v9(
 ) -> Any:
     """Create LightGBM multiclass Optuna objective with residual learning.
 
-    Search space: 4 params (literature-driven, no empirical data yet).
-    Fixed: max_depth=8, learning_rate=0.05, reg_lambda=4.0, min_child_samples=100
-    Tuned: init_score_alpha, num_leaves, feature_fraction, bagging_fraction
+    Search space: 4 params (revised 2026-04-10 with empirical data).
+    Fixed: max_depth=8, learning_rate=0.05, reg_lambda=4.0, bagging_fraction=0.8
+    Tuned: init_score_alpha [0.4,0.8], num_leaves, feature_fraction, min_child_samples
 
-    Literature:
-    - LightGBM is leaf-wise: num_leaves IS the primary complexity param
-    - Probst 2019: learning_rate #1 (moot with ES), reg_lambda LOW
-    - van Rijn 2018: subsample #2 → bagging_fraction, colsample → feature_fraction
-    - max_depth=8 as safety cap (clamps num_leaves to max 255)
+    Changes from v1 (2026-04-10):
+    - bagging_fraction FIXED at 0.8: 1.4% fANOVA importance (quasi-nul),
+      Optuna best=0.801.
+    - min_child_samples ADDED to search: official LightGBM doc says "very important
+      to prevent over-fitting in leaf-wise tree". Range [50,500] for 1.1M rows.
+    - alpha range EXTENDED to [0.4, 0.8]: Optuna best=0.504 at boundary [0.5,0.8].
+      No data below 0.5 for LightGBM specifically.
+
+    Sources:
+    - LightGBM tuning: https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html
+    - fANOVA (12 trials): alpha=92.6%, feature_fraction=5.2%, bagging=1.4%, leaves=0.8%
     """
     import lightgbm as lgb
 
@@ -256,12 +268,13 @@ def create_lightgbm_objective_v9(
     fixed = config.get("optuna", {}).get("lightgbm_fixed", {})
 
     def objective(trial: Any) -> float:
+        # LightGBM-specific: alpha extended to [0.4, 0.8] (best=0.504 at boundary)
         alpha = trial.suggest_float(
             "init_score_alpha",
-            alpha_cfg.get("low", 0.5),
+            alpha_cfg.get("low", 0.4),
             alpha_cfg.get("high", 0.8),
         )
-        # FIXED — safety cap, XGBoost converged to 8 (transferable heuristic)
+        # FIXED — safety cap for leaf-wise growth
         max_depth = fixed.get("max_depth", 8)
         # TUNED — leaf-wise = THE complexity param (clamp to 2^depth-1)
         raw_leaves = _get_search_param(trial, "num_leaves", space, 15, 255, "int")
@@ -273,17 +286,19 @@ def create_lightgbm_objective_v9(
             "metric": "multi_logloss",
             "max_depth": max_depth,
             "num_leaves": num_leaves,
-            # FIXED — coupled with early_stopping (Probst 2019: #1 but moot with ES)
+            # FIXED — coupled with early_stopping
             "learning_rate": fixed.get("learning_rate", 0.05),
-            # FIXED — low tunability (Probst 2019, van Rijn 2018)
+            # FIXED — van Rijn 2018: moderate importance
             "reg_lambda": fixed.get("reg_lambda", 4.0),
-            # TUNED — equivalent colsample_bytree (van Rijn 2018: #5, fANOVA XGB: 18.4%)
+            # TUNED — fANOVA 5.2% (van Rijn 2018: #5)
             "feature_fraction": _get_search_param(trial, "feature_fraction", space, 0.3, 1.0),
-            # TUNED — equivalent subsample (van Rijn 2018: #2, fANOVA XGB: 27%)
-            "bagging_fraction": _get_search_param(trial, "bagging_fraction", space, 0.5, 1.0),
+            # FIXED at 0.8 — fANOVA 1.4% (quasi-nul), Optuna best=0.801
+            "bagging_fraction": fixed.get("bagging_fraction", 0.8),
             "bagging_freq": 1,
-            # FIXED — moderate importance but fixing reduces search space
-            "min_child_samples": fixed.get("min_child_samples", 100),
+            # TUNED — official: "very important for leaf-wise" (was fixed at 100)
+            "min_child_samples": _get_search_param(
+                trial, "min_child_samples", space, 50, 500, "int"
+            ),
             "seed": 42,
             "verbose": -1,
             "n_jobs": int(os.environ.get("ALICE_NTHREAD", "4")),
@@ -429,6 +444,44 @@ def main() -> None:
     # and Kaggle session cleanup. 12h limit - 10h training - 2h margin.
     timeout = optuna_config.get("timeout", 36000)
 
+    # --- Incremental save callback: survives timeout ---
+    # best_params.json + trial_history.csv written after EACH completed trial.
+    # If kernel is killed at 12h, outputs from last completed trial are available.
+    def _save_incremental(study: Any, trial: Any) -> None:
+        completed = [t for t in study.trials if t.state.name == "COMPLETE"]
+        if not completed:
+            return
+        best_trial = min(completed, key=lambda t: t.value)
+        gate = best_trial.value < ELO_BASELINE_LOGLOSS
+        out = {
+            "model": model_name,
+            "best_logloss": best_trial.value,
+            "best_params": best_trial.params,
+            "n_trials_completed": len(completed),
+            "n_trials_pruned": len([t for t in study.trials if t.state.name == "PRUNED"]),
+            "total_time_s": round(time.time() - t0, 1),
+            "gate_pass": gate,
+            "elo_baseline_logloss": ELO_BASELINE_LOGLOSS,
+        }
+        (out_dir / f"best_params_{model_name}.json").write_text(
+            json.dumps(out, indent=2, default=int)
+        )
+        rows = []
+        for t in study.trials:
+            row = {
+                "trial": t.number,
+                "value": t.value,
+                "state": t.state.name,
+                "duration_s": (
+                    (t.datetime_complete - t.datetime_start).total_seconds()
+                    if t.datetime_complete and t.datetime_start
+                    else None
+                ),
+            }
+            row.update(t.params)
+            rows.append(row)
+        pd.DataFrame(rows).to_csv(out_dir / f"trial_history_{model_name}.csv", index=False)
+
     logger.info(
         "Starting Optuna: model=%s, n_trials=%d, timeout=%ds",
         model_name,
@@ -436,7 +489,7 @@ def main() -> None:
         timeout,
     )
     t0 = time.time()
-    study.optimize(objective, n_trials=n_trials, timeout=timeout)
+    study.optimize(objective, n_trials=n_trials, timeout=timeout, callbacks=[_save_incremental])
     elapsed = time.time() - t0
 
     logger.info("Optuna complete: %d trials in %.0fs", len(study.trials), elapsed)
@@ -462,38 +515,9 @@ def main() -> None:
         "PASS" if gate_pass else "FAIL",
     )
 
-    best = {
-        "model": model_name,
-        "best_logloss": study.best_value,
-        "best_params": study.best_params,
-        "n_trials_completed": len([t for t in study.trials if t.state.name == "COMPLETE"]),
-        "n_trials_pruned": len([t for t in study.trials if t.state.name == "PRUNED"]),
-        "total_time_s": round(elapsed, 1),
-        "gate_pass": gate_pass,
-        "elo_baseline_logloss": ELO_BASELINE_LOGLOSS,
-    }
-    best_path = out_dir / f"best_params_{model_name}.json"
-    best_path.write_text(json.dumps(best, indent=2))
-    logger.info("Saved: %s", best_path)
-
-    rows = []
-    for t in study.trials:
-        row = {
-            "trial": t.number,
-            "value": t.value,
-            "state": t.state.name,
-            "duration_s": (
-                (t.datetime_complete - t.datetime_start).total_seconds()
-                if t.datetime_complete and t.datetime_start
-                else None
-            ),
-        }
-        row.update(t.params)
-        rows.append(row)
-    history = pd.DataFrame(rows)
-    history_path = out_dir / f"trial_history_{model_name}.csv"
-    history.to_csv(history_path, index=False)
-    logger.info("Saved: %s", history_path)
+    # Final save (also handled incrementally, but write once more for completeness)
+    _save_incremental(study, None)
+    logger.info("Saved: best_params + trial_history (final)")
 
 
 if __name__ == "__main__":

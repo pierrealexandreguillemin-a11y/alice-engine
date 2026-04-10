@@ -76,15 +76,17 @@ CATBOOST_FIXED = {
 }
 
 LIGHTGBM_GRID = {
-    "num_leaves": [31, 63, 127, 255],
-    "feature_fraction": [0.3, 0.6, 0.9],
-    "bagging_fraction": [0.5, 0.7, 0.9],
+    "num_leaves": [15, 31, 63],
+    "feature_fraction": [0.5, 0.7, 0.9],
+    "min_child_samples": [50, 200, 500],
 }
+# LightGBM alpha extended to 0.4 (Optuna best=0.504 at boundary)
+LIGHTGBM_ALPHA_GRID = {"init_score_alpha": [0.4, 0.5, 0.6, 0.7]}
 LIGHTGBM_FIXED = {
     "max_depth": 8,
     "learning_rate": 0.05,
     "reg_lambda": 4.0,
-    "min_child_samples": 100,
+    "bagging_fraction": 0.8,  # fANOVA 1.4%, fixed near-optimal
     "objective": "multiclass",
     "num_class": 3,
     "metric": "multi_logloss",
@@ -106,7 +108,7 @@ V8_LIGHTGBM = {
     "init_score_alpha": 0.7,
     "num_leaves": 15,
     "feature_fraction": 0.5,
-    "bagging_fraction": 0.7,
+    "min_child_samples": 200,
 }
 
 
@@ -272,9 +274,10 @@ def run_lightgbm_grid(
     """Run LightGBM grid search on subsample."""
     import lightgbm as lgb
 
-    combos = _grid_combos(SHARED_GRID, LIGHTGBM_GRID)
+    # LightGBM uses its own alpha grid (extended to 0.4)
+    combos = _grid_combos(LIGHTGBM_ALPHA_GRID, LIGHTGBM_GRID)
     combos.insert(0, V8_LIGHTGBM)
-    logger.info("LightGBM: %d combos (each ~250s on 200K rows = ~8h total)", len(combos))
+    logger.info("LightGBM: %d combos on 200K rows", len(combos))
 
     results = []
     for i, combo in enumerate(combos):
@@ -287,7 +290,7 @@ def run_lightgbm_grid(
         num_leaves = min(combo["num_leaves"], 2 ** LIGHTGBM_FIXED["max_depth"] - 1)
         params = {**LIGHTGBM_FIXED, "num_leaves": num_leaves}
         params["feature_fraction"] = combo["feature_fraction"]
-        params["bagging_fraction"] = combo["bagging_fraction"]
+        params["min_child_samples"] = combo["min_child_samples"]
 
         dtrain = lgb.Dataset(X_train, label=y_train, init_score=(init_train * alpha).ravel())
         dvalid = lgb.Dataset(
@@ -430,7 +433,12 @@ def main() -> None:
         "model": model_name,
         "best_logloss": float(best["logloss"]),
         "best_params": {
-            k: float(best[k]) if isinstance(best[k], np.floating) else best[k] for k in param_keys
+            k: float(best[k])
+            if isinstance(best[k], np.floating)
+            else int(best[k])
+            if isinstance(best[k], np.integer)
+            else best[k]
+            for k in param_keys
         },
         "best_iter": int(best["best_iter"]),
         "v8_logloss": v8_logloss,
