@@ -216,13 +216,19 @@ optuna:
   n_trials: 100                 # Target trials (timeout may cut short)
   timeout: 36000                # 10h — 2h margin for post-processing + save
 
-  # V9 SEARCH SPACES — 4 params per model (revised 2026-04-10 with empirical data)
+  # V9 SEARCH SPACES — 4 params per model
   #
   # METHODOLOGY:
   # v1 (2026-04-08): reduced 7-8 → 4 params based on fANOVA + literature
   # v2 (2026-04-10): revised after 5 kernels (3 Optuna + 2 Grid) + WebSearch
+  # v3 (2026-04-11): HP search on saison=2022 only (~62K train + 71K valid)
+  #     - Rationale: HP DIRECTIONS stable on subset (AUTOMATA, NeurIPS 2022)
+  #     - ISO 5259-2: recent data = better representativeness for deployment
+  #     - Training Final uses full dataset (2002-2022, 1.1M rows) with best params
+  #     - Budget: XGB ~245 trials, LGB ~336 trials, CB ~85 trials in 10h
+  #     - Grid comparison: 81 combos (3^4) on SAME data for cross-validation
   #
-  # KEY CORRECTIONS:
+  # KEY CORRECTIONS (v2):
   # - Probst 2019 (JMLR): covers XGBoost ONLY, NOT CatBoost/LightGBM
   # - CatBoost min_data_in_leaf: ZERO effect on oblivious trees (grid confirmed)
   # - LightGBM bagging_fraction: 1.4% fANOVA (quasi-nul)

@@ -1,6 +1,6 @@
 {
-  "id": "pguillemin/alice-grid-lightgbm-v9",
-  "title": "alice-grid-lightgbm-v9",
+  "id": "pguillemin/alice-grid-lgb-v9",
+  "title": "alice-grid-lgb-v9",
   "code_file": "grid_lightgbm_entry.py",
   "language": "python",
   "kernel_type": "script",

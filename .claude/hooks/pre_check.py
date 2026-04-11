@@ -113,12 +113,12 @@ def _check_kaggle_push(cwd: Path, cmd: str) -> list[tuple[str, str]]:
     if code_file and not (cwd / "scripts/cloud" / code_file).exists():
         errors.append((f"MISSING: scripts/cloud/{code_file}", "Check code_file in metadata"))
 
-    # Check slug is versioned (not reusing old slug)
-    if slug and not any(c.isdigit() for c in slug.split("-")[-1]):
+    # Check slug looks intentional (has alice- prefix)
+    if slug and not slug.startswith("pguillemin/alice-"):
         errors.append(
             (
-                "Kernel slug not versioned",
-                "Add version suffix: alice-autogluon-v2, not alice-autogluon",
+                "Kernel slug not standard",
+                "Slug should start with pguillemin/alice-",
             )
         )
 

@@ -1,13 +1,20 @@
-"""Grid search on 200K subsample — one model per kernel.
+"""Grid search on recent season (saison=2022) — one model per kernel.
 
-109 combos × ~330s/combo ≈ 10h on CPU (fits 12h session).
-Each combo saved to CSV immediately — no data loss on timeout.
+81 combos (3^4) per model. Each combo saved to CSV immediately.
+Same data as Optuna for direct comparison of HP search methods.
+
+HP Search Methodology (v2.0, 2026-04-11):
+- Train on saison=2022 (~62K rows), valid on 2023 (~71K rows)
+- Rationale: HP directions stable between subset and full data
+  (AUTOMATA, Killamsetty et al. NeurIPS 2022)
+- Budget: XGB ~147s/combo (3.3h), LGB ~107s/combo (2.4h), CB ~422s/combo (9.5h)
+- Training Final uses full dataset (2002-2022) with best params found here
 
 References
 ----------
+- AUTOMATA: https://arxiv.org/abs/2203.08212
 - Bergstra & Bengio 2012: ranking stable between subsample and full data
-- Probst et al. 2019: 2-3 params drive most tunability for GBDTs
-- Benchmarked 2026-04-09: 320s/combo on 200K rows XGBoost CPU
+- Benchmarked 2026-04-10: 286s/combo LGB, 392s/combo XGB, 1125s/combo CB on 200K
 """
 
 from __future__ import annotations
@@ -26,23 +33,24 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-SUBSAMPLE = 200_000
 SEED = 42
 ELO_BASELINE = 0.9766
 MAX_RUNTIME_S = 36000  # 10h — 2h margin for post-processing on 12h Kaggle
 _GLOBAL_START: float = 0  # Set in main(), checked in each grid loop
 
-# Grid — 4 params, same as Optuna V9 reduced search space
-SHARED_GRID = {
-    "init_score_alpha": [0.5, 0.6, 0.7, 0.8],
-}
+# HP search on recent season — same as Optuna for direct comparison.
+HP_SEARCH_MIN_SEASON = int(os.environ.get("ALICE_HP_MIN_SEASON", "2022"))
+
+# ─── Grids: 3^4 = 81 combos per model (3 levels × 4 params) ───────────────
+# Same 4 params as Optuna V9 search space. Alpha always included.
+# Levels: endpoints + midpoint of each Optuna range.
 
 XGBOOST_GRID = {
-    "subsample": [0.6, 0.7, 0.8],
-    "colsample_bytree": [0.5, 0.7, 0.9],
-    "min_child_weight": [50, 100, 200],
+    "init_score_alpha": [0.5, 0.65, 0.8],  # Optuna range [0.5, 0.8]
+    "subsample": [0.6, 0.7, 0.8],  # Optuna range [0.6, 0.8]
+    "colsample_bytree": [0.5, 0.75, 1.0],  # Optuna range [0.5, 1.0]
+    "min_child_weight": [50, 125, 200],  # Optuna range [50, 200]
 }
-# Fixed XGBoost params (fANOVA + literature)
 XGBOOST_FIXED = {
     "max_depth": 8,
     "eta": 0.05,
@@ -58,14 +66,19 @@ XGBOOST_FIXED = {
 }
 
 CATBOOST_GRID = {
-    "depth": [4, 6, 8, 10],
-    "rsm": [0.3, 0.5, 0.7],
-    "min_data_in_leaf": [50, 100, 200],
+    "init_score_alpha": [0.5, 0.65, 0.8],  # Optuna range [0.5, 0.8]
+    "depth": [4, 7, 10],  # Optuna range [4, 10]
+    "l2_leaf_reg": [
+        1.0,
+        8.0,
+        15.0,
+    ],  # Optuna range [1, 15]. Replaces min_data_in_leaf (zero effect oblivious trees)
+    "rsm": [0.2, 0.45, 0.7],  # Optuna range [0.2, 0.7]
 }
 CATBOOST_FIXED = {
     "learning_rate": 0.05,
-    "l2_leaf_reg": 4.0,
     "random_strength": 2.0,
+    "min_data_in_leaf": 200,  # FIXED — zero effect on oblivious trees
     "loss_function": "MultiClass",
     "eval_metric": "MultiClass",
     "iterations": 50000,
@@ -76,12 +89,11 @@ CATBOOST_FIXED = {
 }
 
 LIGHTGBM_GRID = {
-    "num_leaves": [15, 31, 63],
-    "feature_fraction": [0.5, 0.7, 0.9],
-    "min_child_samples": [50, 200, 500],
+    "init_score_alpha": [0.4, 0.6, 0.8],  # Optuna range [0.4, 0.8]
+    "num_leaves": [15, 135, 255],  # Optuna range [15, 255]
+    "feature_fraction": [0.3, 0.65, 1.0],  # Optuna range [0.3, 1.0]
+    "min_child_samples": [50, 275, 500],  # Optuna range [50, 500]
 }
-# LightGBM alpha extended to 0.4 (Optuna best=0.504 at boundary)
-LIGHTGBM_ALPHA_GRID = {"init_score_alpha": [0.4, 0.5, 0.6, 0.7]}
 LIGHTGBM_FIXED = {
     "max_depth": 8,
     "learning_rate": 0.05,
@@ -96,14 +108,14 @@ LIGHTGBM_FIXED = {
     "n_jobs": int(os.environ.get("ALICE_NTHREAD", "4")),
 }
 
-# V8 champion params (manual tuning, 18 iterations) — baseline reference
+# V8 champion params (manual tuning) — baseline reference (combo 0 in each grid)
 V8_XGBOOST = {
     "init_score_alpha": 0.7,
     "subsample": 0.7,
     "colsample_bytree": 0.5,
     "min_child_weight": 50,
 }
-V8_CATBOOST = {"init_score_alpha": 0.7, "depth": 4, "rsm": 0.3, "min_data_in_leaf": 200}
+V8_CATBOOST = {"init_score_alpha": 0.7, "depth": 4, "l2_leaf_reg": 10.0, "rsm": 0.3}
 V8_LIGHTGBM = {
     "init_score_alpha": 0.7,
     "num_leaves": 15,
@@ -118,14 +130,42 @@ def _append_result(row: dict, csv_path: Path) -> None:
     df_row.to_csv(csv_path, mode="a", header=not csv_path.exists(), index=False)
 
 
-def _grid_combos(shared: dict, model_grid: dict) -> list[dict]:
-    """Generate all combinations of shared + model-specific params."""
-    all_keys = list(shared.keys()) + list(model_grid.keys())
-    all_values = list(shared.values()) + list(model_grid.values())
-    combos = []
-    for vals in product(*all_values):
-        combos.append(dict(zip(all_keys, vals, strict=False)))
-    return combos
+def _save_best_json(results: list[dict], model_name: str, out_dir: Path) -> None:
+    """Save best params JSON after each combo — survives timeout."""
+    if not results:
+        return
+    best = min(results, key=lambda r: r["logloss"])
+    v8_rows = [r for r in results if r.get("is_v8_baseline")]
+    v8_logloss = v8_rows[0]["logloss"] if v8_rows else float("nan")
+    param_keys = [
+        k
+        for k in best
+        if k not in ("model", "combo_idx", "logloss", "best_iter", "duration_s", "is_v8_baseline")
+    ]
+    out = {
+        "model": model_name,
+        "best_logloss": float(best["logloss"]),
+        "best_params": {
+            k: float(best[k])
+            if isinstance(best[k], float | np.floating)
+            else int(best[k])
+            if isinstance(best[k], int | np.integer)
+            else best[k]
+            for k in param_keys
+        },
+        "best_iter": int(best["best_iter"]),
+        "v8_logloss": v8_logloss,
+        "n_combos": len(results),
+        "total_time_s": round(sum(r["duration_s"] for r in results), 1),
+    }
+    (out_dir / f"grid_best_{model_name}.json").write_text(json.dumps(out, indent=2))
+
+
+def _grid_combos(grid: dict) -> list[dict]:
+    """Generate all combinations from a single grid dict."""
+    keys = list(grid.keys())
+    values = list(grid.values())
+    return [dict(zip(keys, vals, strict=False)) for vals in product(*values)]
 
 
 def run_xgboost_grid(
@@ -140,9 +180,9 @@ def run_xgboost_grid(
     """Run XGBoost grid search on subsample."""
     import xgboost as xgb
 
-    combos = _grid_combos(SHARED_GRID, XGBOOST_GRID)
+    combos = _grid_combos(XGBOOST_GRID)
     combos.insert(0, V8_XGBOOST)
-    logger.info("XGBoost: %d combos (each ~330s on 200K rows = ~10h total)", len(combos))
+    logger.info("XGBoost: %d combos (V8 baseline + %d grid)", len(combos), len(combos) - 1)
 
     dvalid = xgb.DMatrix(X_valid, label=y_valid)
     results = []
@@ -186,6 +226,7 @@ def run_xgboost_grid(
         results.append(row)
         if csv_path:
             _append_result(row, csv_path)
+            _save_best_json(results, "xgboost", csv_path.parent)
         del booster, dtrain
         gc.collect()
 
@@ -209,9 +250,9 @@ def run_catboost_grid(
     """Run CatBoost grid search on subsample."""
     from catboost import CatBoostClassifier, Pool
 
-    combos = _grid_combos(SHARED_GRID, CATBOOST_GRID)
+    combos = _grid_combos(CATBOOST_GRID)
     combos.insert(0, V8_CATBOOST)
-    logger.info("CatBoost: %d combos (each ~400s on 200K rows = ~12h total)", len(combos))
+    logger.info("CatBoost: %d combos (V8 baseline + %d grid)", len(combos), len(combos) - 1)
 
     results = []
     for i, combo in enumerate(combos):
@@ -224,7 +265,7 @@ def run_catboost_grid(
         params = {**CATBOOST_FIXED}
         params["depth"] = combo["depth"]
         params["rsm"] = combo["rsm"]
-        params["min_data_in_leaf"] = combo["min_data_in_leaf"]
+        params["l2_leaf_reg"] = combo["l2_leaf_reg"]
 
         train_pool = Pool(X_train, y_train, baseline=(init_train * alpha))
         valid_pool = Pool(X_valid, y_valid, baseline=(init_valid * alpha))
@@ -251,6 +292,7 @@ def run_catboost_grid(
         results.append(row)
         if csv_path:
             _append_result(row, csv_path)
+            _save_best_json(results, "catboost", csv_path.parent)
         del model, train_pool, valid_pool
         gc.collect()
 
@@ -274,10 +316,9 @@ def run_lightgbm_grid(
     """Run LightGBM grid search on subsample."""
     import lightgbm as lgb
 
-    # LightGBM uses its own alpha grid (extended to 0.4)
-    combos = _grid_combos(LIGHTGBM_ALPHA_GRID, LIGHTGBM_GRID)
+    combos = _grid_combos(LIGHTGBM_GRID)
     combos.insert(0, V8_LIGHTGBM)
-    logger.info("LightGBM: %d combos on 200K rows", len(combos))
+    logger.info("LightGBM: %d combos (V8 baseline + %d grid)", len(combos), len(combos) - 1)
 
     results = []
     for i, combo in enumerate(combos):
@@ -321,6 +362,7 @@ def run_lightgbm_grid(
         results.append(row)
         if csv_path:
             _append_result(row, csv_path)
+            _save_best_json(results, "lightgbm", csv_path.parent)
         del booster, dtrain, dvalid
         gc.collect()
 
@@ -333,10 +375,10 @@ def run_lightgbm_grid(
 
 
 def main() -> None:
-    """Run grid search for one model on 200K subsample.
+    """Run grid search for one model on recent season (saison=2022).
 
     Model selected via ALICE_MODEL env var (xgboost/catboost/lightgbm).
-    ~109 combos × ~330s/combo ≈ 10h on CPU. One model per 12h kernel.
+    81 combos (3^4) + V8 baseline. Same data as Optuna for comparison.
     """
     from scripts.baselines import compute_init_scores_from_features
     from scripts.cloud.train_kaggle import _load_features, _setup_kaggle_imports
@@ -356,13 +398,28 @@ def main() -> None:
     train_raw, valid_raw, test_raw, _ = _load_features()
     logger.info("Raw: train=%d, valid=%d", len(train_raw), len(valid_raw))
 
-    # Subsample train (valid stays full for stable eval)
-    if len(train_raw) > SUBSAMPLE:
-        train_raw = train_raw.sample(SUBSAMPLE, random_state=SEED)
-        logger.info("Subsampled train to %d rows", SUBSAMPLE)
+    # Filter train to recent season (same as Optuna — AUTOMATA NeurIPS 2022, ISO 5259-2)
+    if HP_SEARCH_MIN_SEASON > 0 and "saison" in train_raw.columns:
+        n_before = len(train_raw)
+        train_raw = train_raw[train_raw["saison"] >= HP_SEARCH_MIN_SEASON].copy()
+        logger.info(
+            "HP search filter: saison >= %d — %d → %d rows (%.1f%%)",
+            HP_SEARCH_MIN_SEASON,
+            n_before,
+            len(train_raw),
+            100 * len(train_raw) / n_before,
+        )
 
     X_train, y_train, X_valid, y_valid, _, _, _ = prepare_features(train_raw, valid_raw, test_raw)
     logger.info("Features: train=%s, valid=%s", X_train.shape, X_valid.shape)
+
+    # NaN audit — mandatory before training (2 weeks lost debugging 61 dead features)
+    for split_name, df_split in [("train", X_train), ("valid", X_valid)]:
+        dead = [c for c in df_split.columns if df_split[c].isna().mean() > 0.99]
+        if dead:
+            logger.error("STOP: %d features >99%% NaN on %s: %s", len(dead), split_name, dead[:10])
+            raise ValueError(f"{len(dead)} features >99% NaN on {split_name}")
+    logger.info("NaN audit: PASS (no features >99%% NaN)")
 
     draw_lookup = build_draw_rate_lookup(train_raw)
     init_train = compute_init_scores_from_features(X_train, draw_lookup)

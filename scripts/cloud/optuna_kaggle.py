@@ -1,19 +1,30 @@
 """Optuna V9 multiclass hyperparameter tuning — Kaggle CPU kernel.
 
 Document ID: ALICE-OPTUNA-V9
-Version: 1.0.0
+Version: 2.0.0
 
 Bayesian optimization with TPESampler on multiclass (loss/draw/win)
 with residual learning (init_score_alpha in search space).
 
+HP Search Methodology (v2.0, 2026-04-11):
+- Train on RECENT season only (saison=2022, ~62K rows) for fast iteration
+- Valid on 2023 (~71K rows), unchanged
+- Rationale: HP directions stable between subset and full data
+  (AUTOMATA, Killamsetty et al. NeurIPS 2022: 3-30x speedup, comparable HP quality)
+- ISO 5259-2: recent data = better representativeness for deployment
+- Training Final uses full dataset (2002-2022, 1.1M rows) with best params
+
 ISO Compliance:
 - ISO/IEC 42001:2023 — AI Management (traceability via SQLite study)
 - ISO/IEC 25059:2023 — AI Quality (baseline comparison gate)
+- ISO/IEC 5259-2:2024 — Data Quality (representativeness via temporal subset)
 - ISO/IEC 5055:2021 — Code Quality (SRP, <300 lines)
 
 References
 ----------
 - Spec: docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md
+- AUTOMATA: https://arxiv.org/abs/2203.08212
+- Bergstra & Bengio 2012: https://jmlr.org/papers/v13/bergstra12a.html
 - XGBoost: https://xgboost.readthedocs.io/en/stable/parameter.html
 - CatBoost: https://catboost.ai/docs/en/concepts/parameter-tuning
 - LightGBM: https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html
@@ -34,6 +45,10 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 ELO_BASELINE_LOGLOSS = 0.9766
+
+# HP search on recent season only — full dataset used in Training Final.
+# Override via env var: ALICE_HP_MIN_SEASON=2020 for multi-season search.
+HP_SEARCH_MIN_SEASON = int(os.environ.get("ALICE_HP_MIN_SEASON", "2022"))
 
 
 def _get_search_param(
@@ -364,10 +379,31 @@ def main() -> None:
     logger.info("Config loaded from %s", config_path)
 
     train, valid, test, features_dir = _load_features()
+
+    # Filter train to recent season for HP search (AUTOMATA NeurIPS 2022, ISO 5259-2)
+    if HP_SEARCH_MIN_SEASON > 0 and "saison" in train.columns:
+        n_before = len(train)
+        train = train[train["saison"] >= HP_SEARCH_MIN_SEASON].copy()
+        logger.info(
+            "HP search filter: saison >= %d — %d → %d rows (%.1f%%)",
+            HP_SEARCH_MIN_SEASON,
+            n_before,
+            len(train),
+            100 * len(train) / n_before,
+        )
+
     X_train, y_train, X_valid, y_valid, X_test, y_test, encoders = prepare_features(
         train, valid, test
     )
     logger.info("Features: train=%s, valid=%s", X_train.shape, X_valid.shape)
+
+    # NaN audit — mandatory before training (2 weeks lost debugging 61 dead features)
+    for split_name, df_split in [("train", X_train), ("valid", X_valid)]:
+        dead = [c for c in df_split.columns if df_split[c].isna().mean() > 0.99]
+        if dead:
+            logger.error("STOP: %d features >99%% NaN on %s: %s", len(dead), split_name, dead[:10])
+            raise ValueError(f"{len(dead)} features >99% NaN on {split_name}")
+    logger.info("NaN audit: PASS (no features >99%% NaN)")
 
     draw_lookup = build_draw_rate_lookup(train)
     init_train = compute_init_scores_from_features(X_train, draw_lookup)

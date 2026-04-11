@@ -1,4 +1,4 @@
-"""Entry point: LightGBM grid search 200K subsample (CPU, 12h)."""
+"""Entry point: LightGBM grid search saison=2022 (CPU, 12h)."""
 
 import os
 import sys

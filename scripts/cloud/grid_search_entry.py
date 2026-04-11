@@ -1,4 +1,4 @@
-"""Entry point: Grid search 200K subsample, all 3 models (CPU, 12h)."""
+"""Entry point: Grid search saison=2022 (CPU, 12h). Set ALICE_MODEL env var."""
 
 import sys
 from pathlib import Path

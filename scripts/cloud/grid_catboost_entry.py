@@ -1,4 +1,4 @@
-"""Entry point: CatBoost grid search 200K subsample (CPU, 12h)."""
+"""Entry point: CatBoost grid search saison=2022 (CPU, 12h)."""
 
 import os
 import sys
