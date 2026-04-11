@@ -155,6 +155,7 @@ def _package_all(tmp_path: Path) -> None:
         "train_kaggle.py",
         "optuna_kaggle.py",
         "grid_search.py",
+        "grid_gaps.py",
     ]
     for cloud_module in cloud_modules:
         src = src_scripts / "cloud" / cloud_module
