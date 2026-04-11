@@ -1,4 +1,4 @@
-# ADR-004: init_score_alpha MUST be tuned per-model (not uniform)
+# ADR-008: init_score_alpha MUST be tuned per-model (not uniform)
 
 ## Status: ACCEPTED (2026-04-11)
 

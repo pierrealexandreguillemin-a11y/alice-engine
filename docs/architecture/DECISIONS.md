@@ -272,3 +272,61 @@ Indicateurs de bascule:
 ---
 
 *Derniere mise a jour: 8 Janvier 2026*
+
+---
+
+## ADR-008: init_score_alpha per-model (V9)
+
+**Date**: 11 Avril 2026
+**Statut**: Accepte
+**Detail**: `docs/architecture/ADR-008-alpha-per-model.md`
+
+### Decision
+alpha DOIT etre tune independamment par modele. LightGBM (leaf-wise) = 50x plus
+sensible que XGBoost (depth-wise). NE JAMAIS appliquer alpha uniforme.
+
+### Consequences
+- LightGBM alpha=0.4, XGBoost alpha=0.5, CatBoost TBD
+- config/MODEL_SPECS.md = source de verite per-model
+
+---
+
+## ADR-009: HP search on recent season (V9)
+
+**Date**: 11 Avril 2026
+**Statut**: Accepte
+
+### Contexte
+HP search sur full dataset (1.1M) = 2-19 trials/10h. Trop lent pour CatBoost.
+
+### Decision
+HP search sur saison=2022 uniquement (~62K train, 71K valid).
+Training Final utilise le dataset complet (1.1M) avec les best params.
+
+### Raisons
+1. AUTOMATA (NeurIPS 2022): subset HP search = HP quality comparable, 3-30x speedup
+2. ISO 5259-2: donnees recentes = meilleure representativite pour le deploiement
+3. Valide empiriquement: Grid 200K et Optuna 1.1M trouvent memes directions
+4. Budget: 100+ trials/10h au lieu de 2-19
+
+### Consequences
+- ALICE_HP_MIN_SEASON=2022 (env var override possible)
+- Grid et Optuna sur MEMES donnees pour comparaison directe
+- Resultats absolus (logloss) non comparables entre HP search et Training Final
+
+---
+
+## ADR-010: ISO validation locale vs cloud (V9)
+
+**Date**: 11 Avril 2026
+**Statut**: Accepte
+
+### Decision
+- **Kaggle kernels**: NaN audit (5 lignes, bloquant) + quality gates (logloss/RPS/ECE)
+- **Local**: Pandera validation complète, robustness (ISO 24029), fairness (ISO 24027)
+- Pandera non installe sur Kaggle (overhead pip install + fragilite)
+
+### Consequences
+- scripts/cloud/ n'importe PAS schemas/training_validation.py
+- Le NaN audit inline remplit le role essentiel
+- Phase 2 (promote_model.py) fait la validation ISO complete localement
