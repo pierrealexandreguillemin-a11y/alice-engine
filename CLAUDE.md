@@ -66,9 +66,11 @@ Statut implémentation : `docs/iso/IMPLEMENTATION_STATUS.md`
 
 ## BUT DU PROJET
 
-Alice Engine = **recommandation de composition d'équipe** interclubs FFE.
-Pipeline : ALI (prédire adversaire) → ML (P(win/draw/loss)) → CE (optimiser E[score]) → API.
-Le CE calcule `E[score] = P(win) + 0.5×P(draw)`. Compositions soumises simultanément.
+Alice Engine = **recommandation de composition multi-équipe** interclubs FFE.
+Un club a N équipes le MÊME week-end. ALICE optimise l'allocation joueurs × équipes × échiquiers.
+Pipeline : ALI (prédire adversaire) → ML (P(win/draw/loss) per board) → CE (optimiser E[score] multi-équipe) → API.
+Le CE calcule `E[score] = P(win) + 0.5×P(draw)`. K échiquiers par match (4-16 selon division).
+Détail complet : `config/MODEL_SPECS.md` §ALICE Engine.
 
 ## ÉTAT ACTUEL (avril 2026)
 
@@ -77,7 +79,7 @@ Spec : `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md`
 
 | Couche | Statut |
 |--------|--------|
-| ML Training | V9 Optuna en cours (XGBoost canary RUNNING) |
+| ML Training | V9 Optuna/Grid HP search en cours (saison=2022, 6 kernels) |
 | API FastAPI | COMPLET (stubs) |
 | Câblage routes→services | MANQUANT (après V9) |
 | ALI prédiction adverse | MANQUANT (Phase 3) |
@@ -85,18 +87,24 @@ Spec : `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md`
 
 ## TRAINING RULES (V8/V9)
 
+**LIRE `config/MODEL_SPECS.md` AVANT TOUTE ACTION ML.** C'est la source de vérité per-model.
+
+- **NE JAMAIS** appliquer les mêmes hyperparams aux 3 modèles sans vérifier MODEL_SPECS (ADR-008)
 - **NE JAMAIS** entraîner sans residual learning (Elo = baseline forte)
 - **NE JAMAIS** déclarer champion sans Optuna
 - **NE JAMAIS** `optuna.integration` — v4.0+ = `optuna_integration`
 - **NE JAMAIS** TreeSHAP sur test complet — subsample 20K
 - **NE JAMAIS** CatBoost init_model + Pool(baseline=)
+- **TOUJOURS** alpha per-model : LGB=0.4, XGB=0.5, CB=TBD (ADR-008, leaf-wise 50× plus sensible)
 - **TOUJOURS** init_scores AVANT filtrage features
 - **TOUJOURS** rsm=0.3-0.5 pour CatBoost >50 features
 - **TOUJOURS** quality gates AVANT SHAP
 - **TOUJOURS** vérifier dataset Kaggle contient fichiers importés
 - **TOUJOURS** SQLite storage Optuna
 
-Inference : `compute_elo_baseline → init_scores → *= alpha → predict_with_init`
+Inference : `compute_elo_baseline → init_scores → *= alpha_per_model → predict_with_init`
+
+**ADR** : `docs/architecture/DECISIONS.md` (ADR-001 à ADR-010)
 
 ## COMMANDES
 
