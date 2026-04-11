@@ -45,3 +45,4 @@
 {"timestamp": "2026-04-11T22:34:25.917682", "git_commit": "7eb0a12", "dataset_slug": "pguillemin/alice-code", "content_hash": "09f06635ccab384e", "version_notes": "7eb0a12 feat(ml): V9 gap-filling grids + MODEL_SPECS enriched + HP search results"}
 {"timestamp": "2026-04-11T22:56:53.487035", "git_commit": "23f5eba", "dataset_slug": "pguillemin/alice-code", "content_hash": "09f06635ccab384e", "version_notes": "23f5eba chore: track kaggle upload log (dataset hash 09f06635)"}
 {"timestamp": "2026-04-11T23:01:06.765528", "git_commit": "9f3af3f", "dataset_slug": "pguillemin/alice-code", "content_hash": "66722f6b92a19bad", "version_notes": "9f3af3f fix(cloud): add grid_gaps.py to upload whitelist"}
+{"timestamp": "2026-04-12T00:47:19.175960", "git_commit": "8c0139f", "dataset_slug": "pguillemin/alice-code", "content_hash": "9c7769901f236b68", "version_notes": "8c0139f feat(ml): gap-filling round 2 \u00e2\u20ac\u201d LGB alpha {0.1,0.15,0.2} + XGB depth=6 refinement"}
