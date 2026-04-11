@@ -43,3 +43,4 @@
 {"timestamp": "2026-04-11T10:02:33.419790", "git_commit": "d21627d", "dataset_slug": "pguillemin/alice-code", "content_hash": "1f2ae0a2bd9bac3b", "version_notes": "d21627d feat(cloud): grid search entry points + push/upload helpers"}
 {"timestamp": "2026-04-11T22:30:16.644239", "git_commit": "dab5419", "dataset_slug": "pguillemin/alice-code", "content_hash": "09f06635ccab384e", "version_notes": "dab5419 docs(claude): enforce MODEL_SPECS, alpha per-model, multi-equipe scope"}
 {"timestamp": "2026-04-11T22:34:25.917682", "git_commit": "7eb0a12", "dataset_slug": "pguillemin/alice-code", "content_hash": "09f06635ccab384e", "version_notes": "7eb0a12 feat(ml): V9 gap-filling grids + MODEL_SPECS enriched + HP search results"}
+{"timestamp": "2026-04-11T22:56:53.487035", "git_commit": "23f5eba", "dataset_slug": "pguillemin/alice-code", "content_hash": "09f06635ccab384e", "version_notes": "23f5eba chore: track kaggle upload log (dataset hash 09f06635)"}
