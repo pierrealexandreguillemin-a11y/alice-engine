@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-gaps-xgboost",
+  "title": "alice-gaps-xgboost",
+  "code_file": "grid_gaps_xgboost.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["pguillemin/alice-code"],
+  "competition_sources": [],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}
