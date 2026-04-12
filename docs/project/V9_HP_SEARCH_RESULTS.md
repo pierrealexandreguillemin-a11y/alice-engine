@@ -359,7 +359,42 @@ sub=0.8, col=1.0, mcw=50 confirme optimal a depth=6.
 
 ---
 
-## 3.9 Synthese finale — Params Training Final (545 configs)
+## 3.9 Tier 2 — Draw calibration metrics (2 kernels, 43 combos)
+
+Chaque combo evalue sur logloss + ECE draw + draw_bias (CE production).
+
+### XGB Tier 2 : colsample_bynode × gamma × max_delta_step (27 combos)
+
+Fixe : alpha=0.5, depth=6, sub=0.8, col=1.0, mcw=50 (best V9)
+
+| Config | Logloss | Draw bias | ECE draw |
+|--------|---------|-----------|----------|
+| **bynode=0.7, gamma=1.0, mds=1** | **0.5178** | **-0.0029** | **0.0045** |
+| bynode=1.0, gamma=0, mds=0 (baseline) | 0.5178 | -0.0037 | 0.0054 |
+| bynode=0.8, gamma=0, mds=5 | 0.5180 | -0.0029 | 0.0058 |
+| bynode=0.8, gamma=1.0, mds=1 | 0.5184 | -0.0029 | 0.0046 |
+
+**Finding** : bynode=0.7 + gamma=1.0 + mds=1 = meme logloss, draw_bias **-22%**, ECE draw **-17%**.
+Gain gratuit pour la calibration draw sans perte de logloss.
+
+### LGB Tier 2 : num_leaves × min_gain × lambda_l1 (16 combos)
+
+Fixe : alpha=0.1, depth=8, ff=1.0, mcs=275 (best V9)
+
+| leaves | mgs | l1 | logloss | draw_bias | ece_draw |
+|--------|-----|----|---------|-----------|----------|
+| **15** | **0** | **0** | **0.5180** | **-0.0081** | **0.0107** |
+| 15 | 0.01 | 0.1 | 0.5188 | -0.0088 | 0.0099 |
+| 31 | 0 | 0.1 | 0.5182 | -0.0101 | 0.0109 |
+| 63 | 0 | 0 | 0.5193 | -0.0113 | 0.0126 |
+| 127 | 0 | 0 | 0.5205 | -0.0118 | 0.0125 |
+
+**Finding** : defaults (leaves=15, mgs=0, l1=0) = best sur logloss ET draw calibration.
+Plus de feuilles = pire draw_bias (overfitting draw). min_gain et L1 n'aident pas.
+
+---
+
+## 3.10 Synthese finale — Params Training Final (590 configs)
 
 | Param | XGBoost | LightGBM | CatBoost |
 |-------|---------|----------|----------|
@@ -369,9 +404,16 @@ sub=0.8, col=1.0, mcw=50 confirme optimal a depth=6.
 | lambda/l2 | 4.0 | 4.0 | 8.0 |
 | sub/bagging | 0.8 | 0.8 | — |
 | col/ff/rsm | 1.0 | 1.0 | 0.7 |
+| **colsample_bynode** | **0.7** | — | — |
+| **gamma** | **1.0** | — | — |
+| **max_delta_step** | **1** | — | — |
 | mcw/mcs/mdil | 50 | 275 | 200 |
 | leaves | — | 15 | — |
+| min_gain_to_split | — | 0 (default) | — |
+| lambda_l1 | — | 0 (default) | — |
 | **Best logloss (62K)** | **0.5178** | **0.5180** | **0.5245** |
+| **Draw bias (62K)** | **-0.0029** | -0.0081 | TBD |
+| **ECE draw (62K)** | **0.0045** | 0.0107 | TBD |
 | **V8 baseline (62K)** | 0.5238 | 0.5735 | 0.5284 |
 | **Gain vs V8** | -0.0060 | -0.0555 | -0.0039 |
 
@@ -383,13 +425,23 @@ sub=0.8, col=1.0, mcw=50 confirme optimal a depth=6.
 | Oblivious (CB) | **0.3** | 0.0024 | Structure fixe, moderement sensible |
 | Depth-wise (XGB) | **0.5** | 0.001 | Arbre complet, compense via iterations |
 
+### Obligatoire dans Training Final (audit production 2026-04-12)
+
+1. **Dirichlet calibration** — obligatoire (pas optionnel). Matrice K×K > temperature 1-param.
+   Draw_bias impacte directement E[score] du CE. Source: Kull et al. 2019 NeurIPS.
+2. **ECE draw + draw_bias** — metriques de selection (pas juste logloss).
+3. **CatBoost posterior_sampling** — pour le champ `confidence` de l'API CDC.
+4. **CatBoost score_function=NewtonL2** — flag simple, second derivees, potentiel amelioration.
+5. **CatBoost border_count=1024** — meilleure resolution golden features.
+6. **CatBoost leaf_estimation_iterations=3** — meilleures leaf values.
+
 ---
 
-## 3.10 Audit pre-Training Final — transfert 62K → 1.1M (2026-04-12)
+## 3.11 Audit pre-Training Final — transfert 62K → 1.1M (2026-04-12)
 
-### Params verifies (evidence empirique ALICE, 545 configs sur 62K)
+### Params verifies (evidence empirique ALICE, 590 configs sur 62K)
 
-Tous les params du §3.9 ont ete testes sur saison=2022 (~62K train, ~71K valid).
+Tous les params du §3.10 ont ete testes sur saison=2022 (~62K train, ~71K valid).
 Le transfert vers le full dataset (1.1M) est justifie par AUTOMATA (NeurIPS 2022) :
 les HP DIRECTIONS sont stables entre subset et full data (speedup 3-30×).
 
@@ -690,3 +742,5 @@ Source : `reports/v8_xgboost_v5_resume/metadata.json`
 | **Gaps CB** | `grid_results/gaps_catboost/grid_gaps_catboost.csv` (17 combos, alpha×depth) |
 | **Gaps R2 LGB** | `grid_results/gaps_round2/grid_gaps2_lightgbm.csv` (3 combos, alpha floor) |
 | **Gaps R2 XGB** | `grid_results/gaps_round2/grid_gaps2_xgboost.csv` (8 combos, depth=6 refine) |
+| **Tier 2 XGB** | `grid_results/tier2_xgboost/grid_tier2_xgboost.csv` (27 combos, bynode×gamma×mds + draw metrics) |
+| **Tier 2 LGB** | `grid_results/gaps_lightgbm/` via log (16 combos, leaves×mgs×l1 + draw metrics) |

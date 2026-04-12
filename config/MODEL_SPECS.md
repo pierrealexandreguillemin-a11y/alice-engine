@@ -87,7 +87,7 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
 - colsample_bytree=1.0 optimal quand alpha bas (plus de signal à capturer)
 - Paysage HP plat → tous les params contribuent ~également
 
-### Hyperparamètres V9 (saison=2022, 545 configs testées)
+### Hyperparamètres V9 (saison=2022, 590 configs testées)
 
 | Param | Optimal V9 | V8 | Gap | Source |
 |-------|-----------|-----|-----|--------|
@@ -95,16 +95,25 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
 | max_depth | **6** | 4 | 0.002 | **Gaps : 6>4>8 à tous les alphas.** V8=4, Grid=8, les deux sous-optimaux |
 | subsample | **0.8** | 0.7 | 0.001 | Grid v4 + Gaps R2 : confirmé à depth=6 |
 | colsample_bytree | **1.0** | 0.5 | 0.001 | Grid v4 + Gaps R2 : confirmé à depth=6 |
+| colsample_bynode | **0.7** | 1.0 (default) | 0 (loss) | **Tier 2 : meme logloss, draw_bias -22% (0.0029 vs 0.0037)** |
+| gamma | **1.0** | 0 (default) | 0 (loss) | **Tier 2 : empeche splits noise. Ameliore draw calibration** |
+| max_delta_step | **1** | 0 (default) | 0 (loss) | **Tier 2 : limite leaf outputs. Aide draw imbalance (13.7%)** |
 | min_child_weight | **50** | 50 | = | Grid v4 + Gaps R2 : confirmé à depth=6 |
 | eta | 0.05 (fixed) | 0.005 | — | Coupled with early_stopping=200 |
 | reg_lambda | 4.0 (fixed) | 10.0 | — | Probst 2019 (valid XGB) : low tunability |
 | reg_alpha | 0.01 (fixed) | 0.5 | — | Probst 2019 : quasi-nul |
 
+### Draw calibration (Tier 2 finding, critique pour CE production)
+- **bynode=0.7 + gamma=1.0 + max_delta_step=1** = meme logloss que defaults mais draw_bias -22%, ECE draw -17%
+- Le CE utilise P(draw) dans E[score] = P(win) + 0.5×P(draw). Draw_bias impacte directement les compositions
+- Ces 3 params sont des "gains gratuits" : aucune perte de logloss, amelioration calibration
+
 ### Interactions entre params (XGBoost)
 - **eta × n_estimators** : couplés. eta=0.05 + early_stopping=200 → converge en ~800-1600 iters
-- **subsample × colsample** : multiplicatifs. sub=0.8 × col=1.0 = chaque arbre voit 80% rows, 100% features
+- **subsample × colsample_bytree × colsample_bynode** : multiplicatifs. 0.8 × 1.0 × 0.7 = chaque split voit 80% rows, 70% features
+- **gamma × depth** : gamma=1.0 empeche les splits avec gain<1.0. Avec depth=6 (64 feuilles max), regularise sans sous-exploiter
+- **max_delta_step × class imbalance** : draw=13.7%. max_delta_step=1 empeche les leaf outputs extremes sur la classe minoritaire
 - **min_child_weight × depth** : MCW contrôle la granularité, depth la profondeur. Sur 62K train, MCW=50 OK
-- **reg_lambda × depth** : lambda régularise les leaf values. Avec depth=8, lambda=4.0 empêche l'overshoot
 - **base_margin shape** : (n_samples × n_classes) FLATTENED pour DMatrix. Contient des raw margins (log-odds), PAS des probas
 
 ### Categorical handling
@@ -172,14 +181,16 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
 - bagging_fraction : quasi-nul (1.4% fANOVA), fixé à 0.8
 - reg_lambda : **PLAT** (range 0.0006 à alpha=0.3). Lambda=4.0 fixe = correct.
 
-### Hyperparamètres V9 (saison=2022, 545 configs testées)
+### Hyperparamètres V9 (saison=2022, 590 configs testées)
 
 | Param | Optimal V9 | V8 | Gap | Source |
 |-------|-----------|-----|-----|--------|
 | init_score_alpha | **0.1** | 0.7 | **0.054** | Gaps R1+R2 : monotone 0.7→0.1, plancher à 0.1 (gradient -0.0015) |
-| num_leaves | **15** | 15 | = | Grid v2 : 15>135≡255 (cap naturel) |
+| num_leaves | **15** | 15 | = | Grid v2 + **Tier 2 : 15>31>63>127.** Plus de feuilles = pire draw_bias |
 | feature_fraction | **1.0** | 0.5 | 0.004 | Grid v2 : 1.0>0.65>0.3 |
 | min_child_samples | **275** | 200 | 0.001 | Grid v2 : léger avantage, robuste |
+| min_gain_to_split | **0** (default) | 0.01 (yaml) | 0 | **Tier 2 : 0 meilleur que 0.01 en logloss ET draw calibration** |
+| lambda_l1 | **0** (default) | 0 | = | **Tier 2 : L1 reg n'ameliore rien (201 features OK sans pruning)** |
 | max_depth | 8 (fixed) | 4 | — | Safety cap leaf-wise |
 | learning_rate | 0.05 (fixed) | 0.03 | — | Coupled with early_stopping=200 |
 | reg_lambda | **4.0** (fixed) | 10.0 | — | Gaps R1 : plat (range 0.0006). van Rijn 2018 : moderate |
@@ -348,7 +359,7 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
 | Oblivious (CB) | **0.3** | **0.0024** (0.3→0.5 à depth=5) | Structure fixe par niveau, modérément sensible |
 | Depth-wise (XGB) | **0.5** | **0.001** (0.3→0.7) | Construit l'arbre entier, compense via n_iter |
 
-**NE JAMAIS appliquer le même alpha aux 3 modèles.** (ADR-008, confirmé par 545 configs)
+**NE JAMAIS appliquer le même alpha aux 3 modèles.** (ADR-008, confirmé par 590 configs)
 
 ---
 
