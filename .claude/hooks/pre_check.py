@@ -95,7 +95,8 @@ def _check_kaggle_push(cwd: Path, cmd: str) -> list[tuple[str, str]]:
                 )
 
     # Check enable_internet only for kernels that need pip install at runtime
-    needs_internet = "autogluon" in slug or "training" in slug
+    # V9 training kernels use only pre-installed packages (no pip install needed)
+    needs_internet = "autogluon" in slug or "sft" in slug or "unsloth" in slug
     if needs_internet and not meta.get("enable_internet"):
         errors.append(("enable_internet=false", "Training kernels need pip install at runtime"))
 
