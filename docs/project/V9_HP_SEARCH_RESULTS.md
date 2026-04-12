@@ -288,7 +288,100 @@ Resume : inclut les 2 trials de v3 (renumerotes 0-1) + 54 nouveaux trials
 | init_alpha | 0.7 | 0.5 | **0.5** | mean 0.569 | **0.5** (plat, delta 0.0011) |
 | random_strength | 3 | non tune | 2.0 (fixe) | 2.0 (fixe) | **2.0** |
 
-**Finding ADR-008** : alpha CatBoost (oblivious) = **quasi-indifferent** (delta 0.0011), comparable a XGBoost (depth-wise, 0.0012). Pas "moderement sensible" comme anticipe — l'arbre oblivious impose la meme structure a tous les niveaux quelle que soit la magnitude du gradient.
+**Finding ADR-008 (CORRIGE par gaps)** : alpha CatBoost = **moderement sensible** (delta 0.0024 a depth=5), PAS quasi-indifferent. La synthese Grid v2 [0.5,0.8] montrait 0.0011 mais le gaps grid etendu a [0.3,0.8] revele un gradient plus net.
+
+---
+
+## 3.7 Gap-Filling Round 1 (3 kernels, 44 combos)
+
+### Gaps XGB : alpha × depth (10 combos)
+
+| alpha | depth=4 | depth=6 | depth=8 |
+|-------|---------|---------|---------|
+| 0.3 | 0.5189 | 0.5183 | 0.5197 |
+| 0.5 | 0.5197 | **0.5178** | 0.5198 |
+| 0.7 | 0.5203 | 0.5190 | 0.5209 |
+
+**Finding** : depth=6 bat depth=4 ET depth=8 a tous les alphas. V8=4, V9 Grid=8 fixe, les deux sous-optimaux.
+
+### Gaps LGB : alpha × lambda (17 combos)
+
+| alpha | lam=1 | lam=4 | lam=10 | lam=15 |
+|-------|-------|-------|--------|--------|
+| 0.3 | 0.5280 | **0.5278** | 0.5279 | 0.5284 |
+| 0.4 | 0.5360 | 0.5357 | 0.5364 | 0.5359 |
+| 0.5 | 0.5473 | 0.5463 | 0.5462 | 0.5459 |
+| 0.7 | 0.5725 | 0.5714 | 0.5720 | 0.5719 |
+
+**Findings** : alpha=0.3 >> 0.4 (delta 0.0079). Lambda plat (range 0.0006).
+
+### Gaps CB : alpha × depth (17 combos)
+
+| alpha | d=4 | d=5 | d=6 | d=8 |
+|-------|-----|-----|-----|-----|
+| 0.3 | 0.5267 | **0.5245** | 0.5260 | 0.5294 |
+| 0.4 | 0.5258 | 0.5254 | 0.5253 | 0.5301 |
+| 0.5 | 0.5256 | 0.5257 | 0.5256 | 0.5296 |
+| 0.7 | 0.5269 | 0.5267 | 0.5267 | 0.5313 |
+
+**Findings** : alpha=0.3 + depth=5 = best. depth=8 nettement pire. Alpha moderement sensible (pas plat).
+
+## 3.8 Gap-Filling Round 2 (1 kernel, 11 combos)
+
+### LGB alpha extension (3 combos) — plancher trouve
+
+| Alpha | Logloss | Delta vs precedent |
+|-------|---------|-------------------|
+| 0.7 | 0.5714 | — |
+| 0.5 | 0.5459 | -0.0255 |
+| 0.4 | 0.5357 | -0.0102 |
+| 0.3 | 0.5278 | -0.0079 |
+| 0.2 | 0.5224 | -0.0054 |
+| 0.15 | 0.5195 | -0.0029 |
+| **0.1** | **0.5180** | -0.0015 |
+
+Gradient s'aplatit. Alpha=0.1 = plancher.
+
+### XGB depth=6 refinement (8 combos) — params confirmes
+
+| sub | col | mcw | logloss |
+|-----|-----|-----|---------|
+| 0.8 | 1.0 | 50 | **0.5178** |
+| 0.7 | 1.0 | 50 | 0.5187 |
+| 0.8 | 0.75 | 50 | 0.5194 |
+| 0.7 | 0.75 | 50 | 0.5203 |
+| 0.8 | 1.0 | 100 | 0.5204 |
+| 0.8 | 0.75 | 100 | 0.5213 |
+| 0.7 | 1.0 | 100 | 0.5221 |
+| 0.7 | 0.75 | 100 | 0.5227 |
+
+sub=0.8, col=1.0, mcw=50 confirme optimal a depth=6.
+
+---
+
+## 3.9 Synthese finale — Params Training Final (545 configs)
+
+| Param | XGBoost | LightGBM | CatBoost |
+|-------|---------|----------|----------|
+| **init_alpha** | **0.5** | **0.1** | **0.3** |
+| **depth** | **6** | 8 (cap) | **5** |
+| eta/lr | 0.05 | 0.05 | 0.05 |
+| lambda/l2 | 4.0 | 4.0 | 8.0 |
+| sub/bagging | 0.8 | 0.8 | — |
+| col/ff/rsm | 1.0 | 1.0 | 0.7 |
+| mcw/mcs/mdil | 50 | 275 | 200 |
+| leaves | — | 15 | — |
+| **Best logloss (62K)** | **0.5178** | **0.5180** | **0.5245** |
+| **V8 baseline (62K)** | 0.5238 | 0.5735 | 0.5284 |
+| **Gain vs V8** | -0.0060 | -0.0555 | -0.0039 |
+
+### Alpha × architecture (finding original ALICE)
+
+| Architecture | Alpha optimal | Sensitivity | Mecanisme |
+|-------------|--------------|-------------|-----------|
+| Leaf-wise (LGB) | **0.1** | 0.054 | GOSS drop petits gradients |
+| Oblivious (CB) | **0.3** | 0.0024 | Structure fixe, moderement sensible |
+| Depth-wise (XGB) | **0.5** | 0.001 | Arbre complet, compense via iterations |
 
 ---
 
@@ -444,3 +537,8 @@ Source : `reports/v8_xgboost_v5_resume/metadata.json`
 | Grid CB v2 | `grid_results/catboost_v2/grid_search_catboost.csv` (70 lignes, avec l2_leaf_reg) |
 | Optuna CB v3 | `optuna_studies/catboost_v3/trial_history_catboost.csv` (2 trials, full data) |
 | Optuna CB v4 | `optuna_studies/catboost_v4/trial_history_catboost.csv` (56 trials, 62K) |
+| **Gaps XGB** | `grid_results/gaps_xgboost/grid_gaps_xgboost.csv` (10 combos, alpha×depth) |
+| **Gaps LGB** | `grid_results/gaps_lightgbm/grid_gaps_lightgbm.csv` (17 combos, alpha×lambda) |
+| **Gaps CB** | `grid_results/gaps_catboost/grid_gaps_catboost.csv` (17 combos, alpha×depth) |
+| **Gaps R2 LGB** | `grid_results/gaps_round2/grid_gaps2_lightgbm.csv` (3 combos, alpha floor) |
+| **Gaps R2 XGB** | `grid_results/gaps_round2/grid_gaps2_xgboost.csv` (8 combos, depth=6 refine) |

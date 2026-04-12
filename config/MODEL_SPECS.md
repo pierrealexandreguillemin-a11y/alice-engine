@@ -87,15 +87,15 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
 - colsample_bytree=1.0 optimal quand alpha bas (plus de signal à capturer)
 - Paysage HP plat → tous les params contribuent ~également
 
-### Hyperparamètres V9 (saison=2022, Grid 82 combos)
+### Hyperparamètres V9 (saison=2022, 545 configs testées)
 
 | Param | Optimal V9 | V8 | Gap | Source |
 |-------|-----------|-----|-----|--------|
-| init_score_alpha | 0.5 | 0.7 | 0.004 | Grid v4 : monotonique mais plat |
-| subsample | 0.8 | 0.7 | 0.004 | Grid v4 : 0.8>0.7>0.6 |
-| colsample_bytree | 1.0 | 0.5 | 0.003 | Grid v4 : 1.0>0.75>0.5 |
-| min_child_weight | 50 | 50 | = | Grid v4 : 50>125>200 |
-| max_depth | 8 (fixed) | 4 | — | fANOVA 0%, Optuna v6 all use 8 |
+| init_score_alpha | **0.5** | 0.7 | 0.002 | Grid v4 + Gaps : plat 0.3-0.7 (delta 0.001) |
+| max_depth | **6** | 4 | 0.002 | **Gaps : 6>4>8 à tous les alphas.** V8=4, Grid=8, les deux sous-optimaux |
+| subsample | **0.8** | 0.7 | 0.001 | Grid v4 + Gaps R2 : confirmé à depth=6 |
+| colsample_bytree | **1.0** | 0.5 | 0.001 | Grid v4 + Gaps R2 : confirmé à depth=6 |
+| min_child_weight | **50** | 50 | = | Grid v4 + Gaps R2 : confirmé à depth=6 |
 | eta | 0.05 (fixed) | 0.005 | — | Coupled with early_stopping=200 |
 | reg_lambda | 4.0 (fixed) | 10.0 | — | Probst 2019 (valid XGB) : low tunability |
 | reg_alpha | 0.01 (fixed) | 0.5 | — | Probst 2019 : quasi-nul |
@@ -163,24 +163,26 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
 - Risque overfitting : plus élevé que depth-wise sur petits datasets
 
 ### Conséquences pour le tuning
-- **init_score_alpha : PARAM #1** (gap 0.05 logloss, 92.6% fANOVA)
-- Bas alpha = large residuals = leaf-wise exploite les features
+- **init_score_alpha : PARAM #1** (gap 0.054 logloss 0.1→0.7, 92.6% fANOVA)
+- Tendance monotone confirmée de 0.7 à 0.1 : chaque -0.1 alpha = -0.003 à -0.025 logloss
+- Plancher à alpha ~0.1 (gradient s'aplatit : -0.008 → -0.005 → -0.003 → -0.0015)
 - feature_fraction=1.0 optimal quand alpha bas (besoin de toutes les features)
-- num_leaves bas (15-30) optimal sur 62K (cap naturel à ~135 feuilles)
+- num_leaves bas (15) optimal sur 62K (cap naturel à ~135 feuilles)
 - min_child_samples : "very important for leaf-wise" (doc officielle)
 - bagging_fraction : quasi-nul (1.4% fANOVA), fixé à 0.8
+- reg_lambda : **PLAT** (range 0.0006 à alpha=0.3). Lambda=4.0 fixe = correct.
 
-### Hyperparamètres V9 (saison=2022, Grid 82 combos + Optuna 100 trials)
+### Hyperparamètres V9 (saison=2022, 545 configs testées)
 
 | Param | Optimal V9 | V8 | Gap | Source |
 |-------|-----------|-----|-----|--------|
-| init_score_alpha | **0.4** | 0.7 | **0.051** | Grid v2 : monotonique strict. TPE ne descend pas sous 0.5 |
-| num_leaves | 15 | 15 | = | Grid v2 : 15>135≡255 (cap naturel) |
-| feature_fraction | 1.0 | 0.5 | 0.004 | Grid v2 : 1.0>0.65>0.3 |
-| min_child_samples | 275 | 200 | 0.001 | Grid v2 : léger avantage, robuste |
+| init_score_alpha | **0.1** | 0.7 | **0.054** | Gaps R1+R2 : monotone 0.7→0.1, plancher à 0.1 (gradient -0.0015) |
+| num_leaves | **15** | 15 | = | Grid v2 : 15>135≡255 (cap naturel) |
+| feature_fraction | **1.0** | 0.5 | 0.004 | Grid v2 : 1.0>0.65>0.3 |
+| min_child_samples | **275** | 200 | 0.001 | Grid v2 : léger avantage, robuste |
 | max_depth | 8 (fixed) | 4 | — | Safety cap leaf-wise |
 | learning_rate | 0.05 (fixed) | 0.03 | — | Coupled with early_stopping=200 |
-| reg_lambda | 4.0 (fixed) | 10.0 | — | van Rijn 2018 : moderate importance |
+| reg_lambda | **4.0** (fixed) | 10.0 | — | Gaps R1 : plat (range 0.0006). van Rijn 2018 : moderate |
 | bagging_fraction | 0.8 (fixed) | 0.7 | — | fANOVA 1.4%, near-optimal |
 
 ### Interactions entre params (LightGBM)
@@ -252,23 +254,24 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
   - rsm INCOMPATIBLE GPU (pairwise only) → task_type=CPU obligatoire
   - init_model + Pool(baseline=) = **CRASH** ("baseline for continuation not supported")
   - snapshot_file exige MÊMES params (iterations, lr, tout)
-- Gradient response : **TBD** (entre XGBoost et LightGBM, structure fixe par niveau)
+- Gradient response : **MODEREMENT SENSIBLE** — structure fixe par niveau absorbe partiellement les petits gradients (comme depth-wise), mais depth bas (5) + oblivious = moins de feuilles pour compenser → alpha=0.3 > 0.5 (delta 0.0011-0.0024 selon depth)
 
 ### Conséquences pour le tuning
 - **depth : param #1** pour CatBoost (contrôle directement la complexité oblivious)
 - **l2_leaf_reg : param #2** (doc officielle : "first params to tune" avec depth)
 - rsm [0.2, 0.7] : obligatoire pour exploration des features
-- init_score_alpha : sensibilité **TBD** (2 trials seulement sur full data, Grid v2 en cours)
+- init_score_alpha : **MODEREMENT SENSIBLE** (delta 0.0024 entre 0.3 et 0.5 à depth=5). Plus sensible que XGB (0.001) mais beaucoup moins que LGB (0.038)
 - min_data_in_leaf : NE PAS TUNER (zéro effet, confirmé grid 3 valeurs identiques)
+- depth=8 **NETTEMENT PIRE** (+0.004-0.005 vs depth=5). Ne pas utiliser.
 
-### Hyperparamètres V9 (saison=2022, Grid en cours)
+### Hyperparamètres V9 (saison=2022, 545 configs testées)
 
 | Param | Optimal V9 | V8 | Gap | Source |
 |-------|-----------|-----|-----|--------|
-| init_score_alpha | TBD (~0.55) | 0.7 | TBD | Optuna v3 (2 trials only) : 0.547 |
-| depth | TBD (~5) | 4 | TBD | Optuna : 5>10. Grid en cours |
-| l2_leaf_reg | TBD (~1.8) | 10 | TBD | Optuna : 1.8>11.2. Grid en cours |
-| rsm | TBD (~0.63) | 0.3 | TBD | Optuna : 0.63>0.50 |
+| init_score_alpha | **0.3** | 0.7 | 0.0024 | Gaps CB : 0.3>0.4>0.5>0.7 à depth=5 |
+| depth | **5** | 4 | 0.0012 | Gaps CB : 5>4>6>>8. Grid v2 : 4>7 |
+| l2_leaf_reg | **8.0** | 10 | 0.001 | Grid v2 : 8~15>1. Optuna mean 7.7 |
+| rsm | **0.7** | 0.3 | 0.004 | Grid v2 : 0.7>0.45. Optuna mean 0.574 |
 | learning_rate | 0.05 (fixed) | 0.03 | — | Coupled with early_stopping=200 |
 | random_strength | 2.0 (fixed) | 3.0 | — | Low priority |
 | min_data_in_leaf | 200 (fixed) | 200 | = | ZERO effect oblivious trees |
@@ -339,13 +342,13 @@ CE.optimize(all_probas, contraintes_ffe, mode_strategie)
 
 ## Règle d'or : alpha × architecture
 
-| Architecture | Alpha sensitivity | Mécanisme | Conséquence |
-|-------------|------------------|-----------|-------------|
-| Depth-wise (XGB) | ~0.001 | Construit l'arbre entier, compense via n_iter | Alpha quasi-indifférent |
-| Leaf-wise (LGB) | ~0.05 | Split le plus grand gradient → petits gradients = sous-apprentissage | Alpha = param #1 |
-| Oblivious (CB) | ~TBD | Structure fixe par niveau | Probablement modéré |
+| Architecture | Alpha optimal | Alpha sensitivity | Mécanisme |
+|-------------|--------------|------------------|-----------|
+| Leaf-wise (LGB) | **0.1** | **0.054** (0.1→0.7) | GOSS drop petits gradients → grands résidus = plus de signal leaf-wise |
+| Oblivious (CB) | **0.3** | **0.0024** (0.3→0.5 à depth=5) | Structure fixe par niveau, modérément sensible |
+| Depth-wise (XGB) | **0.5** | **0.001** (0.3→0.7) | Construit l'arbre entier, compense via n_iter |
 
-**NE JAMAIS appliquer le même alpha aux 3 modèles.**
+**NE JAMAIS appliquer le même alpha aux 3 modèles.** (ADR-008, confirmé par 545 configs)
 
 ---
 
