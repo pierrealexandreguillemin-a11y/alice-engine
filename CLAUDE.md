@@ -74,14 +74,14 @@ Détail complet : `config/MODEL_SPECS.md` §ALICE Engine.
 
 ## ÉTAT ACTUEL (avril 2026)
 
-**V9 Optuna EN COURS.** V8 passent gates mais hyperparams manuels. Optuna lancé (11 étapes).
-Spec : `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md`
+**V9 HP search COMPLET (590 configs, 13 kernels). Training Final = prochaine étape.**
+Résultats : `docs/project/V9_HP_SEARCH_RESULTS.md`
 
 | Couche | Statut |
 |--------|--------|
-| ML Training | V9 Optuna/Grid HP search en cours (saison=2022, 6 kernels) |
+| ML Training | **V9 HP search COMPLET.** Training Final à lancer (3 kernels, 1.1M) |
 | API FastAPI | COMPLET (stubs) |
-| Câblage routes→services | MANQUANT (après V9) |
+| Câblage routes→services | MANQUANT (après Training Final) |
 | ALI prédiction adverse | MANQUANT (Phase 3) |
 | CE multi-équipe | MANQUANT (Phase 4) |
 
@@ -95,9 +95,12 @@ Spec : `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md`
 - **NE JAMAIS** `optuna.integration` — v4.0+ = `optuna_integration`
 - **NE JAMAIS** TreeSHAP sur test complet — subsample 20K
 - **NE JAMAIS** CatBoost init_model + Pool(baseline=)
-- **TOUJOURS** alpha per-model : LGB=0.4, XGB=0.5, CB=TBD (ADR-008, leaf-wise 50× plus sensible)
+- **TOUJOURS** alpha per-model : LGB=0.1, XGB=0.5, CB=0.3 (ADR-008, 590 configs)
 - **TOUJOURS** init_scores AVANT filtrage features
-- **TOUJOURS** rsm=0.3-0.5 pour CatBoost >50 features
+- **TOUJOURS** rsm=0.7 pour CatBoost >50 features (Grid v2 : 0.7>0.45>0.3)
+- **TOUJOURS** Dirichlet calibration (Kull 2019) — draw = 45% variance E[score]
+- **TOUJOURS** mesurer ECE draw + draw_bias (pas juste logloss)
+- **TOUJOURS** skill kernel-push (9 étapes) AVANT chaque push Kaggle
 - **TOUJOURS** quality gates AVANT SHAP
 - **TOUJOURS** vérifier dataset Kaggle contient fichiers importés
 - **TOUJOURS** SQLite storage Optuna
