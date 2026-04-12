@@ -166,9 +166,14 @@ def _train_xgboost(
             dvalid.set_base_margin(init_scores_valid.ravel())
         t0 = time.time()
         evals_log: dict = {}
+        # Checkpoint every 500 rounds — protects against timeout (12h limit)
+        ckpt_cb = xgb.callback.TrainingCheckPoint(
+            directory="/kaggle/working", name="xgb_ckpt", interval=500
+        )
         # fmt: off
         bst = xgb.train(p, dtrain, n_rounds, evals=[(dvalid, "val")],
-                        early_stopping_rounds=es, verbose_eval=100, evals_result=evals_log)
+                        early_stopping_rounds=es, verbose_eval=100,
+                        evals_result=evals_log, callbacks=[ckpt_cb])
         # fmt: on
         # Wrap Booster for sklearn-compatible pipeline (predict_proba, feature_importances_)
         from scripts.kaggle_metrics import XGBWrapper  # noqa: PLC0415
@@ -217,7 +222,7 @@ def _train_lightgbm(
         cbs = [
             lgb_lib.early_stopping(es),
             lgb_lib.log_evaluation(100),
-            _lgbm_checkpoint_callback(ckpt_dir, interval=5000),
+            _lgbm_checkpoint_callback(ckpt_dir, interval=500),  # V9: every 500 (was 5000)
         ]
         lgbm = LGBMClassifier(**lgb_p)
         fit_kw: dict = {

@@ -180,17 +180,27 @@ def predict_with_init(
 
 
 def _apply_isotonic(y_proba: np.ndarray, calibrator: Any) -> np.ndarray:
-    """Apply calibration to probabilities. Supports temperature scaling (float T) or isotonic (list).
+    """Apply calibration to probabilities.
 
-    Temperature scaling (Guo et al. 2017): softmax(log(P)/T). Preserves rankings and E[score] ratios.
+    Supports: temperature scaling (float T), isotonic (list), Dirichlet (tuple).
+    - Temperature (Guo et al. 2017): softmax(log(P)/T)
+    - Isotonic (Niculescu-Mizil & Caruana 2005): per-class isotonic regression
+    - Dirichlet (Kull et al. 2019): softmax(W·log(P) + b) — captures inter-class interactions
     """
+    if isinstance(calibrator, tuple) and len(calibrator) == 3 and calibrator[0] == "dirichlet":
+        _, W, b = calibrator
+        logits = np.log(np.clip(y_proba, 1e-7, 1.0))
+        transformed = logits @ W.T + b
+        shifted = transformed - transformed.max(axis=1, keepdims=True)
+        exp_t = np.exp(shifted)
+        return exp_t / exp_t.sum(axis=1, keepdims=True)
     if isinstance(calibrator, int | float):  # Temperature scaling
         logits = np.log(np.clip(y_proba, 1e-7, 1.0))
         scaled = logits / calibrator
         scaled -= scaled.max(axis=1, keepdims=True)
         probs = np.exp(scaled) / np.exp(scaled).sum(axis=1, keepdims=True)
         return probs
-    # Legacy: per-class isotonic (list of regressors)
+    # Per-class isotonic (list of regressors)
     cal = np.column_stack([iso.predict(y_proba[:, c]) for c, iso in enumerate(calibrator)])
     row_sums = cal.sum(axis=1, keepdims=True)
     row_sums = np.where(row_sums == 0, 1.0, row_sums)

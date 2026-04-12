@@ -86,6 +86,71 @@ def calibrate_models(
     return calibrators
 
 
+def calibrate_models_dirichlet(
+    results: dict,
+    X_valid: Any,
+    y_valid: Any,
+    out_dir: Path,
+    init_scores_valid: Any = None,
+    lam: float = 1e-3,
+) -> dict:
+    """Fit Dirichlet calibration per model (Kull et al. 2019, NeurIPS).
+
+    Dir-L2: full K×K affine on log-probas + L2 regularisation on off-diagonal.
+    Captures inter-class interactions (draw↔loss/win) that temperature/isotonic miss.
+    For K=3, fits 12 params (9 matrix + 3 bias) on 71K+ valid samples.
+    """
+    import joblib  # noqa: PLC0415
+    from scipy.optimize import minimize  # noqa: PLC0415
+
+    n_classes = 3
+    calibrators: dict = {}
+    for name, r in results.items():
+        if r["model"] is None:
+            continue
+        y_proba = predict_with_init(r["model"], X_valid, init_scores_valid)
+        y_true = y_valid.values if hasattr(y_valid, "values") else np.asarray(y_valid)
+        logits = np.log(np.clip(y_proba, 1e-7, 1.0))
+        n = len(y_true)
+        idx = np.arange(n)
+
+        def nll_l2(
+            params: np.ndarray,
+            _logits: Any = logits,
+            _idx: Any = idx,
+            _y: Any = y_true,
+            _lam: float = lam,
+        ) -> float:
+            W = params[: n_classes * n_classes].reshape(n_classes, n_classes)
+            b = params[n_classes * n_classes :]
+            transformed = _logits @ W.T + b
+            shifted = transformed - transformed.max(axis=1, keepdims=True)
+            exp_t = np.exp(shifted)
+            probs = exp_t / exp_t.sum(axis=1, keepdims=True)
+            loss = -np.mean(np.log(np.clip(probs[_idx, _y], 1e-7, 1.0)))
+            off_diag = W - np.diag(np.diag(W))
+            return loss + _lam * np.sum(off_diag**2)
+
+        x0 = np.zeros(n_classes * n_classes + n_classes)
+        x0[: n_classes * n_classes] = np.eye(n_classes).ravel()
+        res = minimize(nll_l2, x0, method="L-BFGS-B", options={"maxiter": 500})
+        W = res.x[: n_classes * n_classes].reshape(n_classes, n_classes)
+        b = res.x[n_classes * n_classes :]
+        calibrators[name] = ("dirichlet", W, b)
+        logger.info(
+            "  %s Dirichlet: NLL=%.4f diag=[%.3f,%.3f,%.3f] off-diag L2=%.4f",
+            name,
+            res.fun,
+            W[0, 0],
+            W[1, 1],
+            W[2, 2],
+            np.sum((W - np.diag(np.diag(W))) ** 2),
+        )
+    if calibrators:
+        joblib.dump(calibrators, out_dir / "calibrators_dirichlet.joblib")
+    return calibrators
+
+
 def calibrate_models_isotonic(
     results: dict,
     X_valid: Any,

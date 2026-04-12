@@ -1,184 +1,135 @@
-# V9 residual-tuned hyperparameters (2026-03-24)
+# V9 Training Final hyperparameters (2026-04-12)
 # Hyperparameters Configuration - Alice-Engine ML Pipeline
-# Version: 4.0.0
-# Date: 24 Mars 2026
+# Version: 9.0.0
+# Date: 12 Avril 2026
 # Conformite: ISO/IEC 42001 (AI Management), ISO/IEC 5259 (Data Quality)
 #
-# Usage:
-#   from scripts.train_models_parallel import load_hyperparameters
-#   params = load_hyperparameters("config/hyperparameters.yaml")
-#
-# JUSTIFICATIONS TECHNIQUES:
-# Toutes les valeurs sont justifiees par:
-# - Documentation officielle CatBoost/XGBoost/LightGBM
-# - Caracteristiques dataset ALICE (1.1M echiquiers, ~177 features V8)
-# - Best practices industrie (Kaggle, papers, benchmarks)
-# - Residual learning (init_score/base_margin depuis baseline Elo)
+# DERIVATION: 590 configs, 13 kernels (Grid v2/v4, Optuna v4/v7/v8, Gaps R1/R2, Tier 2)
+# Details: docs/project/V9_HP_SEARCH_RESULTS.md, config/MODEL_SPECS.md
+# ADR: ADR-008 (alpha per-model), ADR-009 (recent season HP search), ADR-010 (ISO local)
 #
 # Sources:
 # - https://catboost.ai/docs/concepts/parameter-tuning.html
 # - https://xgboost.readthedocs.io/en/stable/tutorials/param_tuning.html
 # - https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html
+# - Kull et al. 2019 (NeurIPS): Dirichlet calibration
+# - AUTOMATA (NeurIPS 2022): HP search on subset transfers to full data
 
 # =============================================================================
 # GLOBAL SETTINGS
 # =============================================================================
 global:
-  random_seed: 42               # Standard reproducibility seed
-  n_folds: 5                    # K-Fold CV: 5 est standard (bias-variance tradeoff)
-  early_stopping_rounds: 500    # 500 iterations sans amelioration = stop
-  eval_metric: "multi_logloss"  # Multiclass logloss: optimise calibration 3-class
-  task_type: "CPU"              # CPU par defaut, GPU si disponible
-  verbose: 500                  # Log tous les 500 iterations
-
-# =============================================================================
-# CATBOOST - Model principal (categories natives)
-# Documentation: https://catboost.ai/docs/concepts/parameter-tuning.html
-#
-# JUSTIFICATIONS CATBOOST V9 residual-tuned:
-# - depth=4: Arbres peu profonds — le modele apprend UNIQUEMENT les corrections Elo
-# - learning_rate=0.005: Tres faible pour residual learning (20000 iterations)
-# - border_count=128: GPU-compatible (defaut GPU)
-# - l2_leaf_reg=10: Regularisation forte sur features sparse (177 cols)
-# - min_data_in_leaf=200: Previent overfitting sur petits groupes
-# - random_strength=3, bagging_temperature=1: Regularisation stochastique
-# - model_size_reg=0.5: Compression modele (ISO 23894 risk)
-# =============================================================================
-catboost:
-  # Boosting parameters
-  iterations: 20000             # 20000 avec early_stopping=500 — residual learning
-  depth: 4                      # Peu profond: apprend corrections Elo, pas l'Elo
-  border_count: 128             # GPU default, compatible T4/P100
-
-  # Regularization
-  l2_leaf_reg: 10               # Regularisation forte sur 177 features sparse
-  min_data_in_leaf: 200         # Min samples par feuille (large dataset)
-  random_strength: 3            # Regularisation stochastique
-  bagging_temperature: 1        # Bayesian bootstrap
-  model_size_reg: 0.5           # Compression modele
-  rsm: 0.3                     # Feature subsampling MANDATORY >50 features (v10: 11/177 sans rsm)
-
-  # Learning rate
-  learning_rate: 0.005          # Tres faible pour residual learning
-
-  # Objective (MultiClass 3-way: loss/draw/win)
-  loss_function: "MultiClass"   # CatBoost native multiclass
-
-  # Model selection
-  use_best_model: true          # Restore best iteration depuis eval_metric sur valid set
-
-  # Performance
-  thread_count: 4               # Auto-set par kaggle_trainers.py
-  task_type: "CPU"              # Auto-set GPU par kaggle_trainers.py si GPU detecte
-
-  # Categorical features (ALICE dataset)
-  cat_features:
-    - type_competition          # A02, F01, C01, etc.
-    - division                  # N1, N2, N3, REG, DEP
-    - ligue_code                # IDF, BRE, ARA, etc.
-    - blanc_titre               # GM, IM, FM, etc.
-    - noir_titre                # GM, IM, FM, etc.
-    - jour_semaine              # Lundi-Dimanche
-    - zone_enjeu_dom            # montee, danger, mi_tableau
-
-  # Early stopping
-  early_stopping_rounds: 500    # 500 iterations sans amelioration
-
-  # Reproducibility
   random_seed: 42
-
-  # Output
+  early_stopping_rounds: 200    # V9: 200 (was 500 V8). Sufficient at lr=0.05
+  eval_metric: "multi_logloss"
+  task_type: "CPU"              # Tree models — no GPU needed
   verbose: 500
 
 # =============================================================================
-# XGBOOST - Model secondaire (rapide, bien documente)
-# Documentation: https://xgboost.readthedocs.io/en/stable/parameter.html
-# XGBoost uses native API params (eta, lambda, alpha) not sklearn aliases
-#
-# JUSTIFICATIONS XGBOOST V9 residual-tuned:
-# - max_depth=4: Aligned with CatBoost residual depth
-# - eta=0.005: Alias learning_rate, tres faible pour residual learning
-# - lambda=10.0: L2 regularisation forte (native API name)
-# - alpha=0.5: L1 regularisation (native API name)
-# - min_child_weight=50: Min sum poids instances (equivalent min_data_in_leaf)
-# - subsample=0.7, colsample_bytree=0.5: Subsampling pour 177 features sparse
+# CATBOOST — Oblivious trees (symmetric, fixed structure)
+# Alpha=0.3 (ADR-008): moderate sensitivity (0.0024), oblivious structure
+# Tier 1 flags: score_function, border_count, leaf_estimation_iterations
+# Source: catboost.ai/docs/concepts/parameter-tuning.html
+# =============================================================================
+catboost:
+  init_score_alpha: 0.3         # ADR-008: oblivious trees, moderate sensitivity
+
+  # Boosting
+  iterations: 50000             # Early stopping decides actual count
+  depth: 5                      # Gaps R1: 5>4>6>8 at alpha=0.3
+  learning_rate: 0.05           # V9: all models lr=0.05 with ES=200
+  loss_function: "MultiClass"
+
+  # Regularization
+  l2_leaf_reg: 8.0              # Grid v1: 8.0 optimal (was 10 V8)
+  min_data_in_leaf: 200         # ZERO effect on oblivious trees but harmless
+  random_strength: 2.0          # V9: reduced from 3 (Grid)
+  rsm: 0.7                      # Grid v2: 0.7>0.45>0.3. MANDATORY >50 features
+
+  # Tier 1 flags (CatBoost advanced — untested in HP search, test in Training Final)
+  # score_function: GPU ONLY (catboost.ai/docs) — cannot use on CPU kernels
+  border_count: 1024                      # More candidate splits (default CPU=254, max=65535)
+  leaf_estimation_iterations: 3           # Better leaf value estimates (default=auto)
+
+  # Infrastructure
+  use_best_model: true
+  early_stopping_rounds: 200
+  thread_count: 4
+  task_type: "CPU"              # rsm incompatible GPU (pairwise only)
+  random_seed: 42
+  verbose: 500
+
+# =============================================================================
+# XGBOOST — Depth-wise (level-by-level, robust to small gradients)
+# Alpha=0.5 (ADR-008): quasi-indifferent (gap 0.001), compensates via iterations
+# Tier 2 draw calibration: bynode=0.7 + gamma=1.0 + max_delta_step=1
+# Source: xgboost.readthedocs.io/en/stable/parameter.html
 # =============================================================================
 xgboost:
-  # Boosting parameters
-  n_estimators: 20000
-  max_depth: 4                  # Peu profond: aligned with CatBoost residual
-  eta: 0.005                    # Native API alias for learning_rate
-  objective: "multi:softprob"   # Multiclass probability output
-  num_class: 3                  # loss=0, draw=1, win=2
+  init_score_alpha: 0.5         # ADR-008: depth-wise, quasi-indifferent (0.001)
 
-  # Regularization (native API names)
-  lambda: 10.0                  # L2 regularization (native API, alias reg_lambda)
-  alpha: 0.5                    # L1 regularization (native API, alias reg_alpha)
-  min_child_weight: 50          # Min sum instance weight
+  # Boosting
+  n_estimators: 50000
+  max_depth: 6                  # Gaps R1: 6>4>8 at all alphas (NEW — was 4 V8)
+  eta: 0.05                     # V9: all models lr=0.05
+  objective: "multi:softprob"
+  num_class: 3
+
+  # Regularization
+  lambda: 4.0                   # L2 (was 10 V8). Probst 2019: low tunability
+  alpha: 0.01                   # L1 (was 0.5 V8). Probst 2019: quasi-nul
+  min_child_weight: 50          # Grid + Gaps R2: confirmed optimal
 
   # Subsampling
-  subsample: 0.7                # Row subsampling
-  colsample_bytree: 0.5         # Feature subsampling pour 177 sparse features
+  subsample: 0.8                # Grid v4 + Gaps R2: 0.8>0.7>0.6
+  colsample_bytree: 1.0         # Grid v4: 1.0 optimal at low alpha
 
-  # Performance
-  tree_method: "hist"           # Histogram-based; device auto-set cuda par kaggle_trainers.py
-  nthread: 4                    # Nombre threads natif XGBoost
+  # Tier 2 draw calibration (same logloss, draw_bias -22%, ECE draw -17%)
+  colsample_bynode: 0.7         # Per-node feature sampling
+  gamma: 1.0                    # Prevents noise splits
+  max_delta_step: 1             # Limits leaf outputs, helps draw imbalance (13.7%)
 
-  # Early stopping
-  early_stopping_rounds: 500    # 500 iterations sans amelioration
-
-  # Reproducibility
-  seed: 42                      # Native XGBoost seed
-
-  # Output
+  # Infrastructure
+  tree_method: "hist"
+  device: "cpu"
+  nthread: 4
+  seed: 42
+  early_stopping_rounds: 200
   verbosity: 1
 
 # =============================================================================
-# LIGHTGBM - Model secondaire (tres rapide, memoire efficiente)
-# Documentation: https://lightgbm.readthedocs.io/en/latest/Parameters.html
-#
-# JUSTIFICATIONS LIGHTGBM V9 residual-tuned:
-# - num_leaves=15: 2^4-1 (equivalent depth=4, aligned residual)
-# - max_depth=4: Controle par depth explicite (residual learning)
-# - learning_rate=0.003: Plus faible que CatBoost/XGBoost (LightGBM converge plus vite)
-# - reg_lambda=10.0, reg_alpha=0.5: Regularisation forte sur 177 features sparse
-# - min_child_samples=200: Coherent avec CatBoost min_data_in_leaf
-# - min_gain_to_split=0.01: Previent splits non-informatifs
-# - subsample=0.7, colsample_bytree=0.5: Subsampling features sparse
+# LIGHTGBM — Leaf-wise (GOSS, best-first split)
+# Alpha=0.1 (ADR-008): high sensitivity (0.054), GOSS drops small gradients
+# Tier 2 confirmed: min_gain_to_split=0, lambda_l1=0 (defaults optimal)
+# Source: lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html
 # =============================================================================
 lightgbm:
-  # Boosting parameters
-  n_estimators: 20000
-  num_leaves: 15                # 2^4-1 = 15 (depth=4 equivalent)
-  max_depth: 4                  # Depth explicite: residual learning
-  learning_rate: 0.003          # Tres faible (LightGBM converge plus vite)
-  objective: "multiclass"       # LightGBM native multiclass
-  num_class: 3                  # loss=0, draw=1, win=2
+  init_score_alpha: 0.1         # ADR-008: leaf-wise/GOSS, high sensitivity (0.054)
+
+  # Boosting
+  n_estimators: 50000
+  num_leaves: 15                # Grid: 15 optimal (leaf-wise complexity param)
+  max_depth: 8                  # Safety cap (was 4 V8)
+  learning_rate: 0.05           # V9: all models lr=0.05
+  objective: "multiclass"
+  num_class: 3
 
   # Regularization
-  reg_lambda: 10.0              # L2 regularization forte
-  reg_alpha: 0.5                # L1 regularization
-  min_child_samples: 200        # Coherent avec CatBoost min_data_in_leaf
-  min_gain_to_split: 0.01       # Previent splits non-informatifs
+  reg_lambda: 4.0               # L2 (was 10 V8)
+  min_child_samples: 275        # Official: "very important for leaf-wise". Gaps R1 optimal
+  # min_gain_to_split: 0 (default — Tier 2 confirmed optimal)
+  # reg_alpha: 0 (default — Tier 2 confirmed optimal)
 
   # Subsampling
-  subsample: 0.7                # Row subsampling
-  colsample_bytree: 0.5         # Feature subsampling pour 177 sparse features
+  subsample: 0.8                # bagging_fraction
+  subsample_freq: 1             # bagging_freq — MUST be >0 to activate bagging
+  colsample_bytree: 1.0         # feature_fraction=1.0
 
-  # Categorical features
-  categorical_feature: "auto"   # Auto-detect from pandas categorical
-
-  # Performance
-  n_jobs: 4                     # Nombre threads
-
-  # Early stopping
-  early_stopping_rounds: 500    # 500 iterations sans amelioration
-
-  # Reproducibility
+  # Infrastructure
+  n_jobs: 4
   random_state: 42
-
-  # Output
-  verbose: -1                   # Silent mode
+  early_stopping_rounds: 200
+  verbose: -1
 
 # =============================================================================
 # STACKING META-LEARNER

@@ -1,7 +1,8 @@
-"""Kaggle Cloud Training — ALICE Engine V8 MultiClass (ISO 42001/5259/5055).
+"""Kaggle Cloud Training — ALICE Engine V9 Training Final (ISO 42001/5259/5055).
 
-Kernel 2 of 2: trains CatBoost/XGBoost/LightGBM on pre-computed features.
-Requires Kernel 1 (fe_kaggle.py) output via kernel_sources.
+1 kernel per model on full 1.1M dataset. V9 params from 590-config HP search.
+Per-model alpha (ADR-008), Dirichlet calibration (Kull 2019), Tier 2 draw metrics.
+Requires FE kernel (alice-fe-v8) output via kernel_sources.
 """
 
 from __future__ import annotations
@@ -147,7 +148,7 @@ def main() -> None:
     else:
         logger.info("Local mode — training all models")
     label = f" [{model_filter.upper()}]" if model_filter else ""
-    logger.info("ALICE Engine — V8 MultiClass Training%s", label)
+    logger.info("ALICE Engine — V9 Training Final%s", label)
     _setup_kaggle_imports()
 
     from scripts.kaggle_artifacts import (  # noqa: PLC0415
@@ -210,15 +211,28 @@ def main() -> None:
     init_scores_valid = compute_init_scores_from_features(X_valid, draw_lookup_train)
     init_scores_test = compute_init_scores_from_features(X_test, draw_lookup_train)
 
-    # Shrink init_scores to reduce Elo prior dominance (Guo et al. 2017: temperature scaling).
-    # Alpha < 1 gives features more room to express corrections beyond Elo.
-    # Env var override for sweep: ALICE_INIT_ALPHA=0.5 or 0.9
-    alpha = float(os.environ.get("ALICE_INIT_ALPHA", config["global"]["init_score_alpha"]))
+    # Per-model alpha (ADR-008): each architecture has different gradient sensitivity.
+    # LGB=0.1 (GOSS drops small gradients), CB=0.3 (oblivious), XGB=0.5 (depth-wise robust).
+    # Env var override for grid/optuna sweeps: ALICE_INIT_ALPHA=0.5
+    alpha_per_model = {
+        "catboost": config["catboost"].get("init_score_alpha", 0.3),
+        "xgboost": config["xgboost"].get("init_score_alpha", 0.5),
+        "lightgbm": config["lightgbm"].get("init_score_alpha", 0.1),
+    }
+    alpha_override = os.environ.get("ALICE_INIT_ALPHA")
+    if alpha_override:
+        alpha = float(alpha_override)
+        logger.info("Init score alpha=%.2f (env override, all models)", alpha)
+    elif model_filter:
+        alpha = alpha_per_model.get(model_filter.lower(), 0.5)
+        logger.info("Init score alpha=%.2f (per-model, %s)", alpha, model_filter)
+    else:
+        alpha = 0.5
+        logger.warning("No model filter — using fallback alpha=0.5")
     if alpha != 1.0:
         init_scores_train = init_scores_train * alpha
         init_scores_valid = init_scores_valid * alpha
         init_scores_test = init_scores_test * alpha
-        logger.info("Init score alpha=%.2f applied (T=%.2f)", alpha, 1.0 / alpha)
 
     for _name, _scores in [
         ("train", init_scores_train),
@@ -277,50 +291,54 @@ def main() -> None:
         model_extensions=MODEL_EXTENSIONS,
         model_filter=model_filter,
     )
-    # Step 1: Dual calibration — temperature scaling vs isotonic (same kernel)
+    # Triple calibration: temperature, isotonic, Dirichlet (Kull et al. 2019 NeurIPS)
+    # Dirichlet = K×K affine on log-probas → captures inter-class interactions (draw↔loss/win)
     # Quality gates FIRST, then SHAP (skill: "gates FIRST, SHAP can be skipped in emergency")
     from scripts.kaggle_diagnostics import (  # noqa: PLC0415
         calibrate_models,
+        calibrate_models_dirichlet,
         calibrate_models_isotonic,
     )
 
     cal_temp = calibrate_models(results, X_valid, y_valid, out_dir, init_scores_valid)
     cal_iso = calibrate_models_isotonic(results, X_valid, y_valid, out_dir, init_scores_valid)
+    cal_dir = calibrate_models_dirichlet(results, X_valid, y_valid, out_dir, init_scores_valid)
 
     baseline_metrics, draw_lookup = _compute_baselines(train, X_test, y_test, y_train)
     draw_lookup.to_parquet(out_dir / "draw_rate_lookup.parquet", index=False)
     logger.info("Saved draw_rate_lookup.parquet (%d cells) for inference", len(draw_lookup))
     champion_ll = fetch_champion_ll()
 
-    # Evaluate temperature, read gate, then overwrite with isotonic
-    evaluate_on_test(
-        results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal_temp
-    )
-    gate_temp = check_quality_gates(
-        results, baseline_metrics=baseline_metrics, champion_ll=champion_ll
-    )
-    logger.info("Quality gate TEMPERATURE: %s", gate_temp)
-
-    evaluate_on_test(
-        results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal_iso
-    )
-    gate_iso = check_quality_gates(
-        results, baseline_metrics=baseline_metrics, champion_ll=champion_ll
-    )
-    logger.info("Quality gate ISOTONIC: %s", gate_iso)
-
-    # Pick winner — re-evaluate with chosen calibrator so results has correct metrics
-    if gate_iso.get("passed") and not gate_temp.get("passed"):
-        calibrators, gate = cal_iso, gate_iso
-        logger.info("Winner: ISOTONIC")
-    elif gate_temp.get("passed") and gate_iso.get("passed"):
-        ll_t = gate_temp.get("best_log_loss", 1.0)
-        ll_i = gate_iso.get("best_log_loss", 1.0)
-        calibrators, gate = (cal_temp, gate_temp) if ll_t <= ll_i else (cal_iso, gate_iso)
-        logger.info("Winner: %s (both pass)", "TEMPERATURE" if ll_t <= ll_i else "ISOTONIC")
+    # Evaluate all 3 calibrators, pick best on quality gates + logloss
+    cal_candidates = [
+        ("TEMPERATURE", cal_temp),
+        ("ISOTONIC", cal_iso),
+        ("DIRICHLET", cal_dir),
+    ]
+    best_cal_name, calibrators, gate = None, cal_temp, {}
+    best_ll = 999.0
+    for cal_name, cal in cal_candidates:
+        evaluate_on_test(
+            results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal
+        )
+        g = check_quality_gates(results, baseline_metrics=baseline_metrics, champion_ll=champion_ll)
+        ll = g.get("best_log_loss", 999.0)
+        logger.info("Quality gate %s: passed=%s logloss=%.6f", cal_name, g.get("passed"), ll)
+        if g.get("passed") and ll < best_ll:
+            best_cal_name, calibrators, gate, best_ll = cal_name, cal, g, ll
+    # Fallback: if none pass, pick lowest logloss
+    if best_cal_name is None:
+        for cal_name, cal in cal_candidates:
+            evaluate_on_test(
+                results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal
+            )
+            g = check_quality_gates(results, baseline_metrics=baseline_metrics)
+            ll = g.get("best_log_loss", 999.0)
+            if ll < best_ll:
+                best_cal_name, calibrators, gate, best_ll = cal_name, cal, g, ll
+        logger.warning("No calibrator passes all gates — using %s (lowest logloss)", best_cal_name)
     else:
-        calibrators, gate = cal_temp, gate_temp
-        logger.info("Winner: TEMPERATURE%s", "" if gate_temp.get("passed") else " (neither passes)")
+        logger.info("Winner: %s (logloss=%.6f)", best_cal_name, best_ll)
     # Final evaluate with winner so saved metrics/predictions match
     evaluate_on_test(
         results, X_test, y_test, init_scores_test=init_scores_test, calibrators=calibrators

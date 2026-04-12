@@ -29,41 +29,53 @@ MODEL_EXTENSIONS = {"CatBoost": ".cbm", "XGBoost": ".ubj", "LightGBM": ".txt"}
 
 
 def default_hyperparameters() -> dict:
-    """Optimal hyperparameters for Kaggle CPU training (ADR-003: all models CPU)."""
+    """V9 Training Final hyperparameters (590 configs, 13 kernels — ADR-008/009/010).
+
+    Per-model alpha (ADR-008): LGB=0.1, CB=0.3, XGB=0.5.
+    Sources: config/MODEL_SPECS.md, docs/project/V9_HP_SEARCH_RESULTS.md.
+    """
     # fmt: off
     return {
         "global": {
             "random_seed": 42,
             "early_stopping_rounds": 200,
             "eval_metric": "multi_logloss",
-            # Init score shrink: reduce Elo prior dominance so features can express corrections.
-            # Alpha < 1 = confidence in Elo prior (Ash & Adams 2020, NeurIPS). Not a hack.
-            # v15: models converge in 89-133 iters → prior too strong → alpha=0.7
-            "init_score_alpha": 0.7,
         },
         "catboost": {
-            "iterations": 50000, "depth": 4, "border_count": 128,
-            "learning_rate": 0.03, "l2_leaf_reg": 10, "min_data_in_leaf": 200,
-            "random_strength": 3, "bagging_temperature": 1, "model_size_reg": 0.5,
-            "rsm": 0.3,  # Feature subsampling — MANDATORY >50 features (v10 bug: 11/177 sans rsm)
-            "thread_count": 4, "task_type": "CPU",  # rsm incompatible GPU (CatBoost: pairwise only)
+            "init_score_alpha": 0.3,  # ADR-008: oblivious trees, moderate sensitivity (0.0024)
+            "iterations": 50000, "depth": 5, "learning_rate": 0.05,
+            "l2_leaf_reg": 8.0, "min_data_in_leaf": 200, "random_strength": 2.0,
+            "rsm": 0.7,  # Grid v2: 0.7>0.45>0.3. MANDATORY >50 features
+            # Tier 1 flags (CatBoost docs: golden features, leaf values)
+            # score_function: GPU ONLY (catboost.ai/docs), removed for CPU training
+            "border_count": 1024,              # more candidate splits (default CPU=254)
+            "leaf_estimation_iterations": 3,   # better leaf values (default=auto)
+            "thread_count": 4, "task_type": "CPU",  # rsm incompatible GPU
             "use_best_model": True, "loss_function": "MultiClass",
             "random_seed": 42, "verbose": 500, "early_stopping_rounds": 200,
         },
         "xgboost": {
-            "n_estimators": 50000, "max_depth": 4, "eta": 0.005,
+            "init_score_alpha": 0.5,  # ADR-008: depth-wise, quasi-indifferent (0.001)
+            "n_estimators": 50000, "max_depth": 6, "eta": 0.05,
             "objective": "multi:softprob", "num_class": 3,
-            "lambda": 10.0, "alpha": 0.5, "min_child_weight": 50,
-            "subsample": 0.7, "colsample_bytree": 0.5,
-            "tree_method": "hist", "device": "cpu",  # CPU — no GPU needed for tree models
+            "lambda": 4.0, "alpha": 0.01, "min_child_weight": 50,
+            "subsample": 0.8, "colsample_bytree": 1.0,
+            # Tier 2 draw calibration: same logloss, draw_bias -22%, ECE draw -17%
+            "colsample_bynode": 0.7,
+            "gamma": 1.0,        # prevents noise splits
+            "max_delta_step": 1,  # limits leaf outputs, helps draw imbalance (13.7%)
+            "tree_method": "hist", "device": "cpu",
             "nthread": 4, "seed": 42,
             "early_stopping_rounds": 200, "verbosity": 1,
         },
         "lightgbm": {
-            "n_estimators": 50000, "num_leaves": 15, "max_depth": 4,
-            "learning_rate": 0.03, "objective": "multiclass", "num_class": 3,
-            "reg_lambda": 10.0, "reg_alpha": 0.5, "min_child_samples": 200,
-            "min_gain_to_split": 0.01, "subsample": 0.7, "colsample_bytree": 0.5,
+            "init_score_alpha": 0.1,  # ADR-008: leaf-wise/GOSS, high sensitivity (0.054)
+            "n_estimators": 50000, "num_leaves": 15, "max_depth": 8,
+            "learning_rate": 0.05, "objective": "multiclass", "num_class": 3,
+            "reg_lambda": 4.0, "min_child_samples": 275,
+            "subsample": 0.8, "subsample_freq": 1,  # freq>0 activates bagging
+            "colsample_bytree": 1.0,  # feature_fraction=1.0
+            # Tier 2 confirmed: min_gain_to_split=0, lambda_l1=0 (defaults optimal)
             "n_jobs": 4, "random_state": 42,
             "early_stopping_rounds": 200, "verbose": -1,
         },
