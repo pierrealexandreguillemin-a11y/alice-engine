@@ -385,6 +385,98 @@ sub=0.8, col=1.0, mcw=50 confirme optimal a depth=6.
 
 ---
 
+## 3.10 Audit pre-Training Final — transfert 62K → 1.1M (2026-04-12)
+
+### Params verifies (evidence empirique ALICE, 545 configs sur 62K)
+
+Tous les params du §3.9 ont ete testes sur saison=2022 (~62K train, ~71K valid).
+Le transfert vers le full dataset (1.1M) est justifie par AUTOMATA (NeurIPS 2022) :
+les HP DIRECTIONS sont stables entre subset et full data (speedup 3-30×).
+
+### Params potentiellement sensibles au scaling (surveiller)
+
+**min_child_weight / min_child_samples :**
+
+| Modele | Valeur | % de 62K | % de 1.1M | Doc fabricant |
+|--------|--------|----------|-----------|--------------|
+| XGB mcw | 50 | 0.08% | 0.005% | "larger = more conservative" |
+| LGB mcs | 275 | 0.44% | 0.024% | "hundreds or thousands for large dataset" |
+| CB mdil | 200 | — | — | zero effect oblivious trees |
+
+Decision : GARDER les valeurs 62K. AUTOMATA preserve le ranking. ES=200 compense.
+Si Training Final sous-performe → mcs/mcw est le premier param a re-examiner.
+
+Source : [XGBoost tuning](https://xgboost.readthedocs.io/en/stable/tutorials/param_tuning.html),
+[LightGBM tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html)
+
+**num_leaves LGB = 15 :**
+
+Sur 62K : 15 feuilles = 4100 samples/feuille. Sur 1.1M : 15 feuilles = 76000 samples/feuille.
+Grid v2 : 15 >> 135 >> 255 sur 62K. Decision : GARDER 15. Si sous-performance → tester 31.
+
+Source : [LightGBM Parameters-Tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html)
+
+**early_stopping_rounds = 200 :**
+
+Regle industrie : ~10% du n_estimators. Avec eta=0.05, convergence attendue 1000-3000 iters.
+ES=200 = 7-20% → dans la plage. Decision : GARDER.
+
+Source : [Google ML — Overfitting GBDT](https://developers.google.com/machine-learning/decision-forests/overfitting-gbdt)
+
+### Params explores mais gardes aux defauts
+
+**max_bin / border_count :**
+
+| Modele | Default | Decision | Raison |
+|--------|---------|----------|--------|
+| XGB | 256 (hist) | GARDER | Standard pour 1.1M |
+| LGB | 255 | GARDER | 63 = speed, 255 = accuracy. Accuracy prioritaire |
+| CB | 254 | GARDER | 1024 pour "golden features" (doc CB), mais pas de donnees |
+
+Source : [LightGBM max_bin issue #6016](https://github.com/lightgbm-org/LightGBM/issues/6016),
+[CatBoost parameter-tuning](https://catboost.ai/docs/en/concepts/parameter-tuning)
+
+**XGB reg_alpha (L1) = 0.01 :**
+
+V8 = 0.5, V9 = 0.01. Jamais explore. Probst 2019 : quasi-nul pour XGB.
+Sur 201 features dont certaines sparse (H2H 0.8%, color perf 7.4%), L1 pourrait aider.
+Decision : GARDER 0.01. Second-order effect.
+
+### Params NON explores signales par la litterature
+
+**CatBoost grow_policy : SymmetricTree vs Depthwise vs Lossguide**
+
+On utilise SymmetricTree (oblivious, default). Depthwise et Lossguide existent mais
+n'ont JAMAIS ete testes. Lossguide = equivalent leaf-wise de LGB.
+
+Doc CatBoost : "symmetric trees give better quality in many cases" mais pas toujours.
+[CatBoost grow_policy issue #1348](https://github.com/catboost/catboost/issues/1348)
+
+Decision : NE PAS CHANGER. Changer grow_policy invalide TOUTE la recherche CB
+(depth, l2, rsm optimises pour oblivious). C'est un pivot architectural, pas un tuning.
+
+**Calibration : Dirichlet calibration (Kull et al. 2019, NeurIPS)**
+
+Temperature scaling = 1 parametre T global. Dirichlet calibration = matrice K×K + softmax,
+capture les interactions inter-classes. Pour notre 3-class W/D/L ou le draw est critique
+(45% de la variance E[score]), les interactions inter-classes importent.
+
+Source : [Beyond temperature scaling (arXiv:1910.12656)](https://ar5iv.labs.arxiv.org/html/1910.12656)
+
+Decision : AJOUTER Dirichlet calibration en parallele de temperature scaling dans le
+Training Final. Comparer sur valid set. Si Dirichlet ameliore ECE draw → l'utiliser.
+Implementation : `netcal.scaling.DirichletCalibration` ou log-transform + LogisticRegression.
+
+### Conclusion
+
+Prets pour Training Final. 2 ajouts :
+1. Dirichlet calibration en comparaison de temperature scaling
+2. Logger min_leaf_samples effectif sur 1.1M (diagnostic, pas bloquant)
+
+Tout le reste est fige. 545 configs sur 62K. AUTOMATA garantit le transfert des directions.
+
+---
+
 ## 4. Features V8 (201 colonnes apres encodage, 219 avant)
 
 Source : `reports/v8_xgboost_v5_resume/metadata.json` (feature_count=219)
