@@ -469,11 +469,67 @@ Implementation : `netcal.scaling.DirichletCalibration` ou log-transform + Logist
 
 ### Conclusion
 
-Prets pour Training Final. 2 ajouts :
-1. Dirichlet calibration en comparaison de temperature scaling
-2. Logger min_leaf_samples effectif sur 1.1M (diagnostic, pas bloquant)
+### Audit contexte production (2026-04-12)
 
-Tout le reste est fige. 545 configs sur 62K. AUTOMATA garantit le transfert des directions.
+**Ce que le CE (`composer.py`) consomme reellement :**
+- `win_probability`, `draw_probability`, `loss_probability` per (joueur × echiquier × scenario)
+- `expected_score = win_prob + draw_prob * 0.5` (ligne 116)
+- `confidence` (champ API CDC §3.3, actuellement en dur a 0.5)
+- 20 scenarios ALI × K boards × N candidats = ~1600 predictions par ronde
+
+**Pourquoi le draw est le signal CRITIQUE (pas le logloss global) :**
+- Draw = 13.7% des parties MAIS 45% de la variance E[score]
+- Mode risk-adjusted : Var[score] = f(P(draw)) — distingue compo "sure" vs "risquee"
+- Mode tactique : P(match_win) = convolution K boards, sensible a P(draw)
+- draw_bias +2% × 8 boards = +0.08 points/match systematique → fausse les rankings
+
+**CE actuel = formules Elo, PAS le modele ML (composer.py ligne 64) :**
+```python
+DRAW_PROBABILITY_FACTOR = 0.35  # draw FIXE pour tout le monde
+```
+Notre ML predit draw de 5% a 46% selon contexte. Le cablage CE→ML est le deliverable Phase 2.
+
+**Pawnalyze (5M parties OTB) :** LightGBM, seulement white_elo + black_elo (2 features).
+Notre approche (201 features + residual learning) est PLUS riche.
+Source : https://blog.pawnalyze.com/tournament/2022/02/27/Elo-Rating-Accuracy-Is-Machine-Learning-Better.html
+
+**ChessEngineLab :** draw rate = f(avg_elo) × relative_draw_rate(diff_elo). Lineaire.
+Notre draw_rate_prior (lookup elo_band × diff_band) est l'equivalent.
+Source : https://chessenginelab.substack.com/p/game-outcomes
+
+**Consequences pour les params Training Final :**
+1. **Dirichlet calibration = OBLIGATOIRE** (pas optionnel). Temperature scaling = 1 param global,
+   Dirichlet = matrice K×K, capture interactions W/D/L. Draw_bias impacte directement E[score].
+   Source : Kull et al. 2019 NeurIPS (arXiv:1910.12656)
+2. **ECE draw + draw_bias = metriques de selection** (pas juste logloss). Le best logloss n'est
+   pas forcement le best pour le CE si la calibration draw se degrade.
+3. **CatBoost posterior_sampling** = utile pour le champ `confidence` de l'API CDC.
+   Pas de la "recherche" — c'est un besoin produit documente.
+4. **Chaque grid Tier 2 doit mesurer ECE draw et draw_bias en plus du logloss.**
+
+### Plan d'action Training Final
+
+**Tier 0 — OBLIGATOIRE dans le kernel Training Final :**
+- Dirichlet calibration (implementation + comparaison avec temperature scaling)
+- Logger ECE draw + draw_bias par modele (pas juste logloss)
+- CatBoost posterior_sampling en parallele du modele standard
+
+**Tier 1 — Flags simples, zero cout :**
+- CB score_function=NewtonL2 (second derivees, potentiel amelioration calibration)
+- CB border_count=1024 (meilleure resolution golden features)
+- CB leaf_estimation_iterations=3 (meilleures leaf values)
+- LGB min_gain_to_split=0.01 (previent splits noise avec alpha=0.1)
+- LGB lambda_l1=0.1 (L1 sur 201 features dont certaines sparse)
+
+**Tier 2 — Grids rapides (avant Training Final, sur 62K) :**
+- LGB num_leaves {15, 31, 63} — 76K samples/leaf sur 1.1M = potentiellement sous-utilise
+- XGB colsample_bynode {0.7, 0.8, 1.0} — regulariseur per-split jamais explore
+- XGB gamma {0, 0.1, 1.0} — min loss reduction, previent noise splits
+- XGB max_delta_step {0, 1, 5} — pour class imbalance (draw 13.7%)
+- **CHAQUE combo evalue sur logloss + ECE draw + draw_bias**
+
+**Tier 3 — V10 (changements architecturaux) :**
+- XGB grow_policy=lossguide, LGB boosting=dart, CB boosting=Ordered, CB langevin
 
 ---
 

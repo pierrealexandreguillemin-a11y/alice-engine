@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-tier2-lightgbm",
+  "title": "alice-tier2-lightgbm",
+  "code_file": "grid_tier2_lightgbm.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["pguillemin/alice-code"],
+  "competition_sources": [],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}

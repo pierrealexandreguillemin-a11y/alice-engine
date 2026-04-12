@@ -157,6 +157,7 @@ def _package_all(tmp_path: Path) -> None:
         "grid_search.py",
         "grid_gaps.py",
         "grid_gaps2.py",
+        "grid_tier2.py",
     ]
     for cloud_module in cloud_modules:
         src = src_scripts / "cloud" / cloud_module
