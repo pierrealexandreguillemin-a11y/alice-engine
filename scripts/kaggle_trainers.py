@@ -109,6 +109,10 @@ def _fail_result() -> dict:
     return {"model": None, "metrics": {}, "importance": {}}
 
 
+# Keys that are ALICE-specific, NOT valid library params — must be stripped before constructors
+_ALICE_KEYS = {"init_score_alpha"}
+
+
 def _train_catboost(
     X_train: Any,
     y_train: Any,
@@ -128,7 +132,8 @@ def _train_catboost(
             "snapshot_file": "/kaggle/working/catboost_snapshot",
             "snapshot_interval": 600,
         }
-        cb = CatBoostClassifier(**params, **snap_params, eval_metric="MultiClass")
+        cb_params = {k: v for k, v in params.items() if k not in _ALICE_KEYS}
+        cb = CatBoostClassifier(**cb_params, **snap_params, eval_metric="MultiClass")
         train_pool = Pool(X_train, y_train, baseline=init_scores_train)
         valid_pool = Pool(X_valid, y_valid, baseline=init_scores_valid)
         t0 = time.time()
@@ -155,7 +160,11 @@ def _train_xgboost(
     try:
         import xgboost as xgb  # noqa: PLC0415
 
-        p = {k: v for k, v in params.items() if k not in ("n_estimators", "early_stopping_rounds")}
+        p = {
+            k: v
+            for k, v in params.items()
+            if k not in {"n_estimators", "early_stopping_rounds"} | _ALICE_KEYS
+        }
         n_rounds = params.get("n_estimators", 5000)
         es = params.get("early_stopping_rounds", 500)
         dtrain = xgb.DMatrix(X_train, label=y_train)
@@ -214,7 +223,9 @@ def _train_lightgbm(
         import lightgbm as lgb_lib  # noqa: PLC0415
         from lightgbm import LGBMClassifier  # noqa: PLC0415
 
-        lgb_p = {k: v for k, v in params.items() if k != "early_stopping_rounds"}
+        lgb_p = {
+            k: v for k, v in params.items() if k not in {"early_stopping_rounds"} | _ALICE_KEYS
+        }
         lgb_p["device"] = "cpu"
         es = params.get("early_stopping_rounds", 50)
         ckpt_dir = "/kaggle/working/checkpoints"
