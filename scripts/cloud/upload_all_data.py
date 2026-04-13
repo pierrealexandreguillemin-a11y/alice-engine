@@ -105,6 +105,17 @@ def upload(version_notes: str | None = None) -> None:
             api.dataset_create_new(folder=str(tmp_path), dir_mode="zip", public=False)
             logger.info("Created: %s", DATASET_SLUG)
 
+        # Wait for Kaggle to process the new dataset version before any kernel push.
+        # Previous incident: kernels pushed immediately after upload got stale V8 code.
+        import time as _time
+
+        logger.warning(
+            "WAITING 120s for Kaggle dataset propagation. "
+            "Do NOT push kernels until this completes."
+        )
+        _time.sleep(120)
+        logger.info("Dataset propagation wait complete. Safe to push kernels.")
+
         _save_upload_record(notes, content_hash)
 
 

@@ -200,6 +200,17 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     config = default_hyperparameters()
+
+    # V9 guard: crash immediately if stale V8 code is running (dataset propagation issue)
+    _xgb_eta = config["xgboost"].get("eta", 0)
+    _cb_rsm = config["catboost"].get("rsm", 0)
+    if _xgb_eta < 0.01 or _cb_rsm < 0.5:
+        raise RuntimeError(
+            f"STALE CODE DETECTED: eta={_xgb_eta}, rsm={_cb_rsm}. "
+            "Expected V9 params (eta=0.05, rsm=0.7). "
+            "Re-upload alice-code dataset and wait for propagation."
+        )
+
     config["catboost"]["train_dir"] = str(out_dir / "catboost_info")
 
     # Compute Elo init scores BEFORE feature subset (needs blanc_elo/noir_elo)

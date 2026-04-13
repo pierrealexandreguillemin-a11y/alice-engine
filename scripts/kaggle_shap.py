@@ -147,8 +147,13 @@ def _tree_explainer_shap(
     rng = np.random.RandomState(42)  # noqa: NPY002
     idx = rng.choice(len(X_test), n, replace=False)
     X_sub = X_test.iloc[idx].reset_index(drop=True)
-    # LGBMClassifier: use booster_ for TreeExplainer
-    raw_model = getattr(model, "booster_", model)
+    # LGBMClassifier: booster_, XGBWrapper: get_booster(), else model itself
+    if hasattr(model, "get_booster"):
+        raw_model = model.get_booster()
+    elif hasattr(model, "booster_"):
+        raw_model = model.booster_
+    else:
+        raw_model = model
     t0 = time.time()
     explainer = shap.TreeExplainer(raw_model)
     shap_vals = explainer.shap_values(X_sub)
