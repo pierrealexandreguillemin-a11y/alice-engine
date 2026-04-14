@@ -160,7 +160,11 @@ def main() -> None:
         setup_hf_auth,
     )
     from scripts.kaggle_diagnostics import save_diagnostics  # noqa: PLC0415
-    from scripts.kaggle_metrics import check_quality_gates, evaluate_on_test  # noqa: PLC0415
+    from scripts.kaggle_metrics import evaluate_on_test  # noqa: PLC0415
+    from scripts.kaggle_quality_gates import (  # noqa: PLC0415
+        check_quality_gates,
+        compute_split_logloss,
+    )
     from scripts.kaggle_trainers import (  # noqa: PLC0415
         LABEL_COLUMN,
         MODEL_EXTENSIONS,
@@ -332,7 +336,12 @@ def main() -> None:
         evaluate_on_test(
             results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal
         )
-        g = check_quality_gates(results, baseline_metrics=baseline_metrics, champion_ll=champion_ll)
+        g = check_quality_gates(
+            results,
+            baseline_metrics=baseline_metrics,
+            champion_ll=champion_ll,
+            verbose=False,
+        )
         ll = g.get("best_log_loss", 999.0)
         logger.info("Quality gate %s: passed=%s logloss=%.6f", cal_name, g.get("passed"), ll)
         if g.get("passed") and ll < best_ll:
@@ -343,7 +352,7 @@ def main() -> None:
             evaluate_on_test(
                 results, X_test, y_test, init_scores_test=init_scores_test, calibrators=cal
             )
-            g = check_quality_gates(results, baseline_metrics=baseline_metrics)
+            g = check_quality_gates(results, baseline_metrics=baseline_metrics, verbose=False)
             ll = g.get("best_log_loss", 999.0)
             if ll < best_ll:
                 best_cal_name, calibrators, gate, best_ll = cal_name, cal, g, ll
@@ -353,6 +362,21 @@ def main() -> None:
     # Final evaluate with winner so saved metrics/predictions match
     evaluate_on_test(
         results, X_test, y_test, init_scores_test=init_scores_test, calibrators=calibrators
+    )
+    # Authoritative T1-T12 gate check with T10 train-test gap (ISO 42001)
+    train_ll = compute_split_logloss(
+        results,
+        X_train,
+        y_train,
+        init_scores_train,
+        calibrators,
+    )
+    gate = check_quality_gates(
+        results,
+        baseline_metrics=baseline_metrics,
+        champion_ll=champion_ll,
+        train_log_loss=train_ll,
+        verbose=True,
     )
 
     save_models(results, encoders, out_dir, model_extensions=MODEL_EXTENSIONS)

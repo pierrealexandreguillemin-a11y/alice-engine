@@ -179,10 +179,13 @@ def _train_xgboost(
         ckpt_cb = xgb.callback.TrainingCheckPoint(
             directory="/kaggle/working", name="xgb_ckpt", interval=500
         )
+        # EarlyStopping as CALLBACK with save_best=True (NOT parameter)
+        # xgb.train() returns LAST model, not best. save_best=True fixes this.
+        es_cb = xgb.callback.EarlyStopping(rounds=es, save_best=True)
         # fmt: off
         bst = xgb.train(p, dtrain, n_rounds, evals=[(dvalid, "val")],
-                        early_stopping_rounds=es, verbose_eval=100,
-                        evals_result=evals_log, callbacks=[ckpt_cb])
+                        verbose_eval=100,
+                        evals_result=evals_log, callbacks=[ckpt_cb, es_cb])
         # fmt: on
         # Wrap Booster for sklearn-compatible pipeline (predict_proba, feature_importances_)
         from scripts.kaggle_metrics import XGBWrapper  # noqa: PLC0415

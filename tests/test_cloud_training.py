@@ -2,7 +2,7 @@
 
 Document ID: ALICE-TEST-CLOUD-TRAINING
 Version: 3.0.0
-Tests count: 14
+Tests count: 18
 Classes: TestComputeHash, TestBuildLineage, TestQualityGates, TestModelCard
 """
 
@@ -196,6 +196,52 @@ class TestQualityGates:
         gate = check_quality_gates(
             self._make_results(0.85), baseline_metrics=self._make_baselines(), champion_ll=None
         )
+        assert gate["passed"] is True
+
+    def test_t9_few_features_fails(self) -> None:
+        """T9: model with <=5 features importance>0 must fail."""
+        results = self._make_results(0.85)
+        results["CatBoost"]["model"].feature_importances_ = np.array([0.5, 0.3, 0.1, 0.0, 0.0])
+        gate = check_quality_gates(
+            results,
+            baseline_metrics=self._make_baselines(),
+            verbose=False,
+        )
+        assert gate["passed"] is False
+        assert "T9" in gate["reason"]
+
+    def test_t9_many_features_passes(self) -> None:
+        """T9: model with >5 features importance>0 must pass."""
+        results = self._make_results(0.85)
+        results["CatBoost"]["model"].feature_importances_ = np.array(
+            [0.5, 0.3, 0.2, 0.15, 0.1, 0.08, 0.05, 0.0, 0.0, 0.0]
+        )
+        gate = check_quality_gates(
+            results,
+            baseline_metrics=self._make_baselines(),
+            verbose=False,
+        )
+        assert gate["passed"] is True
+
+    def test_t10_small_gap_passes(self) -> None:
+        """T10: train-test gap < 0.05 must pass (no warning)."""
+        gate = check_quality_gates(
+            self._make_results(0.85),
+            baseline_metrics=self._make_baselines(),
+            train_log_loss=0.82,
+            verbose=False,
+        )
+        assert gate["passed"] is True
+
+    def test_t10_large_gap_warns_but_passes(self) -> None:
+        """T10: train-test gap > 0.05 logs warning but still passes (temporal splits)."""
+        gate = check_quality_gates(
+            self._make_results(0.85),
+            baseline_metrics=self._make_baselines(),
+            train_log_loss=0.75,
+            verbose=False,
+        )
+        # T10 is WARNING, not FAIL — expected for temporal splits
         assert gate["passed"] is True
 
 

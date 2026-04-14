@@ -78,35 +78,10 @@ def compute_ece(y_true: np.ndarray, y_proba_class: np.ndarray, n_bins: int = 10)
 
 
 def check_baseline_conditions(m: dict, baseline_metrics: dict) -> str | None:
-    """Check 6 baseline conditions. Returns failure reason or None (ISO 25059).
+    """DEPRECATED: moved to kaggle_quality_gates.py. Re-exported for backward compat."""
+    from scripts.kaggle_quality_gates import check_baseline_conditions as _impl  # noqa: PLC0415
 
-    Conditions checked (model must beat both naive and Elo baselines):
-    1. log_loss < naive  2. log_loss < elo  3. rps < naive
-    4. rps < elo         5. brier < naive   6. es_mae < elo
-    """
-    naive = baseline_metrics.get("naive", {})
-    elo = baseline_metrics.get("elo", {})
-    checks: list[tuple[bool, str]] = [
-        (
-            bool(naive) and m.get("test_log_loss", 999) >= naive.get("log_loss", 999),
-            "log_loss >= naive baseline",
-        ),
-        (
-            bool(elo) and m.get("test_log_loss", 999) >= elo.get("log_loss", 999),
-            "log_loss >= elo baseline",
-        ),
-        (bool(naive) and m.get("test_rps", 999) >= naive.get("rps", 999), "rps >= naive baseline"),
-        (bool(elo) and m.get("test_rps", 999) >= elo.get("rps", 999), "rps >= elo baseline"),
-        (
-            bool(naive) and m.get("test_brier", 999) >= naive.get("brier", 999),
-            "brier >= naive",
-        ),
-        (bool(elo) and m.get("test_es_mae", 999) >= elo.get("es_mae", 999), "es_mae >= elo"),
-    ]
-    for fail_cond, label in checks:
-        if fail_cond:
-            return label
-    return None
+    return _impl(m, baseline_metrics)
 
 
 class XGBWrapper:
@@ -227,6 +202,13 @@ def evaluate_on_test(
         y_proba = predict_with_init(r["model"], X_test, init_scores_test)
         if calibrators and name in calibrators:
             y_proba = _apply_isotonic(y_proba, calibrators[name])
+        # T7: No NaN/Inf in predictions (ISO 25059)
+        if np.any(~np.isfinite(y_proba)):
+            raise ValueError(f"T7 FAIL: NaN/Inf detected in {name} predictions")
+        # T8: Probas must sum to 1 (ISO 25059)
+        max_sum_err = float(np.max(np.abs(y_proba.sum(axis=1) - 1.0)))
+        if max_sum_err > 1e-6:
+            raise ValueError(f"T8 FAIL: {name} probas sum error {max_sum_err:.2e}")
         y_pred = np.argmax(y_proba, axis=1)
         y_arr = y_test.values if hasattr(y_test, "values") else np.asarray(y_test)
         r["metrics"]["test_log_loss"] = float(log_loss(y_arr, y_proba))
@@ -259,40 +241,13 @@ def evaluate_on_test(
         )
 
 
-def _check_calibration(m: dict) -> str | None:
-    """Check ECE per class, draw bias, and draw recall (conditions 7-9)."""
-    for cls in ("loss", "draw", "win"):
-        if m.get(f"ece_class_{cls}", 1.0) >= 0.05:
-            return f"ece_{cls} >= 0.05"
-    if abs(m.get("draw_calibration_bias", 1.0)) >= 0.02:
-        return "draw_calibration_bias >= 0.02"
-    if m.get("mean_p_draw", 0.0) < 0.01:
-        return "mean_p_draw < 0.01 (model produces near-zero draw probabilities)"
-    return None
-
-
 def check_quality_gates(
     results: dict,
     baseline_metrics: dict | None = None,
     champion_ll: float | None = None,
+    **kwargs: Any,
 ) -> dict:
-    """ISO 42001: 9-condition quality gate (baselines + calibration + draw recall + champion)."""
-    candidates = [(n, r) for n, r in results.items() if r["model"] is not None]
-    if not candidates:
-        return {"passed": False, "reason": "All models failed to train"}
-    best_name, best_r = min(candidates, key=lambda x: x[1]["metrics"].get("test_log_loss", 999.0))
-    m = best_r["metrics"]
-    best_ll = m.get("test_log_loss", 999.0)
-    if baseline_metrics:
-        reason = check_baseline_conditions(m, baseline_metrics)
-        if reason:
-            return {"passed": False, "reason": reason}
-    # Calibration + draw prediction checks (conditions 7-9)
-    cal_reason = _check_calibration(m)
-    if cal_reason:
-        return {"passed": False, "reason": cal_reason}
-    if champion_ll and champion_ll > 0:
-        rise_pct = (best_ll - champion_ll) / champion_ll * 100
-        if rise_pct > 5.0:
-            return {"passed": False, "reason": f"Degradation {rise_pct:.1f}% > 5.0%"}
-    return {"passed": True, "best_model": best_name, "best_log_loss": best_ll}
+    """DEPRECATED: moved to kaggle_quality_gates.py. Re-exported for backward compat."""
+    from scripts.kaggle_quality_gates import check_quality_gates as _impl  # noqa: PLC0415
+
+    return _impl(results, baseline_metrics=baseline_metrics, champion_ll=champion_ll, **kwargs)
