@@ -110,8 +110,7 @@ def upload(version_notes: str | None = None) -> None:
         import time as _time
 
         logger.warning(
-            "WAITING 120s for Kaggle dataset propagation. "
-            "Do NOT push kernels until this completes."
+            "WAITING 120s for Kaggle dataset propagation. Do NOT push kernels until this completes."
         )
         _time.sleep(120)
         logger.info("Dataset propagation wait complete. Safe to push kernels.")
