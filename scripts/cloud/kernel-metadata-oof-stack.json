@@ -1,0 +1,13 @@
+{
+  "id": "pguillemin/alice-oof-stack-v9",
+  "title": "alice-oof-stack-v9",
+  "code_file": "train_final_oof.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["pguillemin/alice-code"],
+  "competition_sources": [],
+  "kernel_sources": ["pguillemin/alice-fe-v8"]
+}

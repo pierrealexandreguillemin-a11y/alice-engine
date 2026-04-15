@@ -164,6 +164,8 @@ def _package_all(tmp_path: Path) -> None:
         "autogluon_diagnostics.py",
         "autogluon_model_card.py",
         "train_kaggle.py",
+        "train_oof_stack.py",
+        "train_autogluon_v9.py",
         "optuna_kaggle.py",
         "grid_search.py",
         "grid_gaps.py",
