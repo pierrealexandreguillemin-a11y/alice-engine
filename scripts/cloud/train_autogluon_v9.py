@@ -2,6 +2,7 @@
 
 Trains AutoGluon on V9 features + 3 Elo proba features. No init_scores
 (AG doesn't support them). Benchmark against V9 single models.
+Time guard: fit 7h, post-processing checkpointed after each artifact.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import time as _time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,10 +22,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))
-AG_TIME_LIMIT = 28800  # 8h (1h margin on 9h GPU session limit)
+AG_TIME_LIMIT = 25200  # 7h fit (2h margin for post-processing on 9h GPU)
 AG_PRESETS = "best_quality"
 AG_BAG_FOLDS = 5
 AG_STACK_LEVELS = 1  # V8 postmortem: L2/L3 overfit
+SESSION_HARD_LIMIT = 32400  # 9h GPU absolute max
 
 
 def _setup_kaggle_imports() -> None:
@@ -51,52 +54,56 @@ def _compute_elo_proba_features(
 
     blanc_elo = df["blanc_elo"].fillna(1500).values
     noir_elo = df["noir_elo"].fillna(1500).values
-    # Returns (n, 3) = [P(loss), P(draw), P(win)]
     probas = compute_elo_baseline(blanc_elo, noir_elo, draw_lookup)
     return pd.DataFrame(
-        {
-            "p_elo_win": probas[:, 2],
-            "p_elo_draw": probas[:, 1],
-            "p_elo_loss": probas[:, 0],
-        },
+        {"p_elo_win": probas[:, 2], "p_elo_draw": probas[:, 1], "p_elo_loss": probas[:, 0]},
         index=df.index,
     )
 
 
-def main() -> None:
-    """AutoGluon V9 benchmark pipeline."""
+def _save_predictions(probas: pd.DataFrame, y: pd.Series, path: Path) -> None:
+    """Save predictions parquet. Label-based [[0,1,2]] NOT positional .iloc."""
+    arr = probas[[0, 1, 2]].values if hasattr(probas, "columns") else np.asarray(probas)
+    pd.DataFrame(
+        {"y_true": y.values, "p_loss": arr[:, 0], "p_draw": arr[:, 1], "p_win": arr[:, 2]}
+    ).to_parquet(path, index=False)
+    logger.info("CHECKPOINT: %s (%d rows)", path.name, len(y))
+
+
+def _time_left(t0: float) -> float:
+    """Seconds remaining before 9h session hard limit."""
+    return SESSION_HARD_LIMIT - (_time.time() - t0)
+
+
+def main() -> None:  # noqa: PLR0915
+    """AutoGluon V9 benchmark with time-guarded checkpoints."""
+    t0 = _time.time()
     logger.info("ALICE Engine — AutoGluon V9 Benchmark")
     _setup_kaggle_imports()
 
     from autogluon.tabular import TabularPredictor  # noqa: PLC0415
 
-    # Load features (same as V9 Training Final)
     from scripts.cloud.train_kaggle import _load_features  # noqa: PLC0415
     from scripts.kaggle_trainers import prepare_features  # noqa: PLC0415
 
     train_raw, valid_raw, test_raw, features_dir = _load_features()
     logger.info("Loaded: train=%d valid=%d test=%d", len(train_raw), len(valid_raw), len(test_raw))
 
-    # Prepare features (encoding, target mapping)
     X_train, y_train, X_valid, y_valid, X_test, y_test, encoders = prepare_features(
         train_raw,
         valid_raw,
         test_raw,
     )
 
-    # NaN audit
     for name, df in [("train", X_train), ("valid", X_valid), ("test", X_test)]:
         dead = [c for c in df.columns if df[c].isna().mean() > 0.99]
         if dead:
             raise ValueError(f"{len(dead)} features >99% NaN on {name}")
 
-    # Build draw_rate_lookup from TRAIN ONLY (same as V9 Training Final)
     from scripts.features.draw_priors import build_draw_rate_lookup  # noqa: PLC0415
 
     draw_lookup = build_draw_rate_lookup(train_raw)
 
-    # Add 3 Elo proba features using SAME baseline as V9 (dynamic white advantage).
-    # Align on index: prepare_features may drop rows (forfeit filter in _split_xy).
     for X, raw in [(X_train, train_raw), (X_valid, valid_raw), (X_test, test_raw)]:
         elo_feats = _compute_elo_proba_features(raw, draw_lookup)
         for col in elo_feats.columns:
@@ -104,7 +111,6 @@ def main() -> None:
 
     logger.info("Features: %d (201 V9 + 3 Elo probas)", X_train.shape[1])
 
-    # Build AG training DataFrame (AG needs label column in the DataFrame)
     train_ag = X_train.copy()
     train_ag["target"] = y_train.values
     valid_ag = X_valid.copy()
@@ -114,7 +120,7 @@ def main() -> None:
     out_dir = OUTPUT_DIR / version
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- FIT ---
+    # === FIT (time-limited, AG handles its own checkpoints) ===
     predictor = TabularPredictor(
         label="target",
         eval_metric="log_loss",
@@ -124,47 +130,61 @@ def main() -> None:
     predictor.fit(
         train_data=train_ag,
         tuning_data=valid_ag,
-        use_bag_holdout=True,  # Required: tuning_data + num_bag_folds needs this flag
+        use_bag_holdout=True,
         presets=AG_PRESETS,
         time_limit=AG_TIME_LIMIT,
         num_bag_folds=AG_BAG_FOLDS,
         num_stack_levels=AG_STACK_LEVELS,
-        dynamic_stacking=False,  # Force num_stack_levels=1 (V8 postmortem: L2 overfit)
+        dynamic_stacking=False,
         calibrate=True,
-        num_gpus=1,  # T4 GPU for NN_TORCH/FASTAI (tree models auto-use CPU)
-        ag_args_fit={"max_memory_usage_ratio": 1.5},  # No "ag." prefix (AG 1.5 docs)
+        num_gpus=1,
+        ag_args_fit={"max_memory_usage_ratio": 1.5},
         verbosity=2,
     )
+    logger.info("Fit complete. Time left: %.0fs", _time_left(t0))
 
-    # --- LEADERBOARD ---
+    # === POST-PROCESSING: each step checkpointed, time-guarded ===
+
+    # CHECKPOINT 1: leaderboard
     test_ag = X_test.copy()
     test_ag["target"] = y_test.values
     leaderboard = predictor.leaderboard(test_ag, silent=True)
     leaderboard.to_csv(out_dir / "leaderboard.csv", index=False)
-    logger.info("Leaderboard:\n%s", leaderboard.to_string())
+    logger.info(
+        "CHECKPOINT: leaderboard.csv (%d models). Time left: %.0fs",
+        len(leaderboard),
+        _time_left(t0),
+    )
 
-    # --- PREDICTIONS ---
-    # Best model (stacked ensemble)
+    # CHECKPOINT 2: ensemble predictions
+    if _time_left(t0) < 300:
+        logger.warning("TIME GUARD: <5min left, skipping remaining artifacts")
+        return
     probas_test_best = predictor.predict_proba(X_test)
-    probas_valid_best = predictor.predict_proba(X_valid)
+    _save_predictions(probas_test_best, y_test, out_dir / "predictions_test_ensemble.parquet")
 
-    # Best single model
+    # CHECKPOINT 3: valid predictions
+    if _time_left(t0) < 300:
+        logger.warning("TIME GUARD: <5min left, skipping remaining artifacts")
+        return
+    probas_valid_best = predictor.predict_proba(X_valid)
+    _save_predictions(probas_valid_best, y_valid, out_dir / "predictions_valid_ensemble.parquet")
+
+    # CHECKPOINT 4: best single model predictions
     best_single = None
     for m in leaderboard["model"].values:
         if "Ensemble" not in m and "Stack" not in m:
             best_single = m
             break
-    if best_single:
+    if best_single and _time_left(t0) > 300:
         probas_test_single = predictor.predict_proba(X_test, model=best_single)
-        logger.info("Best single model: %s", best_single)
-
-    # Save predictions
-    _save_predictions(probas_test_best, y_test, out_dir / "predictions_test_ensemble.parquet")
-    _save_predictions(probas_valid_best, y_valid, out_dir / "predictions_valid_ensemble.parquet")
-    if best_single:
         _save_predictions(probas_test_single, y_test, out_dir / "predictions_test_single.parquet")
+        logger.info("Best single: %s", best_single)
 
-    # --- QUALITY GATES T1-T12 ---
+    # CHECKPOINT 5: quality metrics
+    if _time_left(t0) < 120:
+        logger.warning("TIME GUARD: <2min left, skipping metrics+metadata")
+        return
     from sklearn.metrics import log_loss  # noqa: PLC0415
 
     from scripts.kaggle_metrics import (  # noqa: PLC0415
@@ -176,21 +196,16 @@ def main() -> None:
 
     y_arr = y_test.values
     probas_arr = (
-        probas_test_best.values
-        if hasattr(probas_test_best, "values")
+        probas_test_best[[0, 1, 2]].values
+        if hasattr(probas_test_best, "columns")
         else np.asarray(probas_test_best)
     )
-    # Ensure column order is [loss, draw, win] = [0, 1, 2]
-    if hasattr(probas_test_best, "columns"):
-        probas_arr = probas_test_best[[0, 1, 2]].values
-
     test_ll = float(log_loss(y_arr, probas_arr))
     test_rps = float(compute_rps(y_arr, probas_arr))
     test_brier = float(compute_multiclass_brier(y_arr, probas_arr))
     test_es_mae = float(compute_expected_score_mae(y_arr, probas_arr))
     mean_p_draw = float(probas_arr[:, 1].mean())
-    observed_draw = float((y_arr == 1).mean())
-    draw_bias = mean_p_draw - observed_draw
+    draw_bias = mean_p_draw - float((y_arr == 1).mean())
 
     logger.info(
         "AG ENSEMBLE: ll=%.6f rps=%.6f es_mae=%.6f draw_bias=%.6f",
@@ -199,12 +214,12 @@ def main() -> None:
         test_es_mae,
         draw_bias,
     )
-
     for c, cls in enumerate(["loss", "draw", "win"]):
-        ece = float(compute_ece((y_arr == c).astype(float), probas_arr[:, c]))
-        logger.info("  ECE %s: %.4f", cls, ece)
+        logger.info(
+            "  ECE %s: %.4f", cls, float(compute_ece((y_arr == c).astype(float), probas_arr[:, c]))
+        )
 
-    # --- METADATA ---
+    # CHECKPOINT 6: metadata
     metadata = {
         "version": version,
         "created_at": datetime.now(tz=UTC).isoformat(),
@@ -229,34 +244,18 @@ def main() -> None:
     }
     with open(out_dir / "metadata.json", "w") as f:
         json.dump(metadata, f, indent=2, default=str)
+    logger.info("CHECKPOINT: metadata.json. Time left: %.0fs", _time_left(t0))
 
-    # Feature importance
-    try:
-        imp = predictor.feature_importance(valid_ag, silent=True)
-        imp.to_csv(out_dir / "feature_importance.csv")
-    except Exception:
-        logger.warning("Feature importance failed (non-blocking)")
+    # CHECKPOINT 7: feature importance (non-blocking)
+    if _time_left(t0) > 300:
+        try:
+            imp = predictor.feature_importance(valid_ag, silent=True)
+            imp.to_csv(out_dir / "feature_importance.csv")
+            logger.info("CHECKPOINT: feature_importance.csv")
+        except Exception:
+            logger.warning("Feature importance failed (non-blocking)")
 
-    logger.info("Done. AG V9 benchmark complete.")
-
-
-def _save_predictions(probas: pd.DataFrame, y: pd.Series, path: Path) -> None:
-    """Save predictions parquet with y_true + 3 proba columns.
-
-    AG predict_proba returns DataFrame with class labels as columns (0,1,2).
-    Use label-based access [[0,1,2]] NOT positional .iloc (avoids class swap).
-    """
-    arr = probas[[0, 1, 2]].values if hasattr(probas, "columns") else np.asarray(probas)
-    df = pd.DataFrame(
-        {
-            "y_true": y.values,
-            "p_loss": arr[:, 0],
-            "p_draw": arr[:, 1],
-            "p_win": arr[:, 2],
-        }
-    )
-    df.to_parquet(path, index=False)
-    logger.info("Saved predictions: %s (%d rows)", path.name, len(df))
+    logger.info("Done. AG V9 benchmark complete. Total: %.0fs", _time.time() - t0)
 
 
 if __name__ == "__main__":
