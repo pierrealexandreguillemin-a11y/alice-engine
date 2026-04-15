@@ -78,6 +78,48 @@ Applique sur les modeles entraines, predictions test/valid, et artefacts.
 | **T11** | Reliability diagram par classe | Visuel : courbe proche diagonale | Guo2017, scikit-learn |
 | **T12** | Reporter RPS ET log_loss | Les deux | Wheat2019 |
 
+### Gates infrastructure — protection timeout (2026-04-15)
+
+Ces gates ne verifient pas la qualite du MODELE mais la robustesse du PIPELINE.
+Un kernel sans checkpoint qui timeout = 100% du travail perdu. Constate 5 fois
+sur le projet ALICE (V8 v17, AG v1-v4). ISO 25010 (fiabilite), ISO 42001 (tracabilite).
+
+| Gate | Check | Seuil | Ref |
+|------|-------|-------|-----|
+| **T13** | Checkpoint apres chaque modele/fold | 0 artefact perdu si timeout a tout moment | ALICE postmortem v17, kaggle-deployment skill |
+| **T14** | Time guard avant post-processing | `time_left > budget_post` avant chaque etape | ALICE AG v4 timeout, SESSION_HARD_LIMIT |
+| **T15** | Artefacts sauves incrementalement | Chaque save independant (pas batch en fin de script) | ALICE postmortem 3 timeouts consecutifs |
+| **T16** | Budget temps calcule AVANT push | Docstring avec temps reel par composant | feedback_time_budget_kernels, feedback_calculate_dont_guess |
+
+**T13 — Checkpoints par modele/fold :**
+- Training Final : `_checkpoint_model()` apres chaque modele (deja implemente)
+- OOF : `_save_oof_checkpoint()` apres chaque fold (deja implemente)
+- AG : AG gere ses propres checkpoints internes (`ag_models/`)
+- Meta-learner : checkpoints apres predictions, modele, metadata (deja implemente)
+- **Verification** : grep `checkpoint` ou `save` dans le kernel. Si absent = FAIL.
+
+**T14 — Time guard :**
+```python
+SESSION_HARD_LIMIT = 32400  # 9h GPU ou 43200 12h CPU
+def _time_left(t0): return SESSION_HARD_LIMIT - (time.time() - t0)
+# Avant chaque etape post-fit :
+if _time_left(t0) < 300:  # 5 min minimum
+    logger.warning("TIME GUARD: skipping remaining artifacts")
+    return
+```
+- **Verification** : grep `time_left` ou `time_guard` dans le kernel. Si absent = FAIL.
+
+**T15 — Sauvegarde incrementale :**
+- MAUVAIS : `save_all()` en fin de script → timeout = 0 outputs
+- BON : chaque artefact sauve IMMEDIATEMENT apres production
+- **Verification** : chaque `save`/`to_parquet`/`json.dump` doit etre AVANT le prochain compute.
+
+**T16 — Budget temps :**
+- AVANT push : calculer temps par composant avec donnees empiriques (pas estimation)
+- Documenter dans le docstring : "fit ~7h, post ~30min, total ~7h30 / 9h budget"
+- Si total > 80% du budget session → restructurer AVANT de push
+- **Verification** : docstring du kernel contient budget temps avec chiffres reels.
+
 ### Notes
 
 - **T2 (RPS)** : score de reference en prediction sportive ordinale. RPS = 0 parfait.

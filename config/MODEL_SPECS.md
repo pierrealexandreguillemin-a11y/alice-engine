@@ -46,7 +46,7 @@ CE (Composition Engine, OR-Tools)
 6. **Per-board, pas per-match** — K prédictions indépendantes (4-16 selon division), agrégées par le CE
 7. **Multi-équipe = contrainte CE, pas ML** — le ML prédit board par board, le CE alloue
 
-### Quality gates (15 conditions, TOUTES obligatoires)
+### Quality gates (16 conditions, TOUTES obligatoires)
 T1-T2: log_loss < Elo ET < Naïf
 T3-T4: RPS < Elo ET < Naïf
 T5: E[score] MAE < Elo
@@ -55,6 +55,7 @@ T7: ECE < 0.05 per class
 T8: Draw calibration bias < 0.02
 T9: mean_p_draw > 1%
 T10-T12: reporting
+T13-T16: infrastructure (checkpoints, time guard, artefacts incrémentaux, budget temps)
 
 ### Inference flow (production)
 ```
