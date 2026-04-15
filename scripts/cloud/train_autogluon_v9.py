@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))
-AG_TIME_LIMIT = 36000  # 10h (2h margin for post-processing)
+AG_TIME_LIMIT = 28800  # 8h (1h margin on 9h GPU session limit)
 AG_PRESETS = "best_quality"
 AG_BAG_FOLDS = 5
 AG_STACK_LEVELS = 1  # V8 postmortem: L2/L3 overfit
@@ -128,7 +128,7 @@ def main() -> None:
         num_stack_levels=AG_STACK_LEVELS,
         dynamic_stacking=False,  # Force num_stack_levels=1 (V8 postmortem: L2 overfit)
         calibrate=True,
-        num_gpus=0,
+        num_gpus=1,  # T4 GPU for NN_TORCH/FASTAI (tree models auto-use CPU)
         ag_args_fit={"max_memory_usage_ratio": 1.5},  # No "ag." prefix (AG 1.5 docs)
         verbosity=2,
     )
