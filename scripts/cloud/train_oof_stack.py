@@ -101,14 +101,13 @@ def main() -> None:
     combined_raw = pd.concat([train_raw, valid_raw], ignore_index=True)
     logger.info("Combined train+valid: %d rows", len(combined_raw))
 
+    # prepare_features fits encoder on splits[0] = combined_raw. Second arg is
+    # a dummy (discarded as _). combined_raw used twice to avoid wasting memory.
     X_combined, y_combined, _, _, X_test, y_test, encoders = prepare_features(
         combined_raw,
-        valid_raw,
+        combined_raw,
         test_raw,
     )
-    # Re-prepare combined after encoding (valid was used for encoder fit only)
-    # Actually prepare_features fits encoders on train (combined_raw here)
-    # X_test is correctly prepared
 
     # NaN audit
     for name, df in [("combined", X_combined), ("test", X_test)]:
@@ -118,8 +117,8 @@ def main() -> None:
 
     config = default_hyperparameters()
 
-    # Draw lookup from combined (not just train)
-    draw_lookup = build_draw_rate_lookup(combined_raw)
+    # Draw lookup from TRAIN ONLY (not combined — avoids leakage via draw rates)
+    draw_lookup = build_draw_rate_lookup(train_raw)
 
     # Init scores for full combined + test
     init_scores_combined = compute_init_scores_from_features(X_combined, draw_lookup)
@@ -133,8 +132,10 @@ def main() -> None:
     folds = _create_folds(n, N_FOLDS)
 
     # Pre-allocate OOF arrays: (n, 6) = 2 models x 3 classes
-    oof_preds = np.zeros((n, len(MODELS) * 3))
-    test_preds_acc = np.zeros((len(y_test), len(MODELS) * 3))
+    n_cols = len(MODELS) * 3
+    oof_preds = np.zeros((n, n_cols))
+    test_preds_acc = np.zeros((len(y_test), n_cols))
+    test_fold_counts = np.zeros(n_cols)  # track successful folds per model column
 
     alpha_map = {
         "xgboost": config["xgboost"].get("init_score_alpha", 0.5),
@@ -198,10 +199,11 @@ def main() -> None:
             col_start = m_idx * 3
             oof_preds[val_idx, col_start : col_start + 3] = y_proba_va_cal
 
-            # Test predictions (accumulate, average later)
+            # Test predictions (accumulate, average by actual success count later)
             y_proba_te = predict_with_init(result["model"], X_test, init_te)
             y_proba_te_cal = _apply_temperature(y_proba_te, T)
             test_preds_acc[:, col_start : col_start + 3] += y_proba_te_cal
+            test_fold_counts[col_start : col_start + 3] += 1
 
             del result
             gc.collect()
@@ -209,8 +211,14 @@ def main() -> None:
         # Checkpoint after each fold
         _save_oof_checkpoint(oof_preds, y_combined.values, fold_k, out_dir)
 
-    # Average test predictions over folds
-    test_preds_acc /= N_FOLDS
+    # Average test predictions by actual successful fold count (not N_FOLDS)
+    for col_start in range(0, n_cols, 3):
+        n_success = test_fold_counts[col_start]
+        if n_success > 0:
+            test_preds_acc[:, col_start : col_start + 3] /= n_success
+        else:
+            model_name = MODELS[col_start // 3]
+            raise RuntimeError(f"{model_name} has zero successful folds — cannot produce OOF")
 
     # Build output DataFrames with explicit prefix map (xgb/lgb)
     col_names = []

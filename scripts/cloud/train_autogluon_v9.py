@@ -92,11 +92,12 @@ def main() -> None:
         if dead:
             raise ValueError(f"{len(dead)} features >99% NaN on {name}")
 
-    # Add 3 Elo proba features (compensates for missing init_scores)
+    # Add 3 Elo proba features (compensates for missing init_scores).
+    # Align on index: prepare_features may drop rows (forfeit filter in _split_xy).
     for X, raw in [(X_train, train_raw), (X_valid, valid_raw), (X_test, test_raw)]:
         elo_feats = _compute_elo_proba_features(raw)
         for col in elo_feats.columns:
-            X[col] = elo_feats[col].values
+            X[col] = elo_feats[col].reindex(X.index).values
 
     logger.info("Features: %d (201 V9 + 3 Elo probas)", X_train.shape[1])
 
@@ -126,12 +127,14 @@ def main() -> None:
         num_stack_levels=AG_STACK_LEVELS,
         calibrate=True,
         num_gpus=0,
-        ag_args_fit={"ag.max_memory_usage_ratio": 1.5},
+        ag_args={"ag.max_memory_usage_ratio": 1.5},
         verbosity=2,
     )
 
     # --- LEADERBOARD ---
-    leaderboard = predictor.leaderboard(test_raw if "target" in test_raw else None, silent=True)
+    test_ag = X_test.copy()
+    test_ag["target"] = y_test.values
+    leaderboard = predictor.leaderboard(test_ag, silent=True)
     leaderboard.to_csv(out_dir / "leaderboard.csv", index=False)
     logger.info("Leaderboard:\n%s", leaderboard.to_string())
 
@@ -233,13 +236,18 @@ def main() -> None:
 
 
 def _save_predictions(probas: pd.DataFrame, y: pd.Series, path: Path) -> None:
-    """Save predictions parquet with y_true + 3 proba columns."""
+    """Save predictions parquet with y_true + 3 proba columns.
+
+    AG predict_proba returns DataFrame with class labels as columns (0,1,2).
+    Use label-based access [[0,1,2]] NOT positional .iloc (avoids class swap).
+    """
+    arr = probas[[0, 1, 2]].values if hasattr(probas, "columns") else np.asarray(probas)
     df = pd.DataFrame(
         {
             "y_true": y.values,
-            "p_loss": probas.iloc[:, 0].values if hasattr(probas, "iloc") else probas[:, 0],
-            "p_draw": probas.iloc[:, 1].values if hasattr(probas, "iloc") else probas[:, 1],
-            "p_win": probas.iloc[:, 2].values if hasattr(probas, "iloc") else probas[:, 2],
+            "p_loss": arr[:, 0],
+            "p_draw": arr[:, 1],
+            "p_win": arr[:, 2],
         }
     )
     df.to_parquet(path, index=False)
