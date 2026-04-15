@@ -72,18 +72,21 @@ est acceptable pour un batch nocturne. Le critere de selection = CALIBRATION
 
 **Objectif** : AG best_quality bat-il V9 0.5619 ? AG best_single vs AG stacked ?
 
-**Configuration :**
+**Configuration (CORRIGEE v4, verifiee WebFetch AG 1.5 docs) :**
 | Param | Valeur | Justification |
 |-------|--------|---------------|
 | preset | `best_quality` | `extreme` inutile >30K rows |
-| eval_metric | `log_loss` | Multiclass 3-class (W/D/L) |
+| eval_metric | `log_loss` | Multiclass 3-class (W/D/L). AG override default accuracy. |
 | problem_type | `multiclass` | 3 classes : loss=0, draw=1, win=2 |
 | calibrate | `True` | Temperature scaling integre (AG 1.2+) |
 | num_bag_folds | 5 | OOF pour stacking interne |
 | num_stack_levels | 1 | V8 postmortem : L2/L3 overfit |
-| time_limit | 36000 | 10h (2h marge post-processing) |
-| num_gpus | 0 | CPU only (tree models, pas de GPU needed) |
-| ag_args_fit | max_memory_usage_ratio: 1.5 | 24 GB Kaggle |
+| dynamic_stacking | `False` | Force stack levels (best_quality override sinon) |
+| use_bag_holdout | `True` | REQUIS avec tuning_data + num_bag_folds (crash v1 sans) |
+| time_limit | **28800** | **8h (1h marge sur 9h GPU session)** |
+| num_gpus | **1** | **T4 GPU pour NN_TORCH/FASTAI (CPU = OOM skip)** |
+| enable_gpu | **true** | **Metadata kernel** |
+| ag_args_fit | `{"max_memory_usage_ratio": 1.5}` | SANS prefixe "ag." (WebFetch doc AG 1.5) |
 
 **Features** : 201 features V9 (FE kernel alice-fe-v8) + 3 features Elo proba
 (P_elo_win, P_elo_draw, P_elo_loss) = 204 features.
@@ -106,7 +109,8 @@ l'information equivalente a notre baseline Elo, sous forme de features.
 **Entry point** : `scripts/cloud/train_autogluon_v9.py` (nouveau)
 **Metadata** : `kernel-metadata-autogluon-v9.json`
 **Slug** : `pguillemin/alice-autogluon-v9`
-**CPU** : `enable_gpu: false`, `enable_internet: true` (pip install autogluon)
+**GPU T4** : `enable_gpu: true`, `enable_internet: true` (pip install autogluon)
+**Accelerator** : NvidiaTeslaT4 (sm_75, compatible cu128)
 
 ### 3.2 Kernel B — Stack leger (OOF 3 modeles V9)
 
@@ -233,3 +237,81 @@ Architecture batch :
 | `scripts/cloud/kernel-metadata-oof-stack.json` | Creer | Metadata OOF |
 | `scripts/cloud/upload_all_data.py` | Modifier | Whitelist nouveaux cloud modules |
 | `config/hyperparameters.yaml` | Pas de modif | Memes params V9 |
+
+---
+
+## 8. Corrections post-implementation (2026-04-15, session runtime)
+
+### 8.1 Bugs trouves et corriges
+
+| # | Bug | Impact | Fix | Commit |
+|---|-----|--------|-----|--------|
+| 1 | `use_bag_holdout` manquant | AG crash v1 | Ajout `use_bag_holdout=True` | c7b3f60 |
+| 2 | `ag_args` au lieu de `ag_args_fit` | 110 warnings, memoire non protegee | `ag_args_fit={"max_memory_usage_ratio": 1.5}` | c7c4bdd |
+| 3 | Prefixe `ag.` sur la cle | Cle ignoree silencieusement | `max_memory_usage_ratio` sans prefixe (doc AG 1.5) | c7c4bdd |
+| 4 | `num_gpus=0` (CPU only) | NN_TORCH/FASTAI skipped (OOM 89%) | `num_gpus=1` + `enable_gpu: true` (T4) | 39dfe1c |
+| 5 | `time_limit=36000` (CPU 12h) | Depasse budget GPU 9h | `time_limit=28800` (8h + 1h marge) | 39dfe1c |
+| 6 | Elo baseline fixe +20 | Diverge de baselines.py (+8.5 a +32.4) | `compute_elo_baseline()` dynamique | pending |
+| 7 | `_save_predictions` positional `.iloc` | Class swap silencieux | Label-based `[[0,1,2]].values` | ae233bc |
+| 8 | `leaderboard()` recoit `test_raw` | Schema mismatch | `test_ag` prepare avec target | ae233bc |
+| 9 | Elo features `.values` sans `.reindex()` | Row misalignment forfeits | `.reindex(X.index).values` | ae233bc |
+| 10 | draw_lookup leakage (OOF kernel) | Lookup sur combined au lieu de train | `build_draw_rate_lookup(train_raw)` | ae233bc |
+| 11 | `test_preds_acc /= N_FOLDS` fixe | Probas invalides si fold fail | Track `test_fold_counts` per model | ae233bc |
+
+### 8.2 Configuration finale AG kernel v4 (verifiee WebFetch doc AG 1.5)
+
+| Param | Valeur | Source doc AG 1.5 |
+|-------|--------|-------------------|
+| `train_data` | DataFrame avec "target" | pd.DataFrame |
+| `tuning_data` | valid_ag | Holdout pour scoring |
+| `use_bag_holdout` | `True` | Requis tuning_data + bag |
+| `presets` | `"best_quality"` | 110 model configs zeroshot |
+| `time_limit` | `28800` | 8h (session GPU 9h max) |
+| `num_bag_folds` | `5` | int >= 2 |
+| `num_stack_levels` | `1` | V8 postmortem L2 overfit |
+| `dynamic_stacking` | `False` | Force stack levels |
+| `calibrate` | `True` | Temperature scaling post-hoc |
+| `num_gpus` | `1` | T4 GPU pour NN_TORCH/FASTAI |
+| `ag_args_fit` | `{"max_memory_usage_ratio": 1.5}` | SANS prefixe "ag." |
+| `verbosity` | `2` | Standard logging |
+
+### 8.3 State-of-the-art findings (WebSearch 2026-04-15)
+
+**Composition predictive echecs :**
+- AUCUN systeme publie ne fait ce qu'ALICE fait. Innovation pure.
+- Litterature sports ML (Hubacek 2019, arXiv:2309.14807) : features relatives > absolues.
+- Board allocation strategies (FIDE, Chess.com) : heuristiques manuelles seulement.
+
+**AutoGluon benchmark :**
+- Nature Scientific Reports 2025 : AG = meilleur AutoML overall (16 outils benchmarkes).
+- AG paper (Erickson 2020) : multi-layer stacking + bagging = reduction variance.
+
+**Calibration multiclass GBMs tabulaires (SOTA 2025) :**
+- Temperature scaling (Guo 2017) : standard, competitif pour GBMs.
+- Dirichlet calibration (Kull 2019 NeurIPS) : meilleur multiclass general.
+- Isotonic per-class (Niculescu-Mizil 2005) : reference sklearn.
+- GETS ICLR 2025 : **GNN only**, PAS applicable aux GBMs tabulaires.
+- Top-versus-All (Le Coz 2024) : reformule multiclass en binaire — non teste.
+- **Notre implementation (Temp + Iso + Dirichlet) = CONFORME SOTA 2025.**
+
+**Elo + residual learning :**
+- Standard confirme : NBA, EPL, UCL (2024-2025) utilisent Elo + ML corrections.
+- Per-model alpha (ADR-008, 590 configs) : innovation ALICE.
+
+**OR-Tools allocation :**
+- Standard industrie constraint programming (Google).
+- ML + combinatorial optimization : domaine actif NeurIPS 2024.
+
+### 8.4 Elo proba features — implementation correcte
+
+`_compute_elo_proba_features` utilise `compute_elo_baseline()` de `scripts/baselines.py` :
+- Dynamic white advantage : +8.5 (Elo<1200) a +32.4 (Elo>2400) — donnees FFE verifiees.
+- `draw_rate_lookup` : 45 cellules (elo_band x diff_band), construit sur train_raw UNIQUEMENT.
+- Meme formule que les init_scores V9, sous forme de features au lieu de base_margin.
+
+### 8.5 GPU T4 decision
+
+NN_TORCH/FASTAI necessitent GPU pour 1.1M rows (OOM sur CPU 31GB).
+T4 (sm_75) compatible PyTorch 2.9+cu128 (image Kaggle v168).
+Session GPU = 9h max, quota 30h/semaine. Budget kernel = 8h + 1h marge.
+Tree models (GBM, CAT, XGB, RF, XT) auto-detectent CPU meme avec num_gpus=1.

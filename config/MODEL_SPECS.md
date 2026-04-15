@@ -509,6 +509,39 @@ V9 fixe LR=0.05 + ES=200 pour tous (converge en 800-3000 iters sur 62K train).
 **LightGBM = meilleur recall draw** (0.5578).
 Tous les 3 over-predict draws (mean P(draw) > observed 12.04%).
 
+### V9 Training Final v4 (test set, 231,532 samples, T1-T12 ALL PASS)
+
+| Métrique | XGBoost v4 | LightGBM v4 | CatBoost v4 | V8 best |
+|----------|-----------|-------------|-------------|---------|
+| **Test log_loss** | 0.5622 | **0.5619** | 0.5708 | 0.5660 |
+| **Test RPS** | 0.0887 | 0.0887 | 0.0895 | 0.0891 |
+| **E[score] MAE** | 0.2464 | 0.2467 | 0.2488 | 0.2474 |
+| **Brier** | 0.3392 | 0.3397 | 0.3420 | 0.3414 |
+| ECE Loss | 0.0087 | 0.0089 | **0.0083** | 0.0107 |
+| ECE Draw | 0.0129 | 0.0145 | **0.0123** | 0.0156 |
+| ECE Win | 0.0088 | 0.0104 | **0.0085** | 0.0094 |
+| Draw bias | 0.0109 | 0.0136 | **0.0095** | 0.0146 |
+| mean_p_draw | 0.1367 | 0.1394 | 0.1353 | — |
+| T9 features>0 | 197 | 193 | 198 | — |
+| T10 gap | 0.0478 | **0.0148** | 0.0312 | — |
+| Best iter | 6172 | 8623 | 14572 | 86500 |
+| Temps | 1h11m | 50m | 6h49m | 4h42m |
+| Calibration winner | Temperature | Temperature | Temperature | Temperature |
+
+**V9 vs V8 gains :**
+- LGB : **-0.0102** log_loss (meilleur gain absolu)
+- XGB : -0.0038
+- CB : -0.0045
+
+**V9 LightGBM = meilleur log_loss** (0.5619). V9 CatBoost = **meilleure calibration** (ECE + draw_bias les plus bas, confirmé V8 pattern).
+
+**5 candidats champion** (en cours d'évaluation) :
+1. LGB V9 single (0.5619)
+2. XGB V9 single (0.5622)
+3. Stack XGB+LGB (OOF kernel EN COURS)
+4. AG best_single (AG kernel EN COURS)
+5. AG stacked ensemble (AG kernel EN COURS, déployable en batch)
+
 ### Erreur par bande Elo (XGBoost)
 | Avg Elo | Error rate | Draw rate | Interprétation |
 |---------|-----------|-----------|----------------|
@@ -623,8 +656,149 @@ Tous les 3 over-predict draws (mean P(draw) > observed 12.04%).
 
 ---
 
+## AutoGluon V9 Benchmark (2026-04-15)
+
+### Pourquoi AutoGluon
+
+AG = benchmark diversité modèles. Nos V9 GBMs (XGB/LGB/CB) sont optimisés mais corrélés.
+AG ajoute NN_TORCH, FASTAI, RF, ExtraTrees + stacking automatique multi-couche.
+Nature Scientific Reports 2025 : AG = meilleur AutoML overall (16 outils benchmarkés).
+
+### Configuration kernel (v4, vérifiée WebFetch doc AG 1.5)
+
+| Param | Valeur | Source |
+|-------|--------|--------|
+| preset | `best_quality` | `extreme` inutile >30K rows (AG 1.4 release notes) |
+| eval_metric | `log_loss` | Override default accuracy. Multiclass 3-class. |
+| calibrate | `True` | Temperature scaling post-hoc intégré (AG 1.2+) |
+| num_bag_folds | 5 | OOF pour stacking interne |
+| num_stack_levels | 1 | V8 postmortem : L2/L3 overfit |
+| dynamic_stacking | `False` | Force stack levels (best_quality override sinon) |
+| use_bag_holdout | `True` | REQUIS avec tuning_data + bag (crash v1 sans) |
+| time_limit | 28800 | 8h (session GPU 9h max) |
+| num_gpus | 1 | T4 GPU pour NN_TORCH/FASTAI (CPU = OOM skip) |
+| ag_args_fit | `{"max_memory_usage_ratio": 1.5}` | SANS préfixe "ag." (doc AG 1.5) |
+
+### Pas d'init_scores — Elo proba features compensent
+
+AG ne supporte PAS `base_margin`/`init_score`. Compensation : 3 features explicites
+P_elo(win), P_elo(draw), P_elo(loss) calculées avec `compute_elo_baseline()` de baselines.py
+(avantage blanc dynamique +8.5 à +32.4, draw_rate_lookup par bande Elo × diff).
+draw_lookup construit sur train_raw UNIQUEMENT (pas de leakage).
+
+### Bugs AG rencontrés (3 pushes avant v4 conforme)
+
+| Bug | Impact | Fix |
+|-----|--------|-----|
+| `use_bag_holdout` manquant | AG crash AssertionError | `use_bag_holdout=True` |
+| `ag_args` au lieu de `ag_args_fit` | 110 warnings, mémoire non protégée | `ag_args_fit={"max_memory_usage_ratio": 1.5}` |
+| Préfixe `ag.` sur la clé | Clé ignorée silencieusement | `max_memory_usage_ratio` sans préfixe |
+| `num_gpus=0` CPU only | NN_TORCH/FASTAI skippé OOM (89% RAM) | `num_gpus=1` + T4 GPU |
+| Elo baseline fixe +20 | Diverge de baselines.py (+8.5 à +32.4) | `compute_elo_baseline()` dynamique |
+| `_save_predictions` positional | Class swap silencieux | `[[0,1,2]].values` label-based |
+| `leaderboard()` raw data | Schema mismatch | `test_ag` préparé avec target |
+| Row alignment sans reindex | Elo features décalées après forfeit filter | `.reindex(X.index).values` |
+
+### Leçon : TOUJOURS WebFetch la doc API param par param AVANT de coder
+
+---
+
+## Architecture Production — Batch ML + CE on-demand (2026-04-15)
+
+### Décision
+
+Les prédictions ML sont INDÉPENDANTES de l'allocation joueurs.
+Le CE optimise avec des probas PRÉ-CALCULÉES.
+
+```
+BATCH HEBDOMADAIRE (nuit, après résultats ronde précédente):
+  1. Update feature store (stats joueurs, équipes, classements)   ~5 min
+  2. ALI: 20 scénarios adversaire par match                       ~secondes
+  3. ML: predict ALL (joueur × board × adversaire_prédit)         ~10s-100s
+  4. Cache probas dans MongoDB (par ronde, par club)              ~secondes
+
+À LA DEMANDE (capitaine ouvre l'app, <2s):
+  CE solver (OR-Tools):
+    Input : probas cachées + contraintes FFE + joueurs dispos + mode stratégie
+    Output : composition optimale N équipes
+    Temps : <2 secondes
+```
+
+### Conséquences
+
+- Changement joueur / mode stratégie → re-run CE seul, PAS ML
+- AG stacked ensemble (~100s) déployable car batch nocturne
+- Critère champion = CALIBRATION (ECE draw + draw_bias), pas vitesse inférence
+- Club 10 équipes : 16K prédictions ML en batch. Acceptable même à 100s.
+
+---
+
+## State-of-the-Art — Calibration GBMs Tabulaires Multiclass (2025)
+
+### Méthodes implémentées ALICE V9
+
+| Méthode | Réf | Statut ALICE | Résultat V9 |
+|---------|-----|-------------|-------------|
+| Temperature scaling | Guo 2017 (ICML) | ✓ Implémenté (V9 winner) | T~0.97-0.99 |
+| Isotonic per-class | Niculescu-Mizil 2005 | ✓ Implémenté | Comparé, pas winner |
+| Dirichlet calibration | Kull 2019 (NeurIPS) | ✓ Implémenté | off-diag L2 <0.004 |
+
+### Méthodes NON applicables (recherchées, éliminées)
+
+| Méthode | Réf | Pourquoi PAS applicable |
+|---------|-----|------------------------|
+| GETS (Ensemble TS) | ICLR 2025 | **GNN only** (graph structure requis) |
+| Probe Scaling | OpenReview 2025 | Neural networks only |
+| BCSoftmax | Atarashi 2025 | Constraint-aware NN calibration |
+| Top-versus-All (TvA) | Le Coz 2024 | Reformule en binaire — non testé, à évaluer V10 |
+
+### Conclusion SOTA
+
+Notre implémentation (Temperature + Isotonic + Dirichlet comparés) est **conforme SOTA 2025**
+pour GBMs tabulaires multiclass. Aucun gap bloquant.
+Source survey : Wang 2023 (arxiv:2308.01222), Kull 2019 (NeurIPS).
+
+---
+
+## Positionnement ALICE — Innovation (2026-04-15)
+
+### Composition prédictive interclubs échecs
+
+**AUCUN système publié ne fait ce qu'ALICE fait.**
+La littérature couvre :
+- Prédiction résultats individuels (Elo, ML) — standard
+- Stratégie d'ordre boards — heuristiques manuelles capitaines
+- FIDE Swiss pairing — algorithme d'appariement, PAS d'optimisation composition
+
+ALICE est le **PREMIER** système ML-driven pour optimisation multi-équipe interclubs.
+Innovation : ML probas calibrées → CE constraint solver (OR-Tools) → allocation optimale.
+
+### Elo + ML residual = standard industrie sport
+
+Confirmé par littérature 2024-2025 :
+- NBA 2024-25 : Elo + ML corrections
+- EPL 2025-26 : Elo + PCA + binomial
+- UCL 2024-25 : Elo predictive modeling
+- Per-model alpha (ADR-008, 590 configs) : innovation ALICE
+
+### Sources
+
+- Nature Sci Rep 2025 : AG benchmark 16 AutoML tools
+- Wheatcroft 2021 : calibration > accuracy pour paris sportifs
+- Constantinou 2012 : RPS pour outcomes ordinaux
+- arxiv:2303.06021 : selection modèle basée calibration
+- Guo 2017 (ICML) : temperature scaling
+- Kull 2019 (NeurIPS) : Dirichlet calibration
+- Wang 2023 (arxiv:2308.01222) : survey calibration deep learning
+
+---
+
 ## Mise à jour
 
 Ce fichier est mis à jour à chaque nouveau résultat empirique.
-Dernière mise à jour : 2026-04-11 (Grid XGB v4 + Grid LGB v2 + Optuna LGB v7 + findings consolidés).
-CatBoost : à compléter quand Grid CB v2 termine.
+Dernière mise à jour : 2026-04-15.
+- V9 Training Final v4 : 3 modèles T1-T12 ALL PASS (LGB 0.5619, XGB 0.5622, CB 0.5708)
+- AutoGluon V9 benchmark : kernel v4 GPU T4, EN COURS
+- OOF Stack XGB+LGB : kernel v1, EN COURS
+- Architecture production : batch ML hebdo + CE on-demand <2s
+- SOTA calibration : Temperature + Dirichlet = conforme 2025, GETS = GNN only (éliminé)

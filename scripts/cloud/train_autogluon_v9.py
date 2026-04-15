@@ -38,31 +38,29 @@ def _setup_kaggle_imports() -> None:
         logger.info("sys.path += %s", kaggle_input)
 
 
-def _compute_elo_proba_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute P_elo(W/D/L) from blanc_elo/noir_elo as explicit features.
+def _compute_elo_proba_features(
+    df: pd.DataFrame,
+    draw_lookup: pd.DataFrame,
+) -> pd.DataFrame:
+    """Compute P_elo(W/D/L) using the SAME baseline as V9 models.
 
-    Gives AutoGluon the Elo baseline signal that V9 models get via init_scores.
-    Uses the same logistic model as scripts/baselines.py + draw_rate_lookup.
+    Uses compute_elo_baseline from baselines.py (dynamic white advantage
+    +8.5 to +32.4 per Elo level, draw_rate_lookup per band). NOT simplified.
     """
+    from scripts.baselines import compute_elo_baseline  # noqa: PLC0415
+
     blanc_elo = df["blanc_elo"].fillna(1500).values
     noir_elo = df["noir_elo"].fillna(1500).values
-    # White advantage: dynamic +20 Elo (simplified, full lookup in production)
-    blanc_adj = blanc_elo + 20.0
-    expected_w = 1.0 / (1.0 + 10.0 ** ((noir_elo - blanc_adj) / 400.0))
-    expected_l = 1.0 / (1.0 + 10.0 ** ((blanc_adj - noir_elo) / 400.0))
-    # Draw = 1 - W - L (simplified; full version uses draw_rate_lookup.parquet)
-    p_draw = np.clip(1.0 - expected_w - expected_l, 0.01, 0.99)
-    # Renormalize
-    total = expected_w + p_draw + expected_l
-    result = pd.DataFrame(
+    # Returns (n, 3) = [P(loss), P(draw), P(win)]
+    probas = compute_elo_baseline(blanc_elo, noir_elo, draw_lookup)
+    return pd.DataFrame(
         {
-            "p_elo_win": expected_w / total,
-            "p_elo_draw": p_draw / total,
-            "p_elo_loss": expected_l / total,
+            "p_elo_win": probas[:, 2],
+            "p_elo_draw": probas[:, 1],
+            "p_elo_loss": probas[:, 0],
         },
         index=df.index,
     )
-    return result
 
 
 def main() -> None:
@@ -92,10 +90,15 @@ def main() -> None:
         if dead:
             raise ValueError(f"{len(dead)} features >99% NaN on {name}")
 
-    # Add 3 Elo proba features (compensates for missing init_scores).
+    # Build draw_rate_lookup from TRAIN ONLY (same as V9 Training Final)
+    from scripts.features.draw_priors import build_draw_rate_lookup  # noqa: PLC0415
+
+    draw_lookup = build_draw_rate_lookup(train_raw)
+
+    # Add 3 Elo proba features using SAME baseline as V9 (dynamic white advantage).
     # Align on index: prepare_features may drop rows (forfeit filter in _split_xy).
     for X, raw in [(X_train, train_raw), (X_valid, valid_raw), (X_test, test_raw)]:
-        elo_feats = _compute_elo_proba_features(raw)
+        elo_feats = _compute_elo_proba_features(raw, draw_lookup)
         for col in elo_feats.columns:
             X[col] = elo_feats[col].reindex(X.index).values
 
