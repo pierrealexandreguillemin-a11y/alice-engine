@@ -126,9 +126,10 @@ def main() -> None:
         time_limit=AG_TIME_LIMIT,
         num_bag_folds=AG_BAG_FOLDS,
         num_stack_levels=AG_STACK_LEVELS,
+        dynamic_stacking=False,  # Force num_stack_levels=1 (V8 postmortem: L2 overfit)
         calibrate=True,
         num_gpus=0,
-        ag_args={"ag.max_memory_usage_ratio": 1.5},
+        ag_args_fit={"ag.max_memory_usage_ratio": 1.5},  # ag_args_fit, NOT ag_args
         verbosity=2,
     )
 

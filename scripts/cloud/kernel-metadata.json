@@ -1,12 +1,12 @@
 {
-  "id": "pguillemin/alice-grid-lightgbm-v9",
-  "title": "alice-grid-lightgbm-v9",
-  "code_file": "grid_lightgbm_entry.py",
+  "id": "pguillemin/alice-autogluon-v9",
+  "title": "alice-autogluon-v9",
+  "code_file": "train_final_autogluon.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
   "enable_gpu": false,
-  "enable_internet": false,
+  "enable_internet": true,
   "dataset_sources": ["pguillemin/alice-code"],
   "competition_sources": [],
   "kernel_sources": ["pguillemin/alice-fe-v8"]
