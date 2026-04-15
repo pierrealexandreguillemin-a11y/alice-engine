@@ -5,66 +5,136 @@
 
 ---
 
-## [Unreleased]
+## [Unreleased] — Champion selection + OOF stacking
+
+### Prochaine etape
+- Selection champion (XGB vs LGB)
+- OOF stacking (Steps 7-9 du plan V9)
+
+---
+
+## [0.9.1] - 2026-04-15 — V9 Training Final v4 COMPLETE (T1-T12)
 
 ### Added
-- **Module `scripts/ffe_rules_features.py`** - Implementation regles FFE
-  - Types stricts: TypeCompetition, NiveauCompetition, Sexe, Joueur, Equipe
-  - Detection type competition (A02, F01, C01, C03, C04, J02, J03, REG, DEP)
-  - Calcul joueur brule avec seuils variables (1-4 matchs selon competition)
-  - Calcul noyau (50% ou 2 absolu selon niveau)
-  - Validation composition complete (ordre Elo, mutes, quotas)
-  - Zones d'enjeu (montee, descente, danger, mi_tableau)
-- **Tests unitaires** `tests/test_ffe_rules_features.py` (66 tests)
-- **Features reglementaires ML** dans `feature_engineering.py`
-  - Features: nb_equipes, niveau_max, niveau_min, type_competition, multi_equipe
-  - Features equipe: zone_enjeu, niveau_hierarchique
-- Structure projet complete (ISO 42010 SRP)
-- API FastAPI avec endpoints /health et /predict
-- Service ALI (Adversarial Lineup Inference) - placeholder
-- Service CE (Composition Engine) avec calcul Elo
-- Schemas Pydantic v2 pour validation
-- Configuration Render (render.yaml)
-- Configuration Vercel (vercel.json)
-- Pre-commit hooks complets (Gitleaks, Ruff, MyPy, Bandit)
-- Pre-push hooks (Pytest, Coverage, Xenon, pip-audit)
-- Scripts DevOps (graphs, architecture, ISO docs)
-- Documentation ISO 15289/26514 reorganisee
-- **Script parse_dataset.py** pour extraction donnees FFE
-  - Parsing compositions (ronde_N.html, calendrier.html)
-  - Parsing joueurs licencies (page_XXXX.html)
-  - Export Parquet (echiquiers.parquet, joueurs.parquet)
-  - 13,935 groupes parses, 1,736,490 echiquiers extraits
-  - 35,320 joueurs licencies (dataset incomplet, voir BILAN_PARSING.md)
-  - Champ `mute` (transfert club) ajoute pour reglements FFE
-  - Mapping categories FFE legacy → officiel (U8, U10, X20, X50, X65)
-- **Script feature_engineering.py** - Pipeline features ML
-  - Features fiabilite club/joueur
-  - Features forme recente, echiquier moyen
-  - Split temporel (2002-2022 / 2023 / 2024-2026)
-- **Script evaluate_models.py** - Evaluation comparative ML
-  - CatBoost vs XGBoost vs LightGBM
-  - Export resultats CSV
-- **Documentation `.claude.md`** - Instructions Claude Code
-- **ADR-007** - Decision Layered+SRP vs DDD
-- **Documentation integration regles FFE → ML** dans TRAINING_PROGRESS.md
-  - Section 4 "Integration regles FFE dans ML (Phase 4 bis)"
-  - Plan d'integration features reglementaires
-  - Hypothese amelioration AUC +5-10%
-
-### Changed
-- Seuil coverage temporairement a 70% (objectif 80%)
-
-### Known Issues
-- Dataset joueurs incomplet (~47% manquants, surtout jeunes U08-U14)
-- Voir `C:\Dev\ffe_scrapper\TODO_SCRAPING_JOUEURS_COMPLET.md` pour action
-- AUC 0.75 = "bon" mais pas "excellent" (cible: 0.80+)
-- Ecart CatBoost/LightGBM faible (+0.21% AUC)
+- **`kaggle_quality_gates.py`** : module T1-T12 complet avec audit logging (237 lignes)
+- **T7/T8** : assertions NaN/Inf + sum-to-1 dans `evaluate_on_test` (crash immediat)
+- **T9** : check >5 features importance>0 (np.ndarray)
+- **T10** : train-test gap via 50K subsample + calibration (GoogleML #37)
+- **T11/T12** : ECE par classe + dual RPS/logloss logges pour audit trail
 
 ### Fixed
-- Erreurs MyPy dans schemas.py
-- Erreurs Ruff (S104, N802, S603)
-- Vulnerabilites dependances (starlette, urllib3, etc.)
+- **XGBoost `EarlyStopping(save_best=True)`** callback — remplace `early_stopping_rounds` parametre (retourne LAST pas BEST)
+- Verbose=False dans boucle selection calibrateur, verbose=True pour gate authoritaire
+
+### Resultats V9 Training Final (3 modeles, T1-T12 ALL PASS)
+
+| Metrique | XGBoost | LightGBM | CatBoost | V8 best |
+|----------|---------|----------|----------|---------|
+| test log_loss | 0.5622 | **0.5619** | 0.5708 | 0.5660 |
+| test RPS | 0.0887 | 0.0887 | 0.0895 | — |
+| ECE draw | 0.0129 | 0.0145 | 0.0123 | 0.0156 |
+| draw_bias | 0.0109 | 0.0136 | 0.0095 | 0.0146 |
+| T10 gap | 0.0478 | 0.0148 | 0.0312 | — |
+| T9 features | 197 | 193 | 198 | — |
+| best iter | 6172 | 8623 | 14572 | 86500 |
+| temps | 1h11m | 50m | 6h49m | — |
+
+---
+
+## [0.9.0] - 2026-04-13 — V9 Training Final v1-v3
+
+### Added
+- **Per-model alpha** (ADR-008) : XGB=0.5, LGB=0.1, CB=0.3 (590 configs)
+- **Dirichlet calibration** (Kull 2019 NeurIPS) : Dir-L2, 12 params, triple comparaison
+- **V9 guard** : RuntimeError si code stale detecte (eta<0.01 ou rsm<0.5)
+- **Dataset propagation wait** : 120s sleep apres upload Kaggle
+- **`_ALICE_KEYS`** : filtrage params custom avant constructeurs ML
+- 3 entry points Training Final (`train_final_{xgboost,lightgbm,catboost}.py`)
+- 3 kernel-metadata Training Final
+
+### Fixed
+- SHAP TreeExplainer : `get_booster()` pour XGBWrapper (crash v1)
+- `init_score_alpha` passe aux constructeurs ML (crash CatBoost v2)
+- Dataset Kaggle non propage (code V8 execute au lieu de V9, v1)
+- XGBoost et CatBoost en cours de training
+
+---
+
+## [0.8.0] - 2026-04-12 — V9 HP Search COMPLET
+
+### Added
+- **590 configs testees** sur 13 kernels Kaggle (Optuna + Grid + Gaps + Tier 2)
+- `config/MODEL_SPECS.md` : source de verite per-model (architecture × alpha)
+- `docs/project/V9_HP_SEARCH_RESULTS.md` : donnees completes HP search
+- ADR-008 (alpha per-model), ADR-009 (recent season HP search), ADR-010 (ISO local)
+- Grid v2 CatBoost : l2_leaf_reg dans search space (gain 0.038 vs Grid v1)
+- Gap-filling R1+R2 : 55 combos, decouverte alpha=0.1 LGB, depth=6 XGB
+- Tier 2 draw calibration : bynode+gamma+mds XGB (draw_bias -22%)
+- `config/hyperparameters.yaml` V9 (version 9.0.0)
+
+---
+
+## [0.7.0] - 2026-04-06 — V8 Milestone COMPLET
+
+### Added
+- **3 modeles converges ALL PASS** (15 quality gates chacun)
+  - XGBoost v5 resume : test 0.566, 86K rounds, champion V8
+  - CatBoost v6 : test 0.575, 37K rounds
+  - LightGBM v7 : test 0.572, 16K rounds
+- SHAP consensus 3 modeles (TreeSHAP 20K subsample)
+- Temperature + isotonic calibration
+- 4-kernel architecture (ADR-003) : 1 modele par kernel
+- Checkpoints per-library (CatBoost snapshot, XGB TrainingCheckPoint, LGB callback)
+
+### Fixed
+- `resultat_blanc=2.0` = victoire jeunes FFE, pas forfait (62K rows)
+- CatBoost `PredictionValuesChange` artefact (166/177=0) → ShapValues
+- CatBoost `rsm` GPU incompatible → CPU obligatoire
+- XGBoost `xgb.train()` retourne LAST pas best → `EarlyStopping(save_best=True)`
+- 61 features 100% NaN sur valid/test (split temporel bug)
+- Dynamic white advantage (+8.5 a +32.4, pas +35 fixe)
+
+---
+
+## [0.6.0] - 2026-03-21 — V8 MultiClass + Feature Engineering
+
+### Added
+- **219 features** : joueur, club, equipe, H2H, draw, differentiels, contexte
+- Target 3-class : loss=0, draw=1, win=2
+- Residual learning avec Elo baseline (init_scores)
+- FE kernel Kaggle (`alice-fe-v8`)
+- `scripts/features/` : pipeline, differentials, draw_priors, helpers
+- Quality gates F1-F12 / T1-T12
+
+---
+
+## [0.5.0] - 2026-03-17 — Kaggle Cloud Training
+
+### Added
+- Cloud training sur Kaggle CPU (12h/session, illimite)
+- `scripts/cloud/upload_all_data.py` : upload dataset alice-code
+- `scripts/cloud/train_kaggle.py` : training kernel multi-model
+- Data refresh pipeline (sync FFE → parse → validate → features)
+
+---
+
+## [0.4.0] - 2026-03-10 — Regles FFE + ISO
+
+### Added
+- `scripts/ffe_rules_features.py` : regles FFE (brule, noyau, mute, zone_enjeu)
+- 66 tests unitaires
+- Pipeline ISO 14 normes (hooks pre-commit/push)
+- FastAPI stubs (endpoints /health, /predict)
+- ADR-001 a ADR-007
+
+---
+
+## [0.1.0] - 2026-01-03 — Initial Release
+
+### Added
+- Structure projet, parsing FFE, premiers modeles ML
+- 1,736,490 echiquiers, 35,320 joueurs
+- CatBoost AUC 0.7527 (premiere evaluation)
 
 ---
 
@@ -92,72 +162,18 @@
 
 ## Roadmap
 
-### [0.2.0] - Parsing Dataset ✅
-- [x] Script parse_dataset.py
-- [x] Export echiquiers.parquet (**1,736,490 lignes** - 34 MB)
-- [x] Export joueurs.parquet (**35,320 lignes** - 1.6 MB)
-- [x] Documentation BILAN_PARSING.md (ISO 25012)
-- [x] Champ `mute` pour reglements FFE
-- [ ] Nettoyage donnees (Elo=0: 18.2%, forfaits: 5%)
-- [ ] Scraping joueurs complet (~66k) - voir ffe_scrapper
-
-### [0.3.0] - Feature Engineering & Evaluation ✅
-- [x] Feature engineering (`feature_engineering.py`)
-- [x] Features fiabilite (club_reliability, player_reliability)
-- [x] Features forme/board (player_form, player_board)
-- [x] Split temporel (2002-2022 / 2023 / 2024-2026)
-- [x] Evaluation CatBoost vs XGBoost vs LightGBM
-- [x] **Resultat**: CatBoost retenu (AUC 0.7527, +1.4% vs XGBoost)
-- [x] Documentation ML_EVALUATION_RESULTS.md
-
-### [0.4.0] - Integration regles FFE dans ML 🔄 (en cours)
-- [ ] Integrer features reglementaires (`joueur_brule`, `noyau`, `zone_enjeu`)
-- [ ] Calculer features sur dataset historique complet
-- [ ] Reentrainer CatBoost avec features regles
-- [ ] Valider impact AUC (cible: +5-10%)
-- [ ] Documentation: `REGLES_FFE_ALICE.md` (1,153 lignes), `ffe_rules_features.py` (845 lignes)
-
-### [0.5.0] - Hyperparameter Tuning
-- [ ] Optuna tuning (depth, learning_rate, l2_leaf_reg)
-- [ ] Validation croisee
-- [ ] Cible: AUC 0.80+ (actuellement 0.75)
-- [ ] Export modele final .cbm
-
-### [0.6.0] - Integration chess-app
-- [ ] Connexion MongoDB Atlas
-- [ ] Endpoint /predict fonctionnel
-- [ ] Tests integration
-
 ### [1.0.0] - Production
-- [ ] Deploiement Render
-- [ ] Coverage >= 80%
-- [ ] Documentation complete
-- [ ] Performance benchmarks
+- [x] V8 : 3 modeles converges, quality gates ALL PASS
+- [x] V9 HP search : 590 configs, params optimaux trouves
+- [~] V9 Training Final (en cours)
+- [ ] V9 OOF stacking + meta-learner
+- [ ] Cablage API FastAPI → services (inference, CE)
+- [ ] ALI (prediction adverse, Phase 3)
+- [ ] CE multi-equipe (OR-Tools, Phase 4)
+- [ ] Deploiement Oracle VM (24GB ARM)
+
+Plan detaille : `docs/superpowers/specs/2026-04-07-optuna-v9-pipeline-design.md`
 
 ---
 
-## Bilan performances ML (8 Janvier 2026)
-
-| Modele | AUC-ROC | Accuracy | Statut |
-|--------|---------|----------|--------|
-| **CatBoost** | **0.7527** | **68.30%** | Retenu |
-| LightGBM | 0.7506 | 68.22% | Backup |
-| XGBoost | 0.7384 | 67.44% | Baseline |
-
-**Interpretation**:
-- AUC 0.75 = "bon" (echelle: 0.5=hasard, 0.7=acceptable, 0.8=tres bon, 0.9=excellent)
-- Accuracy 68% = 32% d'erreurs
-- Ecart CatBoost/LightGBM faible (+0.21% AUC)
-- Ameliorations necessaires: hyperparameter tuning, features supplementaires
-
----
-
-## Documentation associee
-
-- [BILAN_PARSING.md](./BILAN_PARSING.md) - Resultats detailles du parsing
-- [ML_EVALUATION_RESULTS.md](./ML_EVALUATION_RESULTS.md) - Evaluation modeles ML
-- [TRAINING_PROGRESS.md](./TRAINING_PROGRESS.md) - Suivi phases entrainement
-
----
-
-*Derniere mise a jour: 8 Janvier 2026*
+*Derniere mise a jour: 13 Avril 2026*

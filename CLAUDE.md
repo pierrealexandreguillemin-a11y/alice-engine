@@ -74,12 +74,13 @@ Détail complet : `config/MODEL_SPECS.md` §ALICE Engine.
 
 ## ÉTAT ACTUEL (avril 2026)
 
-**V9 HP search COMPLET (590 configs, 13 kernels). Training Final = prochaine étape.**
-Résultats : `docs/project/V9_HP_SEARCH_RESULTS.md`
+**V9 Training Final v4 COMPLETE — 3 modèles convergés, T1-T12 ALL PASS.**
+Résultats HP search : `docs/project/V9_HP_SEARCH_RESULTS.md`
+Résumé session : `memory/project_session_resume.md`
 
 | Couche | Statut |
 |--------|--------|
-| ML Training | **V9 HP search COMPLET.** Training Final à lancer (3 kernels, 1.1M) |
+| ML Training | **V9 Training Final v4 COMPLETE.** LGB 0.5619, XGB 0.5622, CB 0.5708. T1-T12 ALL PASS. |
 | API FastAPI | COMPLET (stubs) |
 | Câblage routes→services | MANQUANT (après Training Final) |
 | ALI prédiction adverse | MANQUANT (Phase 3) |
@@ -103,6 +104,8 @@ Résultats : `docs/project/V9_HP_SEARCH_RESULTS.md`
 - **TOUJOURS** skill kernel-push (9 étapes) AVANT chaque push Kaggle
 - **TOUJOURS** quality gates AVANT SHAP
 - **TOUJOURS** vérifier dataset Kaggle contient fichiers importés
+- **TOUJOURS** télécharger+vérifier fichiers critiques depuis Kaggle AVANT push kernel
+- **TOUJOURS** filtrer `_ALICE_KEYS` (init_score_alpha) avant constructeurs ML
 - **TOUJOURS** SQLite storage Optuna
 
 Inference : `compute_elo_baseline → init_scores → *= alpha_per_model → predict_with_init`
@@ -141,3 +144,8 @@ Rules files :
 
 `Vercel (chess-app) → HTTPS → Oracle VM (FastAPI + ML, 24GB ARM)`
 Spec : `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md`
+
+
+## Wiki
+
+Syntheses wiki : `C:\Dev\wiki\topics\ml\` et `C:\Dev\wiki\entities\alice-engine.md`
