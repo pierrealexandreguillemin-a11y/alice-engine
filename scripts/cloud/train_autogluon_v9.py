@@ -121,6 +121,7 @@ def main() -> None:
     predictor.fit(
         train_data=train_ag,
         tuning_data=valid_ag,
+        use_bag_holdout=True,  # Required: tuning_data + num_bag_folds needs this flag
         presets=AG_PRESETS,
         time_limit=AG_TIME_LIMIT,
         num_bag_folds=AG_BAG_FOLDS,
