@@ -129,7 +129,7 @@ def main() -> None:
         dynamic_stacking=False,  # Force num_stack_levels=1 (V8 postmortem: L2 overfit)
         calibrate=True,
         num_gpus=0,
-        ag_args_fit={"ag.max_memory_usage_ratio": 1.5},  # ag_args_fit, NOT ag_args
+        ag_args_fit={"max_memory_usage_ratio": 1.5},  # No "ag." prefix (AG 1.5 docs)
         verbosity=2,
     )
 
