@@ -1,8 +1,6 @@
-"""OOF Stack Pipeline — 5-fold XGB+LGB for meta-learner (ISO 42001/5259).
+"""OOF Stack Pipeline — 5-fold CV for meta-learner stacking (ISO 42001/5259).
 
-Trains XGBoost and LightGBM in 5-fold CV with V9 params.
-Produces OOF predictions (train+valid) and averaged test predictions.
-CatBoost excluded: 5-fold x 7h = 35h >> 12h Kaggle budget.
+Supports ALICE_MODEL (xgboost/lightgbm/catboost) and ALICE_FOLDS (0,1,2...) env vars.
 """
 
 from __future__ import annotations
@@ -22,9 +20,8 @@ logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path(os.environ.get("KAGGLE_OUTPUT_DIR", "/kaggle/working"))
 N_FOLDS = 5
-MODELS = ["xgboost", "lightgbm"]
+ALL_MODELS = {"xgboost": "xgb", "lightgbm": "lgb", "catboost": "cb"}
 CLASS_NAMES = ["loss", "draw", "win"]
-MODEL_PREFIX = {"xgboost": "xgb", "lightgbm": "lgb"}
 
 
 def _setup_kaggle_imports() -> None:
@@ -79,8 +76,23 @@ def _apply_temperature(y_proba: np.ndarray, T: float) -> np.ndarray:
 
 
 def main() -> None:
-    """5-fold OOF pipeline for XGB+LGB stacking."""
-    logger.info("ALICE Engine — V9 OOF Stack (XGB+LGB, %d folds)", N_FOLDS)
+    """OOF pipeline for stacking. Supports ALICE_MODEL + ALICE_FOLDS env vars."""
+    # Model selection: default XGB+LGB, override via ALICE_MODEL=catboost
+    model_filter = os.environ.get("ALICE_MODEL")
+    if model_filter:
+        models = [model_filter.lower()]
+    else:
+        models = ["xgboost", "lightgbm"]
+    model_prefixes = {m: ALL_MODELS[m] for m in models}
+
+    # Fold selection: default all 5, override via ALICE_FOLDS=0,1
+    fold_filter = os.environ.get("ALICE_FOLDS")
+    if fold_filter:
+        fold_indices = [int(x) for x in fold_filter.split(",")]
+    else:
+        fold_indices = list(range(N_FOLDS))
+
+    logger.info("ALICE Engine — V9 OOF Stack (%s, folds %s)", models, fold_indices)
     _setup_kaggle_imports()
 
     from scripts.baselines import compute_init_scores_from_features  # noqa: PLC0415
@@ -131,22 +143,33 @@ def main() -> None:
     n = len(y_combined)
     folds = _create_folds(n, N_FOLDS)
 
-    # Pre-allocate OOF arrays: (n, 6) = 2 models x 3 classes
-    n_cols = len(MODELS) * 3
+    # Pre-allocate OOF arrays
+    n_cols = len(models) * 3
     oof_preds = np.zeros((n, n_cols))
     test_preds_acc = np.zeros((len(y_test), n_cols))
-    test_fold_counts = np.zeros(n_cols)  # track successful folds per model column
+    test_fold_counts = np.zeros(n_cols)
 
     alpha_map = {
         "xgboost": config["xgboost"].get("init_score_alpha", 0.5),
         "lightgbm": config["lightgbm"].get("init_score_alpha", 0.1),
+        "catboost": config["catboost"].get("init_score_alpha", 0.3),
     }
 
-    from scripts.kaggle_trainers import _train_lightgbm, _train_xgboost  # noqa: PLC0415
+    from scripts.kaggle_trainers import (  # noqa: PLC0415
+        _train_catboost,
+        _train_lightgbm,
+        _train_xgboost,
+    )
 
-    train_fns = {"xgboost": _train_xgboost, "lightgbm": _train_lightgbm}
+    train_fns = {
+        "xgboost": _train_xgboost,
+        "lightgbm": _train_lightgbm,
+        "catboost": _train_catboost,
+    }
 
     for fold_k, (train_idx, val_idx) in enumerate(folds):
+        if fold_k not in fold_indices:
+            continue
         logger.info("=" * 50)
         logger.info(
             "FOLD %d/%d (train=%d, val=%d)", fold_k + 1, N_FOLDS, len(train_idx), len(val_idx)
@@ -157,7 +180,7 @@ def main() -> None:
         X_va = X_combined.iloc[val_idx]
         y_va = y_combined.iloc[val_idx]
 
-        for m_idx, model_name in enumerate(MODELS):
+        for m_idx, model_name in enumerate(models):
             alpha = alpha_map[model_name]
             init_tr = init_scores_combined[train_idx] * alpha
             init_va = init_scores_combined[val_idx] * alpha
@@ -217,13 +240,13 @@ def main() -> None:
         if n_success > 0:
             test_preds_acc[:, col_start : col_start + 3] /= n_success
         else:
-            model_name = MODELS[col_start // 3]
+            model_name = models[col_start // 3]
             raise RuntimeError(f"{model_name} has zero successful folds — cannot produce OOF")
 
-    # Build output DataFrames with explicit prefix map (xgb/lgb)
+    # Build output DataFrames with explicit prefix map
     col_names = []
-    for model_name in MODELS:
-        prefix = MODEL_PREFIX[model_name]
+    for model_name in models:
+        prefix = model_prefixes[model_name]
         for cls in CLASS_NAMES:
             col_names.append(f"{prefix}_p_{cls}")
 
@@ -260,9 +283,12 @@ def _log_oof_metrics(oof_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
     y_oof = oof_df["y_true"].values
     y_test = test_df["y_true"].values
 
-    for model_name, name in [("xgboost", "XGBoost"), ("lightgbm", "LightGBM")]:
-        prefix = MODEL_PREFIX[model_name]
+    # Detect which models are in the DataFrame from column prefixes
+    all_prefixes = {"xgb": "XGBoost", "lgb": "LightGBM", "cb": "CatBoost"}
+    for prefix, name in all_prefixes.items():
         cols = [f"{prefix}_p_loss", f"{prefix}_p_draw", f"{prefix}_p_win"]
+        if cols[0] not in oof_df.columns:
+            continue
         oof_probas = oof_df[cols].values
         test_probas = test_df[cols].values
         oof_ll = float(log_loss(y_oof, oof_probas))
