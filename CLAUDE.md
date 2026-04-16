@@ -74,13 +74,13 @@ Détail complet : `config/MODEL_SPECS.md` §ALICE Engine.
 
 ## ÉTAT ACTUEL (avril 2026)
 
-**V9 Training Final v4 COMPLETE — 3 modèles convergés, T1-T12 ALL PASS.**
+**V9 Training Final v4 COMPLETE. OOF stack en cours. AG ÉLIMINÉ (ADR-011).**
 Résultats HP search : `docs/project/V9_HP_SEARCH_RESULTS.md`
 Résumé session : `memory/project_session_resume.md`
 
 | Couche | Statut |
 |--------|--------|
-| ML Training | **V9 Training Final v4 COMPLETE.** LGB 0.5619, XGB 0.5622, CB 0.5708. T1-T12 ALL PASS. |
+| ML Training | **V9 Final v4 DONE** (LGB 0.5619, XGB 0.5622, CB 0.5708). OOF CB folds 1,3 RUNNING. AG **ÉLIMINÉ** (ADR-011). |
 | API FastAPI | COMPLET (stubs) |
 | Câblage routes→services | MANQUANT (après Training Final) |
 | ALI prédiction adverse | MANQUANT (Phase 3) |
@@ -149,3 +149,4 @@ Spec : `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md`
 ## Wiki
 
 Syntheses wiki : `C:\Dev\wiki\topics\ml\` et `C:\Dev\wiki\entities\alice-engine.md`
+Guide et outils de recherche : `C:\Dev\wiki\wiki-guide.md`
