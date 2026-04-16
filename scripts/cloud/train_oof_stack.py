@@ -170,6 +170,13 @@ def main() -> None:
     for fold_k, (train_idx, val_idx) in enumerate(folds):
         if fold_k not in fold_indices:
             continue
+
+        # CatBoost snapshot is tied to exact data checksum — MUST delete between folds
+        _snap = Path("/kaggle/working/catboost_snapshot")
+        if _snap.exists():
+            _snap.unlink()
+            logger.info("Deleted stale CatBoost snapshot (fold data changed)")
+
         logger.info("=" * 50)
         logger.info(
             "FOLD %d/%d (train=%d, val=%d)", fold_k + 1, N_FOLDS, len(train_idx), len(val_idx)
@@ -197,8 +204,7 @@ def main() -> None:
                 init_scores_valid=init_va,
             )
             if result["model"] is None:
-                logger.error("  %s fold %d FAILED", model_name, fold_k)
-                continue
+                raise RuntimeError(f"{model_name} fold {fold_k} FAILED — stopping kernel")
 
             # Raw predictions on validation fold
             y_proba_va = predict_with_init(result["model"], X_va, init_va)
