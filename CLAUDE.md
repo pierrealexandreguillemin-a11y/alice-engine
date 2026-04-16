@@ -74,13 +74,13 @@ Détail complet : `config/MODEL_SPECS.md` §ALICE Engine.
 
 ## ÉTAT ACTUEL (avril 2026)
 
-**V9 Training Final v4 COMPLETE. OOF stack en cours. AG ÉLIMINÉ (ADR-011).**
+**CHAMPION: LGB V9 + Dirichlet (0.5541, ECE_draw 0.0042). AG ÉLIMINÉ (ADR-011).**
 Résultats HP search : `docs/project/V9_HP_SEARCH_RESULTS.md`
 Résumé session : `memory/project_session_resume.md`
 
 | Couche | Statut |
 |--------|--------|
-| ML Training | **V9 Final v4 DONE** (LGB 0.5619, XGB 0.5622, CB 0.5708). OOF CB folds 1,3 RUNNING. AG **ÉLIMINÉ** (ADR-011). |
+| ML Training | **CHAMPION: LGB + Dirichlet** (0.5541, ECE_draw 0.0042). OOF COMPLETE. AG ÉLIMINÉ (ADR-011). |
 | API FastAPI | COMPLET (stubs) |
 | Câblage routes→services | MANQUANT (après Training Final) |
 | ALI prédiction adverse | MANQUANT (Phase 3) |
@@ -110,7 +110,7 @@ Résumé session : `memory/project_session_resume.md`
 
 Inference : `compute_elo_baseline → init_scores → *= alpha_per_model → predict_with_init`
 
-**ADR** : `docs/architecture/DECISIONS.md` (ADR-001 à ADR-010)
+**ADR** : `docs/architecture/DECISIONS.md` (ADR-001 à ADR-011)
 
 ## COMMANDES
 

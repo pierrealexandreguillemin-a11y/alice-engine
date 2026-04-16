@@ -657,7 +657,11 @@ Tous les 3 over-predict draws (mean P(draw) > observed 12.04%).
 
 ---
 
-## AutoGluon V9 Benchmark (2026-04-15)
+## ~~AutoGluon V9 Benchmark~~ (2026-04-15) — ELIMINE (ADR-011)
+
+> **⚠ ELIMINE — ADR-011 (2026-04-16)** : AutoGluon elimine du pipeline ALICE.
+> Pas de residual learning, calibration incompatible CE, test logloss 0.5716 > V9 LGB 0.5619.
+> Voir `docs/architecture/DECISIONS.md` §ADR-011 et `docs/postmortem/2026-04-16-autogluon-v9-time-allocation-failure.md`
 
 ### Pourquoi AutoGluon
 
@@ -782,24 +786,115 @@ Confirmé par littérature 2024-2025 :
 - UCL 2024-25 : Elo predictive modeling
 - Per-model alpha (ADR-008, 590 configs) : innovation ALICE
 
+### Domaines analogues au pattern ALICE (recherche 2026-04-16)
+
+ALICE = Predict → Calibrate → Optimize. Ce pattern se retrouve dans :
+
+| Domaine | Prediction ML | Optimiseur downstream | Ref |
+|---------|--------------|----------------------|-----|
+| Finance/Portfolio | P(rendement) par actif | Mean-Variance / CVaR | Elmachtoub & Grigas 2020, SPO+ |
+| Healthcare/Triage | P(urgence) par patient | Assignment patients → lits | Nature Sci Rep 2026, conformal triage |
+| Workforce scheduling | P(demande) par créneau | Assignment personnel × shifts | Dehnoei 2024, ITOR |
+| Supply chain | P(rupture) par SKU | Assignment stock × entrepôts | — |
+| **ALICE** | P(W/D/L) par board | Assignment joueurs × équipes × échiquiers | — |
+
+Point commun : le ML ne decide pas, il alimente un solveur OR. La calibration
+des probas determine la qualite de la decision finale.
+
+### Paradigme : Predict-then-Optimize vs Decision-Focused Learning
+
+**Actuel ALICE : Predict-then-Optimize (PtO)**
+- ML optimise log loss (prediction), CE optimise E[score] (decision). Decouples.
+- Risque : "error maximization" — erreurs petites en logloss peuvent causer
+  erreurs grandes dans le CE (Elmachtoub & Grigas 2020, Management Science).
+
+**Alternative : Decision-Focused Learning (DFL)**
+- ML entraine directement sur le regret du CE — gradient traverse le solveur.
+- Survey : Mandi et al. 2023 (arxiv:2307.13565), 11 methodes, 7 benchmarks.
+- NeurIPS 2024 : Directional Gradients, Lipschitz continuous surrogate loss.
+- **Statut ALICE : Phase 5+ (recherche).** Prerequis : CE fonctionnel pour
+  differencier a travers. OR-Tools CP-SAT = NP-hard, besoin surrogate loss.
+
+**Compromis : Calibration-aware algorithms**
+- ML decoupled du CE, mais calibration SUFFIT pour borner le regret downstream.
+- arxiv:2502.02861 : regret borne par `1 + 2α` ou α = max calibration error.
+- **Statut ALICE : ACTIF.** ECE draw < 0.02 → α ≤ 0.02. Quality gates T7-T8
+  verifient exactement cette condition. Notre pipeline est conforme.
+
+### Stacking meta-learner — resultats empiriques (2026-04-16)
+
+**Resultats champion selection (test set, 231K rows) :**
+
+| Candidat | log_loss | ECE_draw | draw_bias | rps |
+|----------|---------|----------|-----------|-----|
+| **LGB + Dirichlet** | **0.5541** | **0.0042** | **-0.0017** | 0.0880 |
+| Simple average 3 modeles | 0.5558 | 0.0061 | -0.0019 | 0.0880 |
+| LogReg stacking | 0.5907 | 0.0330 | 0.0101 | 0.0895 |
+| V9 LGB single (ref) | 0.5619 | 0.0145 | 0.0136 | — |
+
+**Champion : LGB V9 + Dirichlet calibration (Kull 2019 NeurIPS).**
+
+Gains vs meilleur V9 single :
+- log_loss : -0.0078 (0.5541 vs 0.5619)
+- ECE_draw : ÷3.5 (0.0042 vs 0.0145)
+- draw_bias : ÷8 (0.0017 vs 0.0136)
+
+**Findings :**
+1. LogReg stacking DEGRADE (0.5907 > 0.5558 average). Forecast combination puzzle confirme.
+2. Dirichlet sur LGB single > stacking 3 modeles. Correction per-class > diversite ensemble.
+3. Simple average = forte baseline (0.5558), mais Dirichlet sur LGB bat tout.
+4. Temperature scaling inutile sur LogReg (T=1.0003 ≈ identite).
+
+| Meta-learner | Verdict ALICE | Ref |
+|-------------|--------------|-----|
+| LogisticRegression L2 | **ELIMINE** — sur-ajuste OOF, degrade en test | Wolpert 1992, Breiman 1996 |
+| **Simple average** | Forte baseline (0.5558), battue par Dirichlet | "forecast combination puzzle" |
+| MLP | Non teste — LogReg deja pire que average | — |
+| **Dirichlet sur LGB single** | **CHAMPION** — meilleur log_loss + meilleure calibration | Kull 2019 (NeurIPS) |
+
+### Optimisations futures identifiees (2026-04-16)
+
+| Phase | Optimisation | Effort | Impact | Ref |
+|-------|-------------|--------|--------|-----|
+| ~~**V9**~~ | ~~Dirichlet calibration sur champion~~ | ~~Faible~~ | ~~HAUT~~ | **FAIT** — champion = LGB + Dirichlet |
+| ~~**V9**~~ | ~~LogReg meta-learner~~ | ~~Faible~~ | ~~Moyen~~ | **FAIT** — elimine (degrade) |
+| **Phase 4** | Conformal prediction sets pour CE risk-adjusted | Moyen | Moyen | ACM Survey 2024 |
+| **Phase 4** | Copules inter-boards (correlation dans un match) | Moyen | Moyen | Pair-copula, Springer 2023 |
+| **Phase 4** | Structured Matrix Scaling (beyond Dirichlet) | Faible | Faible | arxiv:2511.03685 (2024) |
+| **Phase 5+** | Decision-Focused Learning (SPO+ loss) | Tres eleve | Potentiellement haut | Mandi 2023, NeurIPS 2024 |
+
 ### Sources
 
 - Nature Sci Rep 2025 : AG benchmark 16 AutoML tools
 - Wheatcroft 2021 : calibration > accuracy pour paris sportifs
 - Constantinou 2012 : RPS pour outcomes ordinaux
-- arxiv:2303.06021 : selection modèle basée calibration
+- arxiv:2303.06021 : selection modele basee calibration
 - Guo 2017 (ICML) : temperature scaling
 - Kull 2019 (NeurIPS) : Dirichlet calibration
 - Wang 2023 (arxiv:2308.01222) : survey calibration deep learning
+- Elmachtoub & Grigas 2020 (Management Science) : Smart Predict-then-Optimize, SPO+ loss
+- Mandi et al. 2023 (arxiv:2307.13565) : Decision-Focused Learning survey, 11 methods, 7 benchmarks
+- NeurIPS 2024 : DFL with Directional Gradients
+- arxiv:2502.02861 : Algorithms with Calibrated ML Predictions (regret bound = f(ECE))
+- arxiv:2509.04203 : Bayesian Stacking via Proper Scoring Rules (SGP, Dirichlet prior)
+- arxiv:2511.03685 : Structured Matrix Scaling for Multi-Class Calibration
+- ACM Computing Surveys 2024 : Conformal Prediction data perspective
+- Nature Sci Rep 2026 : Conformal selective prediction for clinical triage
+- Springer 2023 : Pair-copula construction for binary outcomes
+- Wizard of Odds : Same-game parlays, copules gaussiennes bookmakers
+- arxiv:2408.02841 : Evaluating Posterior Probabilities — ECE captures calibration, not discrimination
 
 ---
 
-## Mise à jour
+## Mise a jour
 
-Ce fichier est mis à jour à chaque nouveau résultat empirique.
-Dernière mise à jour : 2026-04-15.
-- V9 Training Final v4 : 3 modèles T1-T12 ALL PASS (LGB 0.5619, XGB 0.5622, CB 0.5708)
-- AutoGluon V9 benchmark : kernel v4 GPU T4, EN COURS
-- OOF Stack XGB+LGB : kernel v1, EN COURS
+Ce fichier est mis a jour a chaque nouveau resultat empirique.
+Derniere mise a jour : 2026-04-16.
+- **CHAMPION SELECTED : LGB V9 + Dirichlet calibration (0.5541, ECE_draw 0.0042)**
+- V9 Training Final v4 : 3 modeles T1-T12 ALL PASS (LGB 0.5619, XGB 0.5622, CB 0.5708)
+- OOF Stack : XGB+LGB 5-fold COMPLETE, CB 5-fold COMPLETE
+- Stacking LogReg ELIMINE (degrade). Simple average = baseline. Dirichlet = winner.
+- ~~AutoGluon V9 benchmark~~ — ELIMINE (ADR-011)
 - Architecture production : batch ML hebdo + CE on-demand <2s
-- SOTA calibration : Temperature + Dirichlet = conforme 2025, GETS = GNN only (éliminé)
+- SOTA calibration : Dirichlet (Kull 2019) CHAMPION. Temperature scaling = insuffisant.
+- Roadmap recherche : DFL Phase 5+, Conformal/Copules Phase 4
