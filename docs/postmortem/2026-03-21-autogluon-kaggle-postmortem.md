@@ -1,5 +1,9 @@
 # Post-mortem : AutoGluon Kaggle Training (2026-03-20/21)
 
+> **⚠ ELIMINE — ADR-011 (2026-04-16)** : AutoGluon elimine du pipeline ALICE.
+> Pas de residual learning, calibration incompatible CE, test logloss 0.5716 > V9 LGB 0.5619.
+> Voir `docs/architecture/DECISIONS.md` §ADR-011 et `docs/postmortem/2026-04-16-autogluon-v9-time-allocation-failure.md`
+
 ## Résumé
 
 7 tentatives pour lancer un notebook AutoGluon sur Kaggle. 6 échecs avant un run dégradé.

@@ -288,7 +288,7 @@ Features computed from data STRICTLY BEFORE each split (no temporal leakage). Co
 | Features | `scripts/features/pipeline.py` | INTEGRATE — wire ali/presence, ali/patterns |
 | Training | `scripts/kaggle_trainers.py` | MultiClass target, loss, eval, predict_proba 3-col |
 | Training | `scripts/cloud/train_kaggle.py` | Baselines (naïve + Elo), RPS, system metrics |
-| Training | `scripts/cloud/train_autogluon_kaggle.py` | MultiClass config |
+| Training | `scripts/cloud/train_autogluon_kaggle.py` | MultiClass config (ELIMINE -- ADR-011) |
 | Diagnostics | `scripts/kaggle_diagnostics.py` | RPS, ECE, reliability diagrams, calibration 3-class |
 | Config | `config/hyperparameters.yaml` | MultiClass params, quality gate thresholds |
 | Tests | `tests/test_cloud_*.py` | Adapt to new metrics |

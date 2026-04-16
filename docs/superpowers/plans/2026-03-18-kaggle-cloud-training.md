@@ -397,7 +397,7 @@ def pull_candidate(repo_id, version=None) -> Path:
 
 def run_robustness(model, X_test, y_test) -> dict:
     """ISO 24029: noise injection + feature dropout.
-    Standalone implementation (existing modules expect AutoGluon TabularPredictor).
+    Standalone implementation (existing modules expect AutoGluon TabularPredictor — ELIMINE ADR-011).
     Uses same algorithms: 5% Gaussian noise on numerics, single-feature dropout.
     """
     import numpy as np
@@ -418,7 +418,7 @@ def run_robustness(model, X_test, y_test) -> dict:
 
 def run_fairness(model, X_test, y_test, protected_attr="ligue_code") -> dict:
     """ISO 24027: demographic parity on protected attribute.
-    Standalone (existing modules expect AutoGluon TabularPredictor).
+    Standalone (existing modules expect AutoGluon TabularPredictor — ELIMINE ADR-011).
     """
     import numpy as np
     y_pred = (model.predict_proba(X_test)[:, 1] >= 0.5).astype(int)

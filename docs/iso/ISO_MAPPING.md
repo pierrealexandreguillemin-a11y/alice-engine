@@ -49,7 +49,7 @@
 | `scripts/parse_dataset.py` | ISO 5259, 25012 | Parsing qualité, Validation schéma |
 | `scripts/ml_types.py` | ISO 5055, 5259 | Types stricts, Qualité code |
 
-### Scripts AutoGluon (ISO Validation)
+### Scripts AutoGluon (ISO Validation) — ELIMINE (ADR-011)
 
 | Fichier | Normes | Exigences Couvertes |
 |---------|--------|---------------------|

@@ -308,8 +308,12 @@ drift_thresholds:
 # Sources:
 # - https://auto.gluon.ai/stable/api/autogluon.tabular.TabularPredictor.fit.html
 # - https://priorlabs.ai/technical-reports/tabpfn-2-5-model-report
+#
+# ⚠ ELIMINE — ADR-011 (2026-04-16) : AutoGluon elimine du pipeline ALICE.
+# Pas de residual learning, calibration incompatible CE, test logloss 0.5716 > V9 LGB 0.5619.
+# Voir docs/architecture/DECISIONS.md §ADR-011
 # =============================================================================
-autogluon:
+autogluon:  # ELIMINE — ADR-011
   # Presets: 'medium_quality', 'high_quality', 'best_quality', 'extreme'
   presets: "extreme"            # Inclut TabPFN-2.5 + tous modeles
   time_limit: 21600             # 6 HEURES (corrige de 3600)

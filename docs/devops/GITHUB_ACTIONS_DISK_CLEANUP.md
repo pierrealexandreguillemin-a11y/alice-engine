@@ -3,7 +3,7 @@
 **Document ID**: DEVOPS-GHA-DISK-001
 **Version**: 1.0.0
 **Last Updated**: 2026-01-10
-**Applicable**: All repos with large dependencies (PyTorch, TensorFlow, AutoGluon, etc.)
+**Applicable**: All repos with large dependencies (PyTorch, TensorFlow, AutoGluon (ELIMINE -- ADR-011), etc.)
 
 ## Problem
 
@@ -13,7 +13,7 @@ GitHub-hosted runners have limited disk space:
 - Large ML dependencies can fill this quickly:
   - PyTorch: ~2-3GB
   - TensorFlow: ~2GB
-  - AutoGluon: ~500MB + dependencies
+  - AutoGluon: ~500MB + dependencies (ELIMINE -- ADR-011)
   - CUDA/cuDNN: ~2-3GB
 
 ## Solution: Pre-installation Cleanup
@@ -99,7 +99,7 @@ For RAG projects with embedding models:
     swap-storage: false    # Keep swap for large model loading
 ```
 
-### AutoGluon Projects
+### AutoGluon Projects (ELIMINE -- ADR-011)
 
 AutoGluon pulls many dependencies. Full cleanup recommended:
 

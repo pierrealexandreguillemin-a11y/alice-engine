@@ -149,7 +149,7 @@ Ce document décrit le système de hooks Claude Code implémentant une **boucle 
 |---|-------|-----------|-----------|--------------|
 | 1 | Data Preparation | 5259 | - | `data/features/train.parquet` EXISTS |
 | 2 | Baseline Models | 25059 | 1 | `models/v*/metadata.json` EXISTS |
-| 3 | AutoGluon Training | 42001 | 1 | `models/autogluon/*/predictor.pkl` EXISTS |
+| 3 | ~~AutoGluon Training~~ (ELIMINE -- ADR-011) | 42001 | 1 | `models/autogluon/*/predictor.pkl` EXISTS |
 | 4 | Robustness Validation | 24029 | 3 | `noise_tolerance >= 0.95` |
 | 5 | Fairness Validation | 24027 | 3 | `demographic_parity >= 0.60` |
 | 6 | McNemar Comparison | 24029 | 2, 3 | `reports/mcnemar_comparison.json` EXISTS |
@@ -168,7 +168,7 @@ Ce document décrit le système de hooks Claude Code implémentant une **boucle 
               ┌──────────────┼──────────────┐
               ▼              ▼              │
      ┌─────────────┐  ┌─────────────┐       │
-     │ 2. Baseline │  │ 3. AutoGluon│       │
+     │ 2. Baseline │  │ 3. ~~AG~~   │       │
      │ (ISO 25059) │  │ (ISO 42001) │       │
      └──────┬──────┘  └──────┬──────┘       │
             │                │              │
@@ -212,9 +212,9 @@ Ce document décrit le système de hooks Claude Code implémentant une **boucle 
 
 **Vérifications:**
 - Training: data files + RAM ≥ 6GB
-- Robustness: AutoGluon model + data
-- Fairness: AutoGluon model
-- McNemar: AutoGluon + Baseline models
+- Robustness: AutoGluon model + data (ELIMINE -- ADR-011)
+- Fairness: AutoGluon model (ELIMINE -- ADR-011)
+- McNemar: AutoGluon + Baseline models (ELIMINE -- ADR-011)
 - Final Report: Tous rapports intermédiaires
 
 **Sortie si échec:**
@@ -255,7 +255,7 @@ _check_json_condition(cwd, "reports/iso24029_robustness.json EXISTS AND noise_to
 ```
 ## ISO PIPELINE STATUS (MANDATORY)
 [x] Data Preparation (ISO 5259)
-[x] AutoGluon Training (ISO 42001)
+[x] ~~AutoGluon Training~~ (ELIMINE -- ADR-011) (ISO 42001)
 [ ] Robustness Validation (ISO 24029)
 
 **NEXT REQUIRED STEP: Robustness Validation**
@@ -317,14 +317,14 @@ You MUST complete this step before proceeding.
 ### 7.1 Exécution Manuelle (Étape par Étape)
 
 ```bash
-# Étape 3: Entraînement AutoGluon
-python -m scripts.autogluon.run_training
+# Étape 3: Entraînement AutoGluon (ELIMINE -- ADR-011)
+# python -m scripts.autogluon.run_training
 
 # Étape 4: Validation Robustesse
-python -m scripts.autogluon.iso_robustness
+# python -m scripts.autogluon.iso_robustness  # ELIMINE -- ADR-011
 
 # Étape 5: Validation Équité
-python -m scripts.autogluon.iso_fairness
+# python -m scripts.autogluon.iso_fairness  # ELIMINE -- ADR-011
 
 # Étape 6: Comparaison McNemar
 python -m scripts.comparison.run_mcnemar

@@ -4,7 +4,7 @@ Index complet de tous les docs du projet. Consulter AVANT de poser des questions
 
 ## Architecture & ADR
 - `docs/architecture/ARCHITECTURE.md` — Vue d'ensemble architecture
-- `docs/architecture/DECISIONS.md` — Registre des decisions
+- `docs/architecture/DECISIONS.md` — Registre des decisions (ADR-001 a ADR-011, incl. ADR-011 AG YAGNI)
 - `docs/architecture/ADR-002-inference-feature-construction.md` — Feature store decision
 - `docs/architecture/ADR-003-single-model-kernels.md` — Architecture 4 kernels V8
 
@@ -70,12 +70,14 @@ Index complet de tous les docs du projet. Consulter AVANT de poser des questions
 - `docs/postmortem/2026-03-28-split-temporal-nan-features.md` — 61 features mortes
 - `docs/postmortem/2026-03-25-resultat-blanc-2.0-bug.md` — 62K victoires jeunes
 - `docs/postmortem/2026-03-22-training-v8-divergence.md` — V8 v1-v11 divergence
-- `docs/postmortem/2026-03-21-autogluon-kaggle-postmortem.md` — AutoGluon echec
+- `docs/postmortem/2026-03-21-autogluon-kaggle-postmortem.md` — AutoGluon echec (ÉLIMINÉ ADR-011)
+- `docs/postmortem/2026-04-16-autogluon-v9-time-allocation-failure.md` — AutoGluon V9 echec (ÉLIMINÉ ADR-011)
+- `docs/postmortem/2026-04-16-catboost-oof-snapshot-crash.md` — CB OOF snapshot bug
 
 ## Plans Legacy
 - `docs/plans/ISO_5055_ARCHITECTURE_PLAN.md` — Plan architecture ISO
 - `docs/plans/AUDIT_ISO_PLAN.md` — Plan audit ISO
-- `docs/plans/AUTOGLUON_IMPLEMENTATION_PLAN.md` — Plan AutoGluon
+- `docs/plans/AUTOGLUON_IMPLEMENTATION_PLAN.md` — Plan AutoGluon (ÉLIMINÉ ADR-011)
 
 ## DevOps & Operations
 - `docs/development/CONTRIBUTING.md` — Guide contribution

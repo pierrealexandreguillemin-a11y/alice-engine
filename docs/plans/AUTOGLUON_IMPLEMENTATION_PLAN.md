@@ -1,5 +1,9 @@
 # Plan d'Implémentation AutoGluon - ALICE Engine
 
+> **⚠ ELIMINE — ADR-011 (2026-04-16)** : AutoGluon elimine du pipeline ALICE.
+> Pas de residual learning, calibration incompatible CE, test logloss 0.5716 > V9 LGB 0.5619.
+> Voir `docs/architecture/DECISIONS.md` §ADR-011 et `docs/postmortem/2026-04-16-autogluon-v9-time-allocation-failure.md`
+
 Document ID: ALICE-PLAN-AUTOGLUON-001
 Version: 1.0.0
 Date: 2026-01-10

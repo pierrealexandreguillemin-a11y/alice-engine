@@ -105,7 +105,7 @@ Plan actif : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` (sup
 
 - [x] **Protected attributes check** - Validation absence features sensibles ✅
   - Fichiers: `scripts/fairness/protected/types.py`, `config.py`, `validator.py`
-  - Integration: `scripts/autogluon/run_training.py`, `scripts/baseline/run_baselines.py`
+  - Integration: `scripts/autogluon/run_training.py` (ELIMINE -- ADR-011), `scripts/baseline/run_baselines.py`
   - Tests: `tests/protected_attrs/test_validator.py`, `test_error_paths.py` (28 tests)
   - blanc_titre/noir_titre: FORBIDDEN (proxy direct genre)
   - Nominal attrs: Cramer's V (pas Pearson sur LabelEncoded)
@@ -115,7 +115,7 @@ Plan actif : `docs/superpowers/plans/2026-03-25-shap-feature-validation.md` (sup
 - [x] **Fairness report automatique** - Rapport multi-attributs post-training ✅
   - Fichiers: `scripts/fairness/auto_report/types.py`, `generator.py`, `formatter.py`
   - Runner: `scripts/fairness/auto_report/runner.py`
-  - Integration: `scripts/autogluon/run_training.py`, `scripts/baseline/run_baselines.py`
+  - Integration: `scripts/autogluon/run_training.py` (ELIMINE -- ADR-011), `scripts/baseline/run_baselines.py`
   - Tests: `tests/fairness_auto_report/test_generator.py`, `test_formatter.py`, `test_error_paths.py` (41 tests)
   - _status_from_metrics uses ALL 5 metrics (DP, TPR, FPR, PP, min_acc)
   - calibration_gap computed per group (NIST AI 100-1)
@@ -197,9 +197,9 @@ Tous les nouveaux fichiers respectent:
 
 ## Modules créés session 2026-01-17
 
-### Enhanced ISO Validation (ISO 24027/24029/42005)
+### Enhanced ISO Validation (ISO 24027/24029/42005) — AutoGluon (ELIMINE -- ADR-011)
 ```
-scripts/autogluon/
+scripts/autogluon/                # ELIMINE — ADR-011
 ├── iso_fairness_enhanced.py      # Root cause, exclude_empty, mitigations
 ├── iso_robustness_enhanced.py    # Noise, dropout, consistency, monotonicity
 ├── iso_impact_assessment_enhanced.py  # 10-step process, triggers
@@ -212,7 +212,7 @@ scripts/baseline/
 ├── catboost_baseline.py   # Réutilise scripts/training
 ├── xgboost_baseline.py
 ├── lightgbm_baseline.py
-└── run_baselines.py       # Comparaison AutoGluon
+└── run_baselines.py       # Comparaison AutoGluon (ELIMINE -- ADR-011)
 ```
 
 ### Serving/Deployment (ISO 42001)

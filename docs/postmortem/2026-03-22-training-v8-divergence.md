@@ -208,7 +208,7 @@ train → calibrate(isotonic, valid) → evaluate(calibré, test) → gate(calib
 Wilkens 2026 (Bundesliga) : même pipeline exact, isotonic rolling 2 saisons.
 scikit-learn docs : "evaluate on held-out test data AFTER applying calibration method."
 
-## Next Step : Residual Learning + AutoGluon
+## Next Step : Residual Learning + ~~AutoGluon~~ (ELIMINE -- ADR-011)
 
 ### Approche B : Residual Learning (prioritaire)
 
@@ -231,8 +231,10 @@ LightGBM: `init_score` parameter
   car le modèle cherche spécifiquement les corrections draw
 - L'objectif ALICE = P(draw) calibrées pour CE. Residual = focalisé dessus
 
-### Approche C : AutoGluon (validation)
+### Approche C : ~~AutoGluon (validation)~~ (ELIMINE -- ADR-011)
 
-AutoGluon sur les mêmes parquets pour comparer. S'il bat la baseline Elo
-sans residual learning → les features ont du signal, c'était notre approche.
-S'il échoue aussi → les features elles-mêmes ont un problème.
+~~AutoGluon sur les mêmes parquets pour comparer. S'il bat la baseline Elo
+sans residual learning -> les features ont du signal, c'etait notre approche.
+S'il echoue aussi -> les features elles-memes ont un probleme.~~
+
+**Resultat final** : AutoGluon teste en V9 (test logloss 0.5716) mais elimine -- pas de residual learning, calibration incompatible CE. Voir ADR-011.

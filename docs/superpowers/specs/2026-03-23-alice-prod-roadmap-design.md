@@ -51,7 +51,7 @@ Elo baseline:  P_elo(loss), P_elo(draw), P_elo(win)
 | Step 0 | Init Elo + 0 features | Reproduce Elo baseline exactly (sanity) |
 | Step 1 | Init Elo + top 10 (rates, form, draw) | Beat Elo by >0.01 log_loss |
 | Step 2 | Init Elo + all 177 features | Measure if sparse features help |
-| Step 3 | AutoGluon on Step 1 or Step 2 | Validate with AutoML |
+| Step 3 | ~~AutoGluon on Step 1 or Step 2~~ (ELIMINE -- ADR-011) | ~~Validate with AutoML~~ |
 
 ### Quality Gate (unchanged)
 

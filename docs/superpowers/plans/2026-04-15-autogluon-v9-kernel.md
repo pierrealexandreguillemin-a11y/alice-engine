@@ -1,5 +1,9 @@
 # AutoGluon V9 Benchmark Kernel — Implementation Plan
 
+> **⚠ ELIMINE — ADR-011 (2026-04-16)** : AutoGluon elimine du pipeline ALICE.
+> Pas de residual learning, calibration incompatible CE, test logloss 0.5716 > V9 LGB 0.5619.
+> Voir `docs/architecture/DECISIONS.md` §ADR-011 et `docs/postmortem/2026-04-16-autogluon-v9-time-allocation-failure.md`
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Run AutoGluon 1.5 `best_quality` on V9 features (204 cols = 201 + 3 Elo probas) as benchmark against V9 single models (LGB 0.5619, XGB 0.5622).

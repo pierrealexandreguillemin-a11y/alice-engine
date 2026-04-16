@@ -225,8 +225,8 @@ def main():
 ```
 
 This script imports from the existing ISO validation modules:
-- `scripts/autogluon/iso_robustness_enhanced.py`
-- `scripts/autogluon/iso_fairness_enhanced.py`
+- `scripts/autogluon/iso_robustness_enhanced.py` (ELIMINE -- ADR-011)
+- `scripts/autogluon/iso_fairness_enhanced.py` (ELIMINE -- ADR-011)
 - `scripts/comparison/mcnemar_test.py`
 
 RAM requirement: ~1 GB (test set 11 MB + model ~10 MB + validation overhead).
@@ -275,14 +275,14 @@ Includes a test that compares `default_hyperparameters()` keys against `config/h
 
 - `scripts/train_models_parallel.py` — local training still works
 - `scripts/training/` — untouched
-- `scripts/autogluon/` — reused by promote_model.py, not modified
+- `scripts/autogluon/` — reused by promote_model.py, not modified (ELIMINE -- ADR-011)
 - `scripts/comparison/` — reused by promote_model.py, not modified
 - All existing tests — untouched
 
 ## Out of scope V1
 
 - **Stacking** : meta-learner logistic regression sur les 3 base models (`scripts/ensemble_stacking.py`). Ajouté en V2 cloud si les 3 modèles individuels justifient un ensemble.
-- **AutoGluon** : multi-layer bagging + stacking auto. Sous-performait au round jan 2026 (AUC 0.7173 vs LightGBM 0.7513, McNemar p=0.0002). Reporté — pas pertinent tant que les base models n'atteignent pas un plateau.
+- **AutoGluon** (ELIMINE -- ADR-011) : multi-layer bagging + stacking auto. Sous-performait au round jan 2026 (AUC 0.7173 vs LightGBM 0.7513, McNemar p=0.0002). Elimine du pipeline -- pas de residual learning, calibration incompatible CE.
 
 ## File inventory
 

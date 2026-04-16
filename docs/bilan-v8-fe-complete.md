@@ -77,7 +77,7 @@
 ## 3. Git — 27 commits conventionnels
 
 ```
-b65d8b8 fix(hooks): enable_internet check only for training/autogluon kernels
+b65d8b8 fix(hooks): enable_internet check only for training/autogluon kernels  # AG ELIMINE -- ADR-011
 596d76e feat(kaggle): simplify train_kaggle.py to pure Kernel 2 + wire FE kernel_source
 463f0f2 perf(features): vectorize club_level extract + reinforcement_rate (O(n²) → O(n))
 85bbdc7 feat(kaggle): split into 2-kernel architecture (FE + training)
@@ -86,7 +86,7 @@ b65d8b8 fix(hooks): enable_internet check only for training/autogluon kernels
 90db988 chore(kaggle): slug alice-training-v7 -> alice-training-v8
 d9a279f fix(training): quality gate test metrics + lineage 3-class + review fixes
 45339bb fix(artifacts): model card best_auc -> best_log_loss (MultiClass gate)
-074157e feat(config): multiclass thresholds + AutoGluon 3-class + test suite adapted
+074157e feat(config): multiclass thresholds + AutoGluon 3-class + test suite adapted  # AG ELIMINE -- ADR-011
 f5a5e2e feat(training): quality gate 8 conditions + baselines (naive + Elo)
 a5a1038 feat(training): MultiClass 3-way — target, configs, metrics, calibration
 14e1306 fix(plan): Plan A Task 12 — no Kaggle upload until Plan B complete

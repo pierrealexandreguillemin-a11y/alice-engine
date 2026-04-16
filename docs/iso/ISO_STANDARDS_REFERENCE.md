@@ -48,7 +48,7 @@
 | ISO 23894 | Risques AI | Drift monitoring PSI, alertes seuils |
 | ISO 24027 | Biais | `scripts/fairness/bias_detection.py` - SPD, EOD, DIR |
 | ISO 24029 | Robustesse | `scripts/robustness/adversarial_tests.py` - Tests adversariaux |
-| ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - V7/AutoGluon era. V8: redo post-training |
+| ISO 42005 | Impact Assessment | `scripts/autogluon/iso_impact_assessment.py` - V7/AutoGluon era (ELIMINE -- ADR-011). V8: redo post-training |
 | ISO 25059 | Quality Gate | `check_quality_gates()` dans `kaggle_trainers.py`. V8: 8 conditions (voir §Quality Gate) |
 | ISO 24029 | Calibration | Isotonic per-class (3 regressors) + renormalisation. `kaggle_diagnostics.py` |
 | ISO 42001 | AI Transparency | `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md` — LLM co-authorship, traceability, QA gates |
@@ -620,7 +620,7 @@ Current PSI code works per-column — call 3x (P(loss), P(draw), P(win)). Phase 
 | `scripts/fairness/bias_detection.py` | ISO 24027, 42001 | Détection biais, Fairness metrics |
 | `scripts/robustness/adversarial_tests.py` | ISO 24029, 42001 | Tests robustesse, Perturbations |
 
-### Scripts AutoGluon (ML Training Pipeline)
+### Scripts AutoGluon (ML Training Pipeline) — ELIMINE (ADR-011)
 
 | Fichier | Normes Applicables | Exigences |
 |---------|-------------------|-----------|
@@ -683,7 +683,7 @@ Current PSI code works per-column — call 3x (P(loss), P(draw), P(win)). Phase 
 | `scripts/baseline/catboost_baseline.py` | ISO 24029, 5055 | CatBoost isolé, réutilise `scripts/training` |
 | `scripts/baseline/xgboost_baseline.py` | ISO 24029, 5055 | XGBoost isolé, réutilise `scripts/training` |
 | `scripts/baseline/lightgbm_baseline.py` | ISO 24029, 5055 | LightGBM isolé, réutilise `scripts/training` |
-| `scripts/baseline/run_baselines.py` | ISO 24029, 5055 | Runner séquentiel, comparaison AutoGluon |
+| `scripts/baseline/run_baselines.py` | ISO 24029, 5055 | Runner séquentiel, comparaison AutoGluon (ELIMINE -- ADR-011) |
 | `scripts/baseline/types.py` | ISO 5055 | Types partagés (BaselineMetrics) |
 
 ### Scripts Serving (Déploiement MLflow/Render)
@@ -778,7 +778,7 @@ Last Updated: YYYY-MM-DD
 
 ## Ressources Externes (Templates & Best Practices)
 
-### AutoGluon Pipeline
+### AutoGluon Pipeline — ELIMINE (ADR-011)
 
 | Ressource | URL | Usage |
 |-----------|-----|-------|
@@ -796,7 +796,7 @@ Last Updated: YYYY-MM-DD
 | Research Paper | https://www.researchgate.net/publication/397047638 | Framework théorique |
 | Unifiedbooster | https://thierrymoudiki.github.io/blog/2024/08/05/python/r/unibooster | Interface unifiée |
 
-### MLflow + AutoGluon Integration
+### MLflow + AutoGluon Integration — ELIMINE (ADR-011)
 
 | Ressource | URL | Usage |
 |-----------|-----|-------|
@@ -804,7 +804,7 @@ Last Updated: YYYY-MM-DD
 | MLOps Pipeline | https://github.com/AnderGarro/autogluon_airflow_mlflow | Airflow + AutoGluon + MLflow |
 | Databricks Guide | https://community.databricks.com/t5/machine-learning/autogluon-mlflow-integration/td-p/111423 | Best practices Databricks |
 
-### Notes AutoGluon 2024-2025
+### Notes AutoGluon 2024-2025 — ELIMINE (ADR-011)
 
 - **Kaggle 2024**: Top 3 dans 15/18 compétitions tabulaires, 7 premières places
 - **AutoGluon-Assistant (AG-A)**: Pilotage par LLM (Bedrock/OpenAI)

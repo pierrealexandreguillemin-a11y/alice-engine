@@ -82,19 +82,19 @@ Applique sur les modeles entraines, predictions test/valid, et artefacts.
 
 Ces gates ne verifient pas la qualite du MODELE mais la robustesse du PIPELINE.
 Un kernel sans checkpoint qui timeout = 100% du travail perdu. Constate 5 fois
-sur le projet ALICE (V8 v17, AG v1-v4). ISO 25010 (fiabilite), ISO 42001 (tracabilite).
+sur le projet ALICE (V8 v17, AG v1-v4 — AG ELIMINE ADR-011). ISO 25010 (fiabilite), ISO 42001 (tracabilite).
 
 | Gate | Check | Seuil | Ref |
 |------|-------|-------|-----|
 | **T13** | Checkpoint apres chaque modele/fold | 0 artefact perdu si timeout a tout moment | ALICE postmortem v17, kaggle-deployment skill |
-| **T14** | Time guard avant post-processing | `time_left > budget_post` avant chaque etape | ALICE AG v4 timeout, SESSION_HARD_LIMIT |
+| **T14** | Time guard avant post-processing | `time_left > budget_post` avant chaque etape | ALICE AG v4 timeout (AG ELIMINE -- ADR-011), SESSION_HARD_LIMIT |
 | **T15** | Artefacts sauves incrementalement | Chaque save independant (pas batch en fin de script) | ALICE postmortem 3 timeouts consecutifs |
 | **T16** | Budget temps calcule AVANT push | Docstring avec temps reel par composant | feedback_time_budget_kernels, feedback_calculate_dont_guess |
 
 **T13 — Checkpoints par modele/fold :**
 - Training Final : `_checkpoint_model()` apres chaque modele (deja implemente)
 - OOF : `_save_oof_checkpoint()` apres chaque fold (deja implemente)
-- AG : AG gere ses propres checkpoints internes (`ag_models/`)
+- ~~AG : AG gere ses propres checkpoints internes (`ag_models/`)~~ (ELIMINE -- ADR-011)
 - Meta-learner : checkpoints apres predictions, modele, metadata (deja implemente)
 - **Verification** : grep `checkpoint` ou `save` dans le kernel. Si absent = FAIL.
 

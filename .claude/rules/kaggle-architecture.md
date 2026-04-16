@@ -20,6 +20,14 @@ SQLite storage pour resume. Pruning callbacks (`optuna_integration` v4+).
 Search spaces audites : `config/hyperparameters.yaml` section optuna.
 init_score_alpha in [0.3, 0.8] joint search space.
 
+## AutoGluon — ÉLIMINÉ (ADR-011, 2026-04-16)
+Pas de residual learning, calibration incompatible CE, test 0.5716 > V9 LGB 0.5619.
+NE PAS relancer de kernel AG. Voir `docs/architecture/DECISIONS.md` §ADR-011.
+
+## OOF Architecture (2026-04-16)
+1 fold = 1 kernel. CatBoost snapshot_file incompatible avec multi-fold sequentiel
+(checksum mismatch entre folds). Postmortem : `docs/postmortem/2026-04-16-catboost-oof-snapshot-crash.md`.
+
 ## Checkpoints par librairie
 - CatBoost : snapshot_file (binaire, secondes). MEMES params requis.
 - LightGBM : callback text (lent: 65K=3h22m startup). From scratch si >3h.

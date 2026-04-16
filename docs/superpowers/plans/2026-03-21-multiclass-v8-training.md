@@ -745,7 +745,7 @@ git commit -m "feat(diagnostics): 3-class reliability diagrams, classification r
 
 ---
 
-## Task 9: Config + AutoGluon + test suite
+## Task 9: Config + ~~AutoGluon~~ (ELIMINE -- ADR-011) + test suite
 
 **Files:**
 - Modify: `config/hyperparameters.yaml`
@@ -757,7 +757,7 @@ git commit -m "feat(diagnostics): 3-class reliability diagrams, classification r
 
 Replace binary metrics_thresholds with multiclass ones. Add RPS/ECE thresholds.
 
-- [ ] **Step 2: Update AutoGluon script**
+- [ ] **Step 2: ~~Update AutoGluon script~~ (ELIMINE -- ADR-011)**
 
 ```python
 # train_autogluon_kaggle.py: change target encoding
@@ -785,7 +785,7 @@ pytest tests/ --ignore=tests/test_health.py --ignore=tests/training_optuna/ -q
 - [ ] **Step 6: Commit**
 
 ```bash
-git commit -m "feat(config): multiclass params + AutoGluon 3-class + test suite adapted"
+git commit -m "feat(config): multiclass params + test suite adapted"  # AutoGluon ELIMINE -- ADR-011
 ```
 
 ---
