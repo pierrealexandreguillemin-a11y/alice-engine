@@ -74,13 +74,13 @@ Détail complet : `config/MODEL_SPECS.md` §ALICE Engine.
 
 ## ÉTAT ACTUEL (avril 2026)
 
-**CHAMPION: LGB V9 + Dirichlet (0.5541, ECE_draw 0.0042). AG ÉLIMINÉ (ADR-011).**
+**CHAMPION: MLP(32,16) 18f + temp scaling (0.5530, ECE_draw 0.0016). AG ÉLIMINÉ (ADR-011).**
 Résultats HP search : `docs/project/V9_HP_SEARCH_RESULTS.md`
 Résumé session : `memory/project_session_resume.md`
 
 | Couche | Statut |
 |--------|--------|
-| ML Training | **CHAMPION: LGB + Dirichlet** (0.5541, ECE_draw 0.0042). OOF COMPLETE. AG ÉLIMINÉ (ADR-011). |
+| ML Training | **CHAMPION: MLP(32,16) stacking** (0.5530, ECE_draw 0.0016). OOF DONE. AG ÉLIMINÉ (ADR-011). |
 | API FastAPI | COMPLET (stubs) |
 | Câblage routes→services | MANQUANT (après Training Final) |
 | ALI prédiction adverse | MANQUANT (Phase 3) |

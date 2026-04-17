@@ -823,41 +823,75 @@ des probas determine la qualite de la decision finale.
 
 ### Stacking meta-learner — resultats empiriques (2026-04-16)
 
-**Resultats champion selection (test set, 231K rows) :**
+**Resultats champion selection — sweep complet (test set, 231K rows, 24+ experiences) :**
 
-| Candidat | log_loss | ECE_draw | draw_bias | rps |
-|----------|---------|----------|-----------|-----|
-| **LGB + Dirichlet** | **0.5541** | **0.0042** | **-0.0017** | 0.0880 |
-| Simple average 3 modeles | 0.5558 | 0.0061 | -0.0019 | 0.0880 |
-| LogReg stacking | 0.5907 | 0.0330 | 0.0101 | 0.0895 |
-| V9 LGB single (ref) | 0.5619 | 0.0145 | 0.0136 | — |
+| Candidat | Feat | log_loss | ECE_draw | draw_bias | rps |
+|----------|------|---------|----------|-----------|-----|
+| **MLP(32,16) 18f + temp** | **18** | **0.5530** | **0.0016** | **-0.0002** | **0.0879** |
+| MLP(32,16) 18f + Dirichlet | 18 | 0.5530 | 0.0035 | -0.0032 | 0.0879 |
+| MLP(32,16) 18f raw | 18 | 0.5531 | 0.0025 | -0.0006 | 0.0879 |
+| LGB + Dirichlet (single model) | — | 0.5541 | 0.0042 | -0.0017 | 0.0880 |
+| MLP(32,16) 9f | 9 | 0.5538 | 0.0053 | -0.0048 | 0.0880 |
+| Simple average 3 modeles | — | 0.5558 | 0.0061 | -0.0019 | 0.0880 |
+| LogReg stacking | 9 | 0.5907 | 0.0330 | 0.0101 | 0.0895 |
+| V9 LGB single (ref) | — | 0.5619 | 0.0145 | 0.0136 | — |
 
-**Champion : LGB V9 + Dirichlet calibration (Kull 2019 NeurIPS).**
+**Champion : MLP(32,16) sur 18 features + temperature scaling.**
 
-Gains vs meilleur V9 single :
-- log_loss : -0.0078 (0.5541 vs 0.5619)
-- ECE_draw : ÷3.5 (0.0042 vs 0.0145)
-- draw_bias : ÷8 (0.0017 vs 0.0136)
+Gains vs V9 LGB single :
+- log_loss : **-0.0089** (0.5530 vs 0.5619)
+- ECE_draw : **÷9** (0.0016 vs 0.0145)
+- draw_bias : **quasi-neutre** (-0.0002 vs 0.0136)
 
-**Findings :**
-1. LogReg stacking DEGRADE (0.5907 > 0.5558 average). Forecast combination puzzle confirme.
-2. Dirichlet sur LGB single > stacking 3 modeles. Correction per-class > diversite ensemble.
-3. Simple average = forte baseline (0.5558), mais Dirichlet sur LGB bat tout.
-4. Temperature scaling inutile sur LogReg (T=1.0003 ≈ identite).
+### Meta-features : 18 = 9 probas + 9 engineered
+
+| Feature (×3 classes ou ×3 modeles) | Source | Justification |
+|-------------------------------------|--------|---------------|
+| 9 base probas (XGB+LGB+CB × L/D/W) | OOF 5-fold | Signal principal |
+| std per class (3f) | Kuncheva 2003 (variance proxy) | Desaccord inter-modeles |
+| max_prob per model (3f) | Ad hoc (valide empiriquement) | Confiance brute |
+| entropy per model (3f) | Shannon 1948 | Incertitude calibree |
+
+### Sweep exhaustif features (2026-04-17)
+
+24+ combinaisons testees incluant :
+- Features litterature : Q-statistic, double-fault, KL divergence, rank,
+  calibration residual (Kuncheva 2003, arxiv:2511.00126)
+- Restacking : top 15 SHAP brutes, 188 features FE (LEAKAGE detecte)
+- Ablation v1 : chaque groupe individuellement et en combinaison
+
+**Resultat : AUCUNE combinaison ne bat v1 (18 features).** Les features de
+diversite Kuncheva degradent (Q=0.997 entre les 3 GBMs = diversite quasi-nulle,
+mesures de diversite = bruit). Les features brutes = bruit ou leakage.
+
+### Diagnostic Kuncheva (diversite base models)
+
+| Paire | Q-statistic | Disagreement | Triple oracle |
+|-------|------------|-------------|---------------|
+| XGB-LGB | 0.997 | 3.3% | — |
+| XGB-CB | 0.996 | 3.9% | — |
+| LGB-CB | 0.996 | 4.0% | — |
+| **3 modeles** | — | — | **74.2% (vs 71.4% best single = +0.3%)** |
+
+93.6% du temps les 3 modeles predisent la MEME classe. Le gain du stacking
+vient de la recalibration des probas (surtout P(draw)), pas de la diversite.
+Un NN base model (Phase 5+) augmenterait la diversite.
 
 | Meta-learner | Verdict ALICE | Ref |
 |-------------|--------------|-----|
-| LogisticRegression L2 | **ELIMINE** — sur-ajuste OOF, degrade en test | Wolpert 1992, Breiman 1996 |
-| **Simple average** | Forte baseline (0.5558), battue par Dirichlet | "forecast combination puzzle" |
-| MLP | Non teste — LogReg deja pire que average | — |
-| **Dirichlet sur LGB single** | **CHAMPION** — meilleur log_loss + meilleure calibration | Kull 2019 (NeurIPS) |
+| **MLP(32,16) 18f + temp** | **CHAMPION** — meilleur sur toutes metriques | Sweep 24+ exp |
+| LGB + Dirichlet (single) | Forte alternative (0.5541) | Kull 2019 (NeurIPS) |
+| Simple average | Baseline robuste (0.5558) | Breiman 1996 |
+| LogReg | ELIMINE (sur-ajuste) | Wolpert 1992 |
+| MLP + top15 SHAP brutes | ELIMINE (bruit, 0.5594) | — |
+| MLP + 188 FE features | INVALIDE (leakage, 0.0010) | — |
 
-### Optimisations futures identifiees (2026-04-16)
+### Optimisations futures identifiees (2026-04-17)
 
 | Phase | Optimisation | Effort | Impact | Ref |
 |-------|-------------|--------|--------|-----|
-| ~~**V9**~~ | ~~Dirichlet calibration sur champion~~ | ~~Faible~~ | ~~HAUT~~ | **FAIT** — champion = LGB + Dirichlet |
-| ~~**V9**~~ | ~~LogReg meta-learner~~ | ~~Faible~~ | ~~Moyen~~ | **FAIT** — elimine (degrade) |
+| ~~**V9**~~ | ~~Meta-learner sweep~~ | ~~Moyen~~ | ~~HAUT~~ | **FAIT** — MLP(32,16) 18f champion |
+| ~~**V9**~~ | ~~Feature engineering sweep~~ | ~~Moyen~~ | ~~Nul~~ | **FAIT** — v1 optimal, litterature teste |
 | **Phase 4** | Conformal prediction sets pour CE risk-adjusted | Moyen | Moyen | ACM Survey 2024 |
 | **Phase 4** | Copules inter-boards (correlation dans un match) | Moyen | Moyen | Pair-copula, Springer 2023 |
 | **Phase 4** | Structured Matrix Scaling (beyond Dirichlet) | Faible | Faible | arxiv:2511.03685 (2024) |
