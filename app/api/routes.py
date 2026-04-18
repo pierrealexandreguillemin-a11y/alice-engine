@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Request
@@ -30,9 +30,21 @@ from app.api.schemas import (
     TeamComposition,
 )
 from app.logging_config import get_audit_logger, get_logger
-
-if TYPE_CHECKING:
-    from services.inference import StackingInferenceService
+from services.ffe_rules import (
+    check_elo_max,
+    check_elo_order,
+    check_foreign_quota,
+    check_fr_gender,
+    check_mutes_limit,
+    check_noyau,
+    check_team_size,
+    check_unique_assignment,
+    filter_brule,
+    filter_match_count,
+    filter_same_group,
+    sort_by_elo,
+)
+from services.inference import StackingInferenceService
 
 logger = get_logger(__name__)
 audit_logger = get_audit_logger()
@@ -51,8 +63,6 @@ def _build_player_pool(body: ComposeRequest) -> list[dict]:
 
 def _apply_pre_filters(players: list[dict], body: ComposeRequest) -> list[dict]:
     """FFE pre-filter: remove ineligible players before composition."""
-    from services.ffe_rules import filter_brule, filter_match_count, filter_same_group
-
     eligible = filter_brule(players, target_team=f"{body.club_id}_1", team_rank=1)
     eligible = filter_match_count(eligible, ronde=body.ronde)
     return filter_same_group(eligible, target_group="default", group_history={})
@@ -109,17 +119,6 @@ def _predict_board(
 
 def _validate_ffe(boards: list[BoardResult], body: ComposeRequest, team_size: int) -> bool:
     """FFE post-check: validate composed team against 11 blocking rules."""
-    from services.ffe_rules import (
-        check_elo_max,
-        check_elo_order,
-        check_foreign_quota,
-        check_fr_gender,
-        check_mutes_limit,
-        check_noyau,
-        check_team_size,
-        check_unique_assignment,
-    )
-
     elos = [b.elo for b in boards]
     selected = [
         {
@@ -158,9 +157,6 @@ async def compose_teams(body: ComposeRequest, request: Request) -> ComposeRespon
     feature_store = getattr(request.app.state, "feature_store", None)
     if bundle is None:
         raise HTTPException(status_code=503, detail="Models not loaded")
-
-    from services.ffe_rules import sort_by_elo
-    from services.inference import StackingInferenceService
 
     inference = StackingInferenceService(bundle)
     pool = _build_player_pool(body)
