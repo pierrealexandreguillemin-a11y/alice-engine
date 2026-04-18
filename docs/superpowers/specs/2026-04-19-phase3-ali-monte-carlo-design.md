@@ -24,13 +24,22 @@ ALI (prédire adversaire) → ML (P(W/D/L) per board) → CE (optimiser E[score]
 ```
 Phase 2 a wired le ML et le CE avec fallback (ALI = tri Elo 1 scénario, joueurs = stub Elo 1500). **Phase 3 résorbe cette dette et livre un ALI SOTA.**
 
-### 1.2 Scope retenu (option B)
+### 1.2 Scope retenu (option B + audit final)
 1. Monte Carlo hybride (10 TopK déterministes + 10 MC stochastiques pondérés)
 2. Data loader réel sur `joueurs.parquet` + `echiquiers.parquet` (résorbe D1, D2, D5)
 3. RuleEngine JSON-driven (remplace les 11 Python `ffe_rules.py`), vendor depuis `chess-app/flat-six/rules/`
 4. Classification PUBLIC/PRIVATE des règles FFE (annotations locales ALICE)
 5. **SOTA intégrés** : F1-copule gaussienne (F6), F2-recency decay, F3-streak autoregressive, F5-LHS/antithetic, F7-survivor filter
 6. Backtest walk-forward + 10 quality gates T13-T22
+7. **ScenarioExplainer** (ISO 42001 explainability) — top-3 facteurs contributifs par scénario
+8. **Kill switch / graceful degradation** via feature flag `ALI_MODE={sota,fallback,hybrid}`
+9. **ConfidenceLevel par ScenarioSet** basé sur volume historique (fairness petits clubs)
+10. **Feedback loop utilisateur** via endpoint `POST /feedback/scenario` + storage MongoDB
+11. **Normes ISO étendues à 19** : ajout 23053, 22989, 38507, 25012, 25024
+12. **STRIDE threat model** + rate limiting renforcé pour /compose et overrides
+13. **Capacity planning benchmark** + SLO documenté (p95 latence, RPS sustainable)
+14. **Peer review gate** avant merge via skill `superpowers:requesting-code-review`
+15. **Property-based testing** via Hypothesis sur RuleEngine + fuzzing JSON inputs
 
 ### 1.3 Hors scope Phase 3 (traçabilité en dette)
 - **D3** : jeunes J02 (Phase 3.5)
@@ -224,6 +233,80 @@ class ScenarioGenerator:
 - `parquet_sig_joueurs/echiquiers: str` — SHA-256
 - Méthode `is_stale(max_age_days=7)` pour alerte
 
+### 4.11 ScenarioExplainer (`services/ali/explainer.py`) — ISO 42001 explainability
+~80 lignes. Pour chaque `Scenario`, expose les top-3 facteurs contributifs :
+- `taux_presence_effectif` (F2)
+- `streak_lag_boost` (F3)
+- `board_preference_match` (echiquier_prefere)
+- `correlation_partners` (F6 copule : joueurs co-présents historiquement)
+- `rule_pressure` (règles PUBLIC dominantes)
+
+```python
+@dataclass(frozen=True)
+class ScenarioExplanation:
+    scenario_index: int
+    joint_prob: float
+    top_factors: tuple[FactorContribution, ...]  # triés par impact desc
+
+class ScenarioExplainer:
+    def explain(self, scenario: Scenario, copula: CopulaJointSampler,
+                enriched_pool: pd.DataFrame) -> ScenarioExplanation: ...
+    def explain_all(self, scenario_set: ScenarioSet, ...) -> list[ScenarioExplanation]: ...
+```
+
+Exposé dans `ComposeResponse.metadata.explanations`.
+
+### 4.12 KillSwitch / feature flag (`services/ali/mode.py`)
+~40 lignes. Pydantic setting `ALI_MODE: Literal["sota", "fallback", "hybrid"]`.
+- `sota` : pipeline complet Phase 3 (défaut production)
+- `fallback` : force Phase 2 fallback (tri Elo) — utilisation si ALI bug
+- `hybrid` : SOTA mais si rejection_rate > 50% OU timeout > 1.5s, bascule auto fallback avec warning dans response
+
+```python
+class ALIModeManager:
+    def should_use_sota(self, health: ALIHealth) -> bool: ...
+    def get_fallback_reason(self) -> str | None: ...
+```
+
+Observable via `/health` endpoint. Feature flag change sans redéploiement (env var hot reload).
+
+### 4.13 ConfidenceLevel (`services/ali/confidence.py`)
+~60 lignes. Métadonnée fairness attachée à `ScenarioSet` :
+
+```python
+@dataclass(frozen=True)
+class ConfidenceMetadata:
+    n_historical_rounds: int      # volume data disponible
+    coverage_ratio: float         # % joueurs pool avec ≥3 rondes historique
+    confidence_tier: str          # "high" | "medium" | "low" (seuils tunés backtest)
+    sample_warnings: tuple[str, ...]  # ex "club a <5 rondes cette saison"
+```
+
+Seuils tunés backtest :
+- `high` : coverage ≥ 0.8 ET n_historical_rounds ≥ 20
+- `medium` : coverage ≥ 0.5 ET n_historical_rounds ≥ 10
+- `low` : sinon
+
+API retourne ce tier → capitaine informé de la fiabilité.
+
+### 4.14 FeedbackCollector (`services/ali/feedback.py`) — D17 intégré Phase 3
+~100 lignes. Endpoint `POST /feedback/scenario` pour capitaine :
+
+```python
+class ScenarioFeedback(BaseModel):
+    scenario_set_lineage_hash: str  # identifie la prédiction
+    scenario_index: int
+    feedback_type: Literal["unrealistic", "realistic", "missing_player", "wrong_board"]
+    message: str | None = None
+
+class FeedbackCollector:
+    async def record(self, feedback: ScenarioFeedback, user_id: str) -> None:
+        # Store MongoDB collection `ali_feedback` (ISO 27001 audit)
+        # Non-bloquant, async write
+```
+
+Bootstrap pour futur D9 (AIS adaptatif Phase 5+) : accumule signal utilisateur dès Phase 3.
+
 ### 4.10 Structures de données (`services/ali/types.py`)
 ~100 lignes, dataclasses `frozen=True` :
 - `PlayerCandidate`
@@ -285,12 +368,51 @@ Log startup : `N_joueurs, N_rules, lineage_hash_prefix, λ_recency, copula_dim`.
 | T21 | MC rejection rate | ≤ 0.30 |
 | T22 | ≥3 métriques T13-T17 améliorées vs baseline Elo, aucune régression > 10% | strict |
 
-### 6.3 Tests (~60 tests)
-Voir §5.4 de la discussion brainstorming. Coverage cible `services/ali/` ≥ 75%.
+### 6.3 Tests (~80 tests incluant property-based + fuzzing)
+
+**Tests classiques (~60)** : voir §5.4 brainstorming. Coverage cible `services/ali/` ≥ 75%.
+
+**Property-based testing via Hypothesis (~15 nouveaux)** :
+- `test_rule_engine_properties.py` : toute Lineup valide → aucune violation ; toute violation → rule_uuid résolvable
+- `test_copula_properties.py` : samples ∈ [0,1]^N ; Σ marginales ≈ taux_presence empirique ; positive semi-definite Σ
+- `test_scenario_set_properties.py` : sum(weights) == 1.0 invariant ; 20 scenarios distincts invariant ; lineage_hash reproductible
+
+**Fuzzing JSON inputs (~5)** :
+- `test_rule_engine_fuzz.py` : JSON malformés, UUIDs invalides, priorités négatives, `conditions` vides
+- `test_api_fuzz.py` : overrides avec Elo extrêmes, team_size aberrants, caractères Unicode adversarial
+
+### 6.4 Peer review gate (nouveau Phase 3)
+Avant merge main : invocation skill `superpowers:requesting-code-review` sur le diff complet Phase 3. Review bloquant si ≥1 finding critique.
 
 ---
 
-## 7. Conformité ISO (14/14 normes)
+## 6bis. Security (STRIDE threat model)
+
+Document complet : `docs/security/ALI_THREAT_MODEL.md` (livré Phase 3).
+
+| Threat | Vecteur | Mitigation Phase 3 |
+|--------|---------|--------------------|
+| **Spoofing** | Faux `opponent_club_id` ou `user_id` | Auth JWT Phase 2 déjà là + validation Pydantic (club_id ∈ liste FFE connue) |
+| **Tampering** | `overrides` malveillants (Elo 3000, faux NR_FFE) | Pydantic strict + validation contre `joueurs.parquet` (NR_FFE doit exister) |
+| **Repudiation** | Capitaine nie avoir reçu prédiction | Audit log MongoDB + fallback JSONL (ISO 27001) — chaque /compose tracé avec lineage_hash |
+| **Info disclosure** | Fuite stats privées joueurs | Données publiques FFE uniquement (confirmé user : pas de RGPD issue) |
+| **DoS** | `n_mc=1000000` dans overrides | Rate limiting Phase 2 + hard cap `n_topk ∈ [1,20]`, `n_mc ∈ [0,50]` |
+| **Elevation of privilege** | Accès endpoints admin via /compose | Séparation endpoints + auth scope (Phase 2 déjà) |
+
+## 6ter. Capacity planning et SLO
+
+### Targets (documentés dans `docs/operations/ALI_SLO.md`)
+- **p50 latence /compose** : ≤ 800ms
+- **p95 latence /compose** : ≤ 1500ms
+- **p99 latence /compose** : ≤ 2000ms (budget dur)
+- **RPS sustainable** : ≥ 3 req/s sur Oracle VM ARM 24GB (benchmark à mesurer)
+- **Memory footprint** : ≤ 1.5 GB (parquets cached + models + overhead)
+- **Cache warm-up** : ≤ 10s au lifespan startup
+
+### Benchmark script
+`scripts/benchmark/ali_benchmark.py` (~150 lignes) mesure p50/p95/p99 sur jeux de test simulés. CI check : si p95 > 1500ms → warning.
+
+## 7. Conformité ISO (19/19 normes — étendues)
 
 | Norme | Mécanisme |
 |-------|-----------|
@@ -307,7 +429,12 @@ Voir §5.4 de la discussion brainstorming. Coverage cible `services/ali/` ≥ 75
 | **5259** | lineage_hash = SHA-256(parquets + rules + λ + copula_params + config) |
 | **25059** | 10 quality gates T13-T22, `docs/iso/ALI_QUALITY_GATES_REPORT.md` |
 | **24029** | Robustness test Phase 3 smoke (pool vide, tous mute) ; full en Phase 3.5 (D8) |
-| **24027** | Fairness smoke Phase 3 (breakdown niveau cpt) ; full en Phase 3.5 (D8) |
+| **24027** | Fairness smoke Phase 3 (breakdown niveau cpt) + **ConfidenceLevel metadata** (§4.13) ; full en Phase 3.5 (D8) |
+| **23053** | AI lifecycle framework : phases ALICE documentées dans `docs/iso/AI_LIFECYCLE.md` |
+| **22989** | Terminology standardisée : glossaire AI dans `docs/iso/AI_GLOSSARY.md` |
+| **38507** | AI governance org-level : `docs/iso/AI_GOVERNANCE.md` (rôles, responsabilités, review) |
+| **25012** | Data quality model : Pandera schemas sur joueurs/echiquiers (déjà en pre-commit hooks) |
+| **25024** | Data quality measurement : métriques completeness/accuracy dans `compute_data_lineage()` |
 
 ---
 
@@ -358,14 +485,40 @@ Toutes listées explicitement dans `ALI_MODEL_CARD.md` (ISO 42001 exige justific
 
 ## 10. Definition of Done Phase 3
 
+### Qualité code
 - [ ] 10 quality gates T13-T22 verts sur hold-out saison 2024
 - [ ] ≥ 3 métriques T13-T17 améliorées vs baseline Elo, aucune régression > 10%
-- [ ] Coverage `services/ali/` ≥ 75%
+- [ ] Coverage `services/ali/` ≥ 75% incl. property-based + fuzzing
 - [ ] CI green (ruff, mypy, bandit, pytest, xenon)
-- [ ] Dettes D1, D2, D5, D10, D12, D14, D16 résorbées
-- [ ] ADR-013, ADR-014 écrits et committés
-- [ ] ALI Model Card + 4 artefacts ISO présents (AI_RISK_ASSESSMENT, AI_RISK_REGISTER, ALI_QUALITY_GATES_REPORT, ALI_DATA_LINEAGE)
+- [ ] Capacity benchmark : p95 ≤ 1500ms, RPS ≥ 3
+
+### Résorption dette
+- [ ] D1, D2, D5, D10, D12, D14, D16 résorbées
+- [ ] D17 (feedback loop) résorbée via §4.14
+
+### Artefacts ISO (19 normes)
+- [ ] ADR-013 (RuleEngine JSON), ADR-014 (ALI MC hybride SOTA), ADR-015 (extension 19 normes ISO)
+- [ ] `docs/iso/ALI_MODEL_CARD.md` incl. SOTA citations + alternatives évaluées + data sources disclaimer
+- [ ] `docs/iso/AI_RISK_ASSESSMENT.md` étendu ALI
+- [ ] `docs/iso/AI_RISK_REGISTER.md` R-ALI-01..05
+- [ ] `docs/iso/ALI_QUALITY_GATES_REPORT.md` hold-out 2024
+- [ ] `docs/iso/ALI_DATA_LINEAGE.md`
+- [ ] `docs/iso/AI_LIFECYCLE.md` (23053)
+- [ ] `docs/iso/AI_GLOSSARY.md` (22989)
+- [ ] `docs/iso/AI_GOVERNANCE.md` (38507)
+- [ ] `docs/security/ALI_THREAT_MODEL.md` (STRIDE)
+- [ ] `docs/operations/ALI_SLO.md`
+- [ ] `docs/architecture/ALI_ARCHITECTURE.md` diagramme séquence à jour
+
+### Fonctionnalités nouvelles integrees (audit final)
+- [ ] ScenarioExplainer exposé via ComposeResponse
+- [ ] KillSwitch `ALI_MODE` opérationnel (sota/fallback/hybrid)
+- [ ] ConfidenceLevel metadata exposée
+- [ ] FeedbackCollector endpoint `POST /feedback/scenario` actif
+
+### Gates process
 - [ ] MkDocs build strict pass
+- [ ] Peer review skill `superpowers:requesting-code-review` exécuté, 0 finding critique
 - [ ] Checkpoint user final avant merge
 
 ---
