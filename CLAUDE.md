@@ -81,10 +81,35 @@ Résumé session : `memory/project_session_resume.md`
 | Couche | Statut |
 |--------|--------|
 | ML Training | **DONE** — Champion MLP(32,16) stacking 0.5530, ECE_draw 0.0016. AG ÉLIMINÉ (ADR-011). |
-| API FastAPI | **DONE** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). |
+| API FastAPI | **DONE (avec dette)** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). Dette : voir ci-dessous. |
 | ALI prédiction adverse | **FALLBACK** — Elo ranking (Phase 3 = Monte Carlo 20 scénarios) |
 | CE multi-équipe | **FALLBACK** — Tri Elo + E[score] (Phase 4 = OR-Tools) |
 | Deploy Oracle VM | MANQUANT (Phase 5) |
+
+### DETTE TECHNIQUE VISIBLE (ne pas laisser enfouie)
+
+Dette ouverte après Phase 2 — détail et plan de résorption : `memory/project_debt_current.md`
+
+| # | Dette | Origine | Phase résorption |
+|---|-------|---------|-------------------|
+| D1 | Joueurs = Elo 1500 synthétique (pas de lookup) | Phase 2 (ADR-012) | **Phase 3** (data loader `joueurs.parquet`) |
+| D2 | ALI = tri Elo 1 scénario (pas Monte Carlo) | Phase 2 | **Phase 3** (générateur scénarios) |
+| D3 | Jeunes (J02) non supportés (age_min/age_max ignorés) | Phase 2 | **Phase 3.5** (post-ALI de base) |
+| D4 | Coupes configs dispo mais non implémentées | Phase 2 | **Phase 3.5** |
+| D5 | `services/composer.py` legacy non modifié (mort-vivant) | Phase 2 | **Phase 3** (supprimer OU documenter raison) |
+| D6 | Pas de DVC / versioning artefacts ML | Historique | **Phase 5** |
+| D7 | Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel | Historique | **Phase 5** |
+| D8 | ALI fairness/robustness breakdown (genre, taille club, niveau) + stress Elo | Phase 3 (scope) | **Phase 3.5 STRICT** (bloquant Phase 4) |
+| D9 | Adaptive Importance Sampling + drift monitoring prod (ratio TopK:MC dynamique) | Phase 3 (brainstorm finding) | **Phase 5+** (après volume data prod) |
+| D10 | Sync ALICE ↔ chess-app JSON rules (release FFE annuelle) | Phase 3 (RuleEngine design) | **Phase 3** (pipeline copy + CI drift alert) |
+| D11 | Completeness audit : PDF FFE → chess-app JSON (toutes règles capturées ?) | Phase 3 finding | **Phase ultérieure** (tâche NLP, pocket-arbiter stale) |
+| ~~D12~~ | ~~Autoregressive streak~~ | ~~Audit F3~~ | **REMONTÉ PHASE 3** (F3 intégré, option B) |
+| D13 | `zone_enjeu` consommé par ALI (contexte accession/maintien) | Audit SOTA F4 (Phase 3) | **Phase 4+** (couplé CE OR-Tools, dépendance structurelle) |
+| ~~D14~~ | ~~LHS / antithetic MC~~ | ~~Audit F5~~ | **REMONTÉ PHASE 3** (F5 intégré, option B) |
+| D15 | Conformal prediction bout-en-bout (IC sur E[score]) | Audit SOTA F6 | **Phase 4+** (couplé CE multi-objectif, dépendance structurelle) |
+| ~~D16~~ | ~~Copule gaussienne~~ | ~~Section 3~~ | **REMONTÉ PHASE 3** (F6 remplace Gibbs, option B) |
+
+**Règle :** chaque phase résorbe sa dette listée ici. Interdiction de marquer une phase "DONE" sans avoir soit (a) résorbé sa dette, soit (b) reclassé explicitement la dette avec nouvelle phase cible.
 
 ## TRAINING RULES (V8/V9)
 
