@@ -116,6 +116,31 @@ class XGBWrapper:
         return self._booster
 
 
+def _predict_no_init(model: Any, X: Any) -> np.ndarray:
+    """Dispatch predict when init_scores is None (no residual offset).
+
+    LGB Booster.predict returns probas directly; XGB Booster needs DMatrix;
+    all sklearn-compat models use predict_proba.
+    """
+    cls = type(model).__name__
+    mod = type(model).__module__
+    if cls == "Booster" and "lightgbm" in mod:
+        # LightGBM raw Booster — predict() returns probabilities directly
+        return np.asarray(model.predict(X))
+    if cls == "Booster":
+        import xgboost as xgb  # noqa: PLC0415
+
+        return np.asarray(model.predict(xgb.DMatrix(X))).reshape(-1, 3)
+    return np.asarray(model.predict_proba(X))  # XGBWrapper, LGBMClassifier, CB
+
+
+def _softmax_with_offset(raw: np.ndarray, init_scores: np.ndarray) -> np.ndarray:
+    """Apply init_scores offset then numerically-stable softmax."""
+    adjusted = raw + init_scores
+    exp_s = np.exp(adjusted - adjusted.max(axis=1, keepdims=True))
+    return exp_s / exp_s.sum(axis=1, keepdims=True)
+
+
 def predict_with_init(
     model: Any,
     X: Any,
@@ -125,21 +150,18 @@ def predict_with_init(
 
     CatBoost: Pool(baseline=). XGBoost: DMatrix.set_base_margin. LightGBM: raw + manual softmax.
     """
-    cls = type(model).__name__
     if init_scores is None:
-        if cls == "Booster":
-            import xgboost as xgb  # noqa: PLC0415
-
-            return np.asarray(model.predict(xgb.DMatrix(X))).reshape(-1, 3)
-        return np.asarray(model.predict_proba(X))  # works for _XGBWrapper too
+        return _predict_no_init(model, X)
+    cls = type(model).__name__
+    mod = type(model).__module__
     if cls == "CatBoostClassifier":
         # predict_proba with Pool(baseline=) doesn't normalize (catboost #1554)
-        # Use raw predictions + init_scores + softmax instead
         raw = np.asarray(model.predict(X, prediction_type="RawFormulaVal"))
-        adjusted = raw + init_scores
-        exp_s = np.exp(adjusted - adjusted.max(axis=1, keepdims=True))
-        return exp_s / exp_s.sum(axis=1, keepdims=True)
-    if cls in ("XGBClassifier", "Booster", "XGBWrapper"):
+        return _softmax_with_offset(raw, init_scores)
+    if cls == "Booster" and "lightgbm" in mod:
+        # LightGBM raw Booster (loaded from .txt file in production)
+        return _softmax_with_offset(np.asarray(model.predict(X)), init_scores)
+    if cls in ("XGBClassifier", "XGBWrapper", "Booster"):
         import xgboost as xgb  # noqa: PLC0415
 
         dm = xgb.DMatrix(X)
@@ -147,10 +169,7 @@ def predict_with_init(
         bst = model.get_booster() if hasattr(model, "get_booster") else model
         return np.asarray(bst.predict(dm)).reshape(-1, init_scores.shape[1])
     if cls == "LGBMClassifier":
-        raw = np.asarray(model.predict(X, raw_score=True))
-        adjusted = raw + init_scores
-        exp_s = np.exp(adjusted - adjusted.max(axis=1, keepdims=True))
-        return exp_s / exp_s.sum(axis=1, keepdims=True)
+        return _softmax_with_offset(np.asarray(model.predict(X, raw_score=True)), init_scores)
     return np.asarray(model.predict_proba(X))
 
 

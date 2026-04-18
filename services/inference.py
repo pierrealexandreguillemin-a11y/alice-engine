@@ -70,6 +70,11 @@ class StackingInferenceService:
     ) -> np.ndarray:
         """Return (1, 3) P(loss/draw/win) via the stacking pipeline."""
         lookup = draw_rate_lookup or self._bundle.draw_rate_lookup
+        if lookup is None:
+            raise ValueError(
+                "draw_rate_lookup is required for inference. "
+                "Ensure draw_rate_lookup.parquet is in the model cache."
+            )
         elo_probas = compute_elo_baseline(
             np.array([player_elo], dtype=float),
             np.array([opponent_elo], dtype=float),

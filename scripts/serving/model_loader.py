@@ -176,6 +176,8 @@ def load_models(
     if dl_path.exists():
         draw_lookup = pd.read_parquet(dl_path)
         logger.info("Loaded draw_rate_lookup: %d cells", len(draw_lookup))
+    else:
+        logger.warning("draw_rate_lookup.parquet MISSING — inference will fail without it")
 
     # Encoders
     encoders = None
