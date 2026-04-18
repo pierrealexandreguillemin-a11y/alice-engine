@@ -53,6 +53,14 @@ class Settings(BaseSettings):
 
     # Modeles ML
     model_path: str = "./models"
+
+    # Serving (Phase 2)
+    hf_repo_id: str = "Pierrax/alice-engine"
+    model_cache_dir: str = "./models/cache"
+    feature_store_path: str = "./data/feature_store"
+    fallback_mode: bool = False  # Force LGB+Dirichlet only
+    feature_store_max_age_days: int = 14  # ISO 5259: alert if older
+
     default_scenario_count: int = 20
 
     # Render (production)
