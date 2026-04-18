@@ -23,15 +23,10 @@ from app.api.schemas import (
     BoardResult,
     ComposeRequest,
     ComposeResponse,
-    ErrorResponse,
-    ModelInfoResponse,
     OpponentPrediction,
-    PredictRequest,
-    PredictResponse,
     RecomposeRequest,
     TeamComposition,
 )
-from app.config import settings
 from app.logging_config import get_audit_logger, get_logger
 
 logger = get_logger(__name__)
@@ -40,73 +35,7 @@ audit_logger = get_audit_logger()
 # Rate limiter (uses app.state.limiter from main.py)
 limiter = Limiter(key_func=get_remote_address)
 
-# TODO: Importer les services quand ils seront implementes
-# from services.inference import InferenceService
-# from services.composer import ComposerService
-
 router = APIRouter(prefix="/api/v1", tags=["ALICE"])
-
-
-@router.post(
-    "/predict",
-    response_model=PredictResponse,
-    responses={
-        400: {"model": ErrorResponse, "description": "Validation error"},
-        404: {"model": ErrorResponse, "description": "Club not found"},
-        500: {"model": ErrorResponse, "description": "Internal error"},
-    },
-)
-@limiter.limit("30/minute")
-async def predict_lineup(request: PredictRequest, http_request: Request) -> PredictResponse:
-    """Predict opponent lineup and optimize user composition.
-
-    1. ALI (Adversarial Lineup Inference): Predit la composition adverse
-    2. CE (Composition Engine): Optimise la composition utilisateur
-
-    @param request: Donnees du match et joueurs disponibles
-    @returns: Composition adverse predite + composition optimale recommandee
-
-    @see CDC_ALICE.md - F.1 et F.2
-    """
-    # TODO: Implementer la logique avec les services
-    # inference_service = InferenceService()
-    # composer_service = ComposerService()
-
-    # Pour l'instant, reponse placeholder
-    return PredictResponse(
-        success=True,
-        version=settings.app_version,
-        predicted_opponent_lineup=[],
-        scenarios=[],
-        recommended_lineup=[],
-        expected_match_score=0.0,
-        confidence=0.0,
-        alternatives=[],
-        metadata={
-            "processing_time_ms": 0,
-            "model_version": "not_loaded",
-            "data_points_used": 0,
-        },
-    )
-
-
-@router.get(
-    "/models/{club_id}",
-    response_model=ModelInfoResponse,
-)
-async def get_model_info(club_id: str) -> ModelInfoResponse:
-    """Return model information for a club.
-
-    @param club_id: ID FFE du club
-    @returns: Type de modele, version, metriques
-    """
-    # TODO: Implementer la logique
-    return ModelInfoResponse(
-        club_id=club_id,
-        model_type="global-fallback",
-        model_version="not_trained",
-        reason="Model not yet trained",
-    )
 
 
 @router.post("/compose", response_model=ComposeResponse)

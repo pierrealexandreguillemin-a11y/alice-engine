@@ -17,6 +17,8 @@ class TestISO5055CodeQuality:
             "services/feature_store.py",
             "services/inference.py",
             "services/ffe_rules.py",
+            "app/api/routes.py",
+            "app/api/schemas.py",
         ]
         for f in phase2_files:
             p = Path(f)
