@@ -175,8 +175,11 @@ async def health_check(request: Request) -> dict[str, Any]:
     model_bundle = getattr(request.app.state, "model_bundle", None)
     feature_store = getattr(request.app.state, "feature_store", None)
     models_loaded = model_bundle is not None
-    fallback_mode: bool | None = model_bundle.fallback_mode if model_bundle is not None else None
-    model_version: str | None = model_bundle.version if model_bundle is not None else None
+    fallback_mode: bool | None = None
+    model_version: str | None = None
+    if model_bundle is not None:
+        fallback_mode = model_bundle.fallback_mode
+        model_version = model_bundle.version
 
     # Statut global
     status = "healthy" if models_loaded else "degraded"
