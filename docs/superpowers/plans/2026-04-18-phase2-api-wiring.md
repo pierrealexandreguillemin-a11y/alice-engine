@@ -862,15 +862,21 @@ Chess-app integration is optional (double-check if available, not required).
 
 Data for FFE rules comes from parquets FFE (scraped) — same data source as features.
 
-8 blocking rules:
-1. Elo order 100pts (A02 3.6.e)
+11 blocking rules (ADR-012), parametrable par competition via ReglesCompetition:
+1. Elo order 100pts (A02 3.6.e) — `ordre_elo_obligatoire: bool`
 2. 1 player = 1 team (physical impossibility)
-3. Joueur brule (A02 3.7.c) — 3 matchs in stronger team = blocked from weaker
-4. Same group restriction (A02 3.7.d) — 1 player per group
-5. Match count limit (A02 3.7.e) — matchs played < round number
-6. Noyau 50% (A02 3.7.f) — 50% core players after round 1
-7. Max 3 mutes (A02 3.7.g) — transferred players limit
-8. Foreign quota (A02 3.7.h) — min 5/8 French or EU residents
+3. Joueur brule (A02 3.7.c) — `seuil_brulage: int` (A02=3, F01=1, J02=4)
+4. Same group restriction (A02 3.7.d)
+5. Match count limit (A02 3.7.e) — `max_parties_saison: int`
+6. Noyau 50% (A02 3.7.f) — `noyau: int, noyau_type: str`
+7. Max mutes (A02 3.7.g) — `max_mutes: int` (N1-N3=3, N4=1)
+8. Foreign quota (A02 3.7.h) — `min_fr_eu: int`
+9. FR gender requirement (A02 3.7.i) — N1/N2: 1M FR + 1F FR
+10. Elo max (A02 3.7.j) — `elo_max: int` (N4=2400)
+11. Team size (A02 3.7.a) — `taille_equipe: int`
+
+Limitations documentees dans ADR-012 : Jeunes (J02) non supporte Phase 2
+(besoin dates naissance), Coupes configs dispo mais pas implementees.
 
 - [ ] **Step 1: Write failing tests for FFE eligibility**
 

@@ -391,6 +391,109 @@ plus dans le pipeline actif. Le pipeline ML est : Optuna HP search → Training 
 | AG avec features Elo en input | Teste (V9) | Ne remplace pas le residual — feature input ≠ logit baseline |
 | AG comme meta-learner sur OOF | Rejete | MLP/LogReg local suffit, pas besoin d'AG pour 6 inputs |
 
+---
+
+## ADR-012: Validation FFE autonome — regles simplifiees Phase 2, Flat-Six Phase 4
+
+**Date**: 18 Avril 2026
+**Statut**: Accepte
+
+### Contexte
+
+ALICE doit produire des compositions CONFORMES aux regles FFE. Deux sources de
+validation existent :
+
+1. **Chess-app Flat-Six** : moteur complet, 30 validateurs TypeScript, 22 fichiers
+   JSON de regles, 7 types de competition. Production-grade. Mais chess-app est en
+   impasse de dev (60K lignes frontend a auditer). ALICE ne peut pas en dependre.
+
+2. **REGLES_FFE_ALICE.md** : doc exhaustive dans le projet ALICE avec la matrice des
+   7 competitions, les configs Python (`ReglesCompetition(TypedDict)`), et la fonction
+   `valider_composition()` parametree.
+
+### Decision
+
+**Phase 2 : ALICE embarque les regles FFE autonomes** via `services/ffe_rules.py`.
+Implementation basee sur la config `ReglesCompetition` de REGLES_FFE_ALICE.md §7.7
+(matrice complete). Pre-filtre joueurs + post-check composition.
+
+**Phase 4 : Port Flat-Six en Python** si ALICE doit supporter toutes les competitions
+avec la meme exhaustivite que chess-app. Ou integration API si chess-app reprend.
+
+### Regles implementees Phase 2 (interclubs adultes N1-N6)
+
+| # | Regle | Article | Parametrable par competition |
+|---|-------|---------|------------------------------|
+| 1 | Ordre Elo 100pts | A02 3.6.e | `ordre_elo_obligatoire: bool` |
+| 2 | 1 joueur = 1 equipe | physique | non parametrable |
+| 3 | Joueur brule | A02 3.7.c | `seuil_brulage: int` (A02=3, F01=1, J02=4) |
+| 4 | Meme groupe | A02 3.7.d | non parametrable |
+| 5 | Match count | A02 3.7.e | `max_parties_saison: int` |
+| 6 | Noyau 50% | A02 3.7.f | `noyau: int, noyau_type: str` |
+| 7 | Max mutes | A02 3.7.g | `max_mutes: int` (N1-N3=3, N4=1) |
+| 8 | Quota etrangers | A02 3.7.h | `min_fr_eu: int` |
+| 9 | FR genre obligatoire | A02 3.7.i | N1/N2 : 1M FR + 1F FR |
+| 10 | Elo max N4 | A02 3.7.j | `elo_max: int` (N4=2400) |
+| 11 | Team size | A02 3.7.a | `taille_equipe: int` |
+
+### Limitations Phase 2 (DOCUMENTEES)
+
+| Regle NON implementee | Raison | Risque | Remede |
+|----------------------|--------|--------|--------|
+| Ordre par age (Jeunes J02) | Pas de date_naissance fiable dans parquets | Compo jeunes invalide | Phase 3 : scraper dates naissance FFE |
+| Categories age par board (J02) | Idem | Contrainte age non verifiee | Phase 3 |
+| Double partie ech 7-8 (J02) | Logique specifique | Comptage incorrect | Phase 3 |
+| Playoff eligibility (A02 3.7.k) | Besoin historique national complet | Joueur ineligible non detecte | Phase 4 : historique saison complete |
+| Team strength order (A02 3.7.b) | Warning seulement, pas bloquant | Aucun (warning) | Phase 4 si pertinent |
+| Arbitre (A02 3.7) | Non bloquant + data manquante | Aucun | Hors scope ALICE |
+| Home-grown (A02 2.1) | Non bloquant + data manquante | Aucun | Hors scope |
+| Coupe Loubatiere (C03) | Elo max 1800 — config dispo dans ReglesCompetition | Ajout trivial si necessaire | Ajouter config quand demande |
+| Coupe Parite (C04) | 2H+2F + elo_total — config dispo | Idem | Idem |
+| Coupe France (C01) | Ordre libre — config dispo | Idem | Idem |
+| Scolaire (J03) | Appartenance etablissement pas club | Hors cible ALICE | Hors scope |
+
+### Donnees requises pour les 11 regles
+
+| Donnee | Source | Statut |
+|--------|--------|--------|
+| Elo joueur | parquets FFE (scrappes) | DISPONIBLE |
+| Historique matchs (brulage, match count) | parquets FFE | DISPONIBLE |
+| Noyau (joueurs ayant joue) | parquets FFE | DISPONIBLE |
+| Statut mute | joueurs.parquet | DISPONIBLE |
+| Nationalite | joueurs.parquet (scrapper) | PARTIEL — a verifier |
+| Sexe | joueurs.parquet (scrapper) | PARTIEL — a verifier |
+| Division/competition | calendrier FFE | DISPONIBLE |
+
+### Consequences
+
+#### Positif
+- ALICE 100% autonome — fonctionne sans chess-app
+- 11 regles bloquantes = compositions legales pour interclubs adultes
+- Config parametrable par competition (ReglesCompetition TypedDict)
+- Meme source de verite que chess-app (reglements FFE 2025-26)
+
+#### Negatif
+- Duplication partielle avec Flat-Six (risque divergence)
+- Jeunes (J02) non supporte Phase 2 (besoin dates naissance)
+- Coupes non supportees Phase 2 (configs dispo, pas implementees)
+
+#### Mitigation divergence
+- ReglesCompetition = source de verite ALICE, derivee des PDF FFE
+- Chess-app Flat-Six = source de verite chess-app, derivee des memes PDF
+- Les deux DOIVENT produire les memes resultats — test de regression croisse
+  quand integration chess-app se fait (Phase 4)
+
+### Alternatives evaluees
+
+| Approche | Verdict | Raison |
+|----------|---------|--------|
+| Dependre de chess-app Flat-Six | Rejete | Chess-app en impasse (60K lignes), ALICE bloquee |
+| Porter 30 validateurs TS en Python | Rejete Phase 2 | Effort disproportionne, coupes/scolaire hors cible |
+| 8 regles simplifiees | Insuffisant | Manque team size, elo max, FR genre = compos illegales |
+| **11 regles parametrees (actuel)** | **Accepte** | Couvre interclubs adultes N1-N6, extensible coupes |
+
+---
+
 ### Consequences
 
 #### Code
