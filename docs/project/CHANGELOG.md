@@ -13,6 +13,29 @@
 
 ---
 
+## [Phase 2] - 2026-04-18
+
+### Added
+- Feature store (`services/feature_store.py`) — parquet lookup for inference
+- Stacking inference pipeline (`services/inference.py`) — 3 GBMs + MLP + temp scaling
+- FFE rules engine (`services/ffe_rules.py`) — 11 blocking rules, ALICE autonomous (ADR-012)
+- Model loader (`scripts/serving/model_loader.py`) — HF Hub download + fallback
+- Meta-features module (`scripts/serving/meta_features.py`) — 18 engineered features
+- POST /compose endpoint — team composition with ML predictions
+- POST /recompose endpoint stub
+- ComposeRequest/Response schemas
+
+### Changed
+- `app/config.py` — serving settings (HF repo, cache, feature store)
+- `services/inference.py` — rewritten from ALI stub to stacking pipeline
+- `app/api/routes.py` — /compose endpoint wired
+- `app/main.py` — model loading at startup
+
+### Architecture Decisions
+- ADR-012: FFE rules autonomous (no chess-app dependency)
+
+---
+
 ## [0.9.1] - 2026-04-15 — V9 Training Final v4 COMPLETE (T1-T12)
 
 ### Added
