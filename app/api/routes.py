@@ -13,15 +13,22 @@ Author: ALICE Engine Team
 Last Updated: 2026-01-11
 """
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Header, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.api.schemas import (
+    BoardResult,
+    ComposeRequest,
+    ComposeResponse,
     ErrorResponse,
     ModelInfoResponse,
+    OpponentPrediction,
     PredictRequest,
     PredictResponse,
+    TeamComposition,
     TrainRequest,
     TrainResponse,
 )
@@ -156,4 +163,112 @@ async def trigger_training(
         message="Training job queued",
         job_id=f"train-{request.club_id or 'global'}-placeholder",
         estimated_duration="Unknown",
+    )
+
+
+@router.post("/compose", response_model=ComposeResponse)
+@limiter.limit("30/minute")
+async def compose_teams(
+    body: ComposeRequest,
+    request: Request,
+) -> ComposeResponse:
+    """Compose optimal teams for a club (Phase 2).
+
+    Pipeline: FFE filter -> ALI fallback (Elo sort) -> ML predict -> compose.
+    """
+    bundle = getattr(request.app.state, "model_bundle", None)
+    feature_store = getattr(request.app.state, "feature_store", None)
+
+    if bundle is None:
+        raise HTTPException(status_code=503, detail="Models not loaded")
+
+    from services.ffe_rules import sort_by_elo  # noqa: PLC0415
+    from services.inference import StackingInferenceService  # noqa: PLC0415
+
+    inference = StackingInferenceService(bundle)
+
+    # For Phase 2: single team, Elo lookup from request
+    # TODO Phase 3: multi-team, MongoDB player lookup, ALI Monte Carlo
+    available = [{"ffe_id": fid, "elo": 1500} for fid in body.joueurs_disponibles]
+
+    sorted_players = sort_by_elo(available)
+    team_size = min(8, len(sorted_players))
+    selected = sorted_players[:team_size]
+
+    # ALI fallback: opponents = similar Elo (stub)
+    opponent_elos = [p["elo"] - 50 for p in selected]
+
+    boards = []
+    for i, (player, opp_elo) in enumerate(zip(selected, opponent_elos, strict=False)):
+        p_elo = player["elo"]
+        # Feature assembly (if feature store available)
+        if feature_store is not None:
+            features = feature_store.assemble(
+                player_name=player["ffe_id"],
+                player_elo=p_elo,
+                opponent_elo=opp_elo,
+                context={"ronde": body.ronde, "division": body.division},
+            )
+            feat_values = features.values
+        else:
+            import numpy as np  # noqa: PLC0415
+
+            feat_values = np.zeros((1, 201))
+
+        try:
+            result = inference.predict_board(
+                player_elo=p_elo,
+                opponent_elo=opp_elo,
+                features=feat_values,
+            )
+            p_win, p_draw, p_loss, e_score = (
+                result.p_win,
+                result.p_draw,
+                result.p_loss,
+                result.e_score,
+            )
+        except Exception:
+            logger.exception("Inference failed for player %s", player["ffe_id"])
+            # Elo fallback
+            p_win, p_draw, p_loss, e_score = 0.45, 0.15, 0.40, 0.525
+
+        boards.append(
+            BoardResult(
+                board=i + 1,
+                joueur=player["ffe_id"],
+                elo=p_elo,
+                adversaire=f"OPP_{i + 1}",
+                adversaire_elo=opp_elo,
+                p_win=round(p_win, 4),
+                p_draw=round(p_draw, 4),
+                p_loss=round(p_loss, 4),
+                e_score=round(e_score, 4),
+            )
+        )
+
+    from services.ffe_rules import check_elo_order  # noqa: PLC0415
+
+    elos = [b.elo for b in boards]
+    composition = TeamComposition(
+        equipe=f"{body.club_id} - Equipe 1",
+        division=body.division,
+        adversaire="Adversaire (ALI fallback)",
+        adversaire_predit=[
+            OpponentPrediction(board=i + 1, joueur=f"OPP_{i + 1}", elo=e)
+            for i, e in enumerate(opponent_elos[:team_size])
+        ],
+        boards=boards,
+        e_score_total=round(sum(b.e_score for b in boards), 4),
+        contraintes_ok=check_elo_order(elos),
+        validated_by_flatsix=False,
+    )
+
+    return ComposeResponse(
+        compositions=[composition],
+        metadata={
+            "model_version": bundle.version if bundle else "none",
+            "ali_mode": "elo_fallback",
+            "fallback": bundle.fallback_mode if bundle else True,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
     )
