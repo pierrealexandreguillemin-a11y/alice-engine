@@ -124,6 +124,23 @@ Legend:
 
 ---
 
+### 2.6 Phase 2 Serving Risks
+
+| ID | Risk | P | I | Score | Status | Owner | Due |
+|----|------|---|---|-------|--------|-------|-----|
+| **R-PH2-01** | Feature store stale >14 days | Medium | Low | /health age monitoring + cron alerting | 🟡 Monitor | MLOps | Ongoing |
+| **R-PH2-02** | Silent fallback LGB+Dirichlet | Low | Low | Fallback flag in /health + response metadata | ✅ Mitigated | ML Eng | Ongoing |
+| **R-PH2-03** | Model corruption HF download | Low | Very Low | SHA-256 checksums + local cache | ✅ Mitigated | MLOps | Ongoing |
+| **R-PH2-04** | MongoDB unavailable | Medium | Medium | Parquet fallback + default Elo 1500 | 🟡 Monitor | DevOps | Ongoing |
+
+**Controls:**
+- R-PH2-01: `/health` endpoint reports `feature_store_age`; cron alerting if >14 days
+- R-PH2-02: `fallback_mode` flag exposed in `/health` and response metadata
+- R-PH2-03: SHA-256 checksum verification in `scripts/serving/model_loader.py` + local cache
+- R-PH2-04: Feature store parquets as offline fallback; default Elo 1500 when MongoDB unavailable
+
+---
+
 ## 3. Risk Treatment Actions
 
 ### 3.1 Immediate Actions (Score ≥ 9)

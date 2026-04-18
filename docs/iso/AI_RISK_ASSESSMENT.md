@@ -371,3 +371,28 @@ The ALICE system has a comprehensive risk management framework in place. All ide
 |------|------|-----------|------|
 | Risk Manager | ____________ | ____________ | ____________ |
 | AI Owner | ____________ | ____________ | ____________ |
+
+---
+
+## Phase 2 Serving Risks (2026-04-18)
+
+### Risk: Feature store stale (>14 days)
+- **Impact:** Predictions based on outdated player stats
+- **Likelihood:** Medium (cron failure, data source down)
+- **Mitigation:** /health reports feature_store_age, alert if >14 days
+- **Residual risk:** Low (features are rolling 3 seasons, 1 week delay negligible)
+
+### Risk: Silent fallback to LGB+Dirichlet
+- **Impact:** Slightly worse calibration (ECE 0.0042 vs 0.0016) without captain knowing
+- **Mitigation:** /health and response metadata report fallback_mode flag
+- **Residual risk:** Low (LGB+Dirichlet still passes all T1-T12 gates)
+
+### Risk: Model corruption during HF download
+- **Impact:** Inference crash at startup
+- **Mitigation:** SHA-256 checksum verification in model_loader, local cache as fallback
+- **Residual risk:** Very low
+
+### Risk: MongoDB unavailable
+- **Impact:** Cannot load club player data for real Elo lookup
+- **Mitigation:** Feature store parquets as offline fallback, default Elo 1500
+- **Residual risk:** Medium (degraded predictions with placeholder Elo)

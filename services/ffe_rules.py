@@ -88,3 +88,24 @@ def check_foreign_quota(players: list[dict], min_fr_eu: int = 5) -> bool:
 def check_team_size(actual: int, required: int = 8) -> bool:
     """A02 3.7.a: team must have exactly required players."""
     return actual >= required
+
+
+def filter_same_group(
+    players: list[dict], target_group: str, group_history: dict[str, str]
+) -> list[dict]:
+    """A02 3.7.d: if club has multiple teams in same group, player can only play for one."""
+    return [
+        p for p in players if group_history.get(p.get("ffe_id", ""), target_group) == target_group
+    ]
+
+
+def check_fr_gender(selected: list[dict]) -> bool:
+    """A02 3.7.i: N1/N2 must have at least 1 French male + 1 French female."""
+    has_fr_male = any(p.get("is_french", False) and p.get("sexe", "M") == "M" for p in selected)
+    has_fr_female = any(p.get("is_french", False) and p.get("sexe", "M") == "F" for p in selected)
+    return has_fr_male and has_fr_female
+
+
+def check_elo_max(selected: list[dict], elo_max: int) -> bool:
+    """A02 3.7.j: no player above elo_max (e.g., 2400 for N4)."""
+    return all(p.get("elo", 0) <= elo_max for p in selected)

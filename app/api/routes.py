@@ -246,7 +246,11 @@ async def compose_teams(
             )
         )
 
-    from services.ffe_rules import check_elo_order  # noqa: PLC0415
+    from services.ffe_rules import (  # noqa: PLC0415
+        check_elo_order,
+        check_team_size,
+        check_unique_assignment,
+    )
 
     elos = [b.elo for b in boards]
     composition = TeamComposition(
@@ -262,6 +266,11 @@ async def compose_teams(
         contraintes_ok=check_elo_order(elos),
         validated_by_flatsix=False,
     )
+
+    # Post-check FFE (Phase 2: basic checks only — no real player data for brule/noyau/mutes)
+    team_size_ok = check_team_size(len(boards), required=team_size)
+    unique_ok = check_unique_assignment([[b.joueur for b in boards]])
+    composition.contraintes_ok = check_elo_order(elos) and team_size_ok and unique_ok
 
     return ComposeResponse(
         compositions=[composition],

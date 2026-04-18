@@ -96,18 +96,6 @@ class StackingInferenceService:
         self._validate_output(p_cal)
         return p_cal
 
-    def _predict_stacking_mock(self, features: np.ndarray) -> np.ndarray:
-        """For testing: uses predict_proba directly (no init_scores)."""
-        b = self._bundle
-        p_lgb = np.asarray(b.lgb_model.predict_proba(features))
-        p_xgb = np.asarray(b.xgb_model.predict_proba(features))
-        p_cb = np.asarray(b.cb_model.predict_proba(features))
-        meta = build_meta_features(p_xgb, p_lgb, p_cb)
-        p_raw = np.asarray(b.mlp_model.predict_proba(meta))
-        p_cal = self._apply_temperature(p_raw, b.temperature)
-        self._validate_output(p_cal)
-        return p_cal
-
     def _predict_fallback(self, features: np.ndarray, init_scores: np.ndarray) -> np.ndarray:
         b = self._bundle
         p_lgb = predict_with_init(b.lgb_model, features, init_scores * ALPHA_LGB)

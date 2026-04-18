@@ -18,6 +18,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+# FFE ID format constant: 1 letter + 5 digits = 6 characters
+_FFE_ID_LENGTH = 6
+
 # ============================================================
 # SCHEMAS JOUEUR
 # ============================================================
@@ -35,14 +38,12 @@ class PlayerInput(BaseModel):
     is_muted: bool = Field(False, description="Joueur mute")
     matches_played: int | None = Field(None, ge=0, description="Matchs joues")
 
-    _FFE_ID_LENGTH = 6  # Format: 1 lettre + 5 chiffres
-
     @field_validator("ffe_id")
     @classmethod
     def validate_ffe_id(cls, v: str) -> str:
         """Validate FFE ID format (letter + 5 digits)."""
         v = v.upper().strip()
-        if len(v) != cls._FFE_ID_LENGTH or not v[0].isalpha() or not v[1:].isdigit():
+        if len(v) != _FFE_ID_LENGTH or not v[0].isalpha() or not v[1:].isdigit():
             raise ValueError("FFE ID doit etre au format A12345")
         return v
 
@@ -276,6 +277,18 @@ class ComposeRequest(BaseModel):
     ronde: int = Field(..., ge=1, le=20, description="Numero de ronde")
     division: str = Field(..., description="Division (N1, N2, N3, Regionale...)")
     mode_strategie: str = Field("agressif", pattern="^(agressif|conservateur)$")
+
+    @field_validator("joueurs_disponibles")
+    @classmethod
+    def validate_ffe_ids(cls, v: list[str]) -> list[str]:
+        """ISO 27034: validate each FFE ID format (letter + 5 digits)."""
+        validated = []
+        for fid in v:
+            fid = fid.upper().strip()
+            if len(fid) != _FFE_ID_LENGTH or not fid[0].isalpha() or not fid[1:].isdigit():
+                raise ValueError(f"Invalid FFE ID: {fid} (expected format A12345)")
+            validated.append(fid)
+        return validated
 
 
 class ComposeResponse(BaseModel):

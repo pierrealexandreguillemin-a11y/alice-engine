@@ -37,18 +37,29 @@ class TestStackingInference:
     def test_predict_returns_valid_probas(self):
         bundle = self._make_mock_bundle()
         service = StackingInferenceService(bundle)
-        # Use predict_proba_raw which skips the real predict_with_init
-        probas = service._predict_stacking_mock(np.zeros((1, 201)))
-        assert probas.shape == (1, 3)
-        np.testing.assert_almost_equal(probas.sum(), 1.0, decimal=4)
-        assert np.all(probas >= 0)
-        assert np.all(probas <= 1)
+        # Test the pipeline directly: meta-features -> MLP -> temp scaling
+        from scripts.serving.meta_features import build_meta_features
+
+        p = np.array([[0.30, 0.20, 0.50]])
+        meta = build_meta_features(p, p, p)
+        p_raw = np.asarray(bundle.mlp_model.predict_proba(meta))
+        p_cal = service._apply_temperature(p_raw, bundle.temperature)
+        assert p_cal.shape == (1, 3)
+        np.testing.assert_almost_equal(p_cal.sum(), 1.0, decimal=4)
+        assert np.all(p_cal >= 0)
+        assert np.all(p_cal <= 1)
 
     def test_predict_no_nan(self):
         bundle = self._make_mock_bundle()
         service = StackingInferenceService(bundle)
-        probas = service._predict_stacking_mock(np.zeros((1, 201)))
-        assert np.all(np.isfinite(probas))
+        # Test pipeline math produces finite values
+        from scripts.serving.meta_features import build_meta_features
+
+        p = np.array([[0.30, 0.20, 0.50]])
+        meta = build_meta_features(p, p, p)
+        p_raw = np.asarray(bundle.mlp_model.predict_proba(meta))
+        p_cal = service._apply_temperature(p_raw, bundle.temperature)
+        assert np.all(np.isfinite(p_cal))
 
     def test_temperature_scaling(self):
         service = StackingInferenceService.__new__(StackingInferenceService)

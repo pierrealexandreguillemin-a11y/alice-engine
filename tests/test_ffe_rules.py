@@ -4,14 +4,17 @@
 """
 
 from services.ffe_rules import (
+    check_elo_max,
     check_elo_order,
     check_foreign_quota,
+    check_fr_gender,
     check_mutes_limit,
     check_noyau,
     check_team_size,
     check_unique_assignment,
     filter_brule,
     filter_match_count,
+    filter_same_group,
     sort_by_elo,
 )
 
@@ -152,3 +155,51 @@ class TestTeamSize:
 
     def test_invalid(self):
         assert check_team_size(6, required=8) is False
+
+
+class TestSameGroup:
+    """A02 3.7.d: one player per group."""
+
+    def test_blocked_in_group(self):
+        players = [{"ffe_id": "A00001"}, {"ffe_id": "A00002"}]
+        history = {"A00001": "groupA"}  # already played in groupA
+        result = filter_same_group(players, target_group="groupB", group_history=history)
+        assert len(result) == 1
+        assert result[0]["ffe_id"] == "A00002"
+
+    def test_same_group_ok(self):
+        players = [{"ffe_id": "A00001"}]
+        history = {"A00001": "groupA"}
+        result = filter_same_group(players, target_group="groupA", group_history=history)
+        assert len(result) == 1
+
+
+class TestFrGender:
+    """A02 3.7.i: 1 French male + 1 French female for N1/N2."""
+
+    def test_valid(self):
+        players = [
+            {"is_french": True, "sexe": "M"},
+            {"is_french": True, "sexe": "F"},
+            {"is_french": False, "sexe": "M"},
+        ]
+        assert check_fr_gender(players) is True
+
+    def test_missing_female(self):
+        players = [
+            {"is_french": True, "sexe": "M"},
+            {"is_french": False, "sexe": "F"},
+        ]
+        assert check_fr_gender(players) is False
+
+
+class TestEloMax:
+    """A02 3.7.j: Elo max per division."""
+
+    def test_within_limit(self):
+        players = [{"elo": 2300}, {"elo": 2100}]
+        assert check_elo_max(players, elo_max=2400) is True
+
+    def test_exceeded(self):
+        players = [{"elo": 2500}, {"elo": 2100}]
+        assert check_elo_max(players, elo_max=2400) is False
