@@ -16,7 +16,6 @@ Last Updated: 2026-01-11
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -71,7 +70,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await audit_logger.start()
         app.state.audit_logger = audit_logger
 
-    # TODO: Charger le modele XGBoost/CatBoost ici
+    # Load ML models from HF Hub (ISO 42001)
+    from pathlib import Path as _Path  # noqa: PLC0415
+
+    from scripts.serving.model_loader import load_models  # noqa: PLC0415
+
+    try:
+        model_bundle = load_models(
+            cache_dir=_Path(settings.model_cache_dir),
+            hf_repo_id=settings.hf_repo_id,
+            download=not settings.debug,
+        )
+        app.state.model_bundle = model_bundle
+        logger.info("model_loaded", mode="fallback" if model_bundle.fallback_mode else "full")
+    except Exception:
+        logger.exception("model_load_failed")
+        app.state.model_bundle = None
+
+    # Load feature store
+    from services.feature_store import FeatureStore  # noqa: PLC0415
+
+    try:
+        feature_store = FeatureStore(_Path(settings.feature_store_path))
+        feature_store.load()
+        app.state.feature_store = feature_store
+        logger.info("feature_store_loaded", age_hours=feature_store.age_hours)
+    except Exception:
+        logger.exception("feature_store_load_failed")
+        app.state.feature_store = None
 
     yield
 
@@ -136,11 +162,8 @@ async def health_check(request: Request) -> dict[str, Any]:
 
     ISO 25010 - Fiabilite
     ISO 27001 - Verification securite (integrite modeles, config)
+    ISO 42001 - AI Management (model status reporting)
     """
-    # Verification modeles (ISO 27001 - integrite)
-    model_path = Path(settings.model_path)
-    model_status = "ok" if model_path.exists() else "not_configured"
-
     # Verification config securite
     security_checks = {
         "api_key_configured": bool(settings.api_key),
@@ -148,17 +171,28 @@ async def health_check(request: Request) -> dict[str, Any]:
         "debug_mode": settings.debug,
     }
 
+    # Model bundle status (ISO 42001)
+    model_bundle = getattr(request.app.state, "model_bundle", None)
+    feature_store = getattr(request.app.state, "feature_store", None)
+    models_loaded = model_bundle is not None
+    fallback_mode: bool | None = model_bundle.fallback_mode if model_bundle is not None else None
+    model_version: str | None = model_bundle.version if model_bundle is not None else None
+
     # Statut global
-    all_ok = model_status == "ok" and security_checks["api_key_configured"]
-    status = "healthy" if all_ok else "degraded"
+    status = "healthy" if models_loaded else "degraded"
 
     return {
         "status": status,
         "timestamp": datetime.now(UTC).isoformat(),
         "version": settings.app_version,
+        "models_loaded": models_loaded,
+        "fallback_mode": fallback_mode,
+        "model_version": model_version,
+        "feature_store_loaded": feature_store is not None,
         "checks": {
             "api": "ok",
-            "model": model_status,
+            "model": "loaded" if models_loaded else "not_loaded",
+            "feature_store": "loaded" if feature_store is not None else "not_loaded",
             "mongodb": "not_configured",  # TODO: Verifier connexion
         },
         "security": security_checks,
