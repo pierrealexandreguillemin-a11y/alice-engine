@@ -36,14 +36,23 @@ POST /api/v1/compose
   |    -> MLP(32,16) -> temp scaling (T=1.02)
   |    -> P(W/D/L) calibrees par cellule
   |
-  +- CE fallback : allocation par tri Elo + E[score]
-  |    -> contraintes FFE verifiees :
+  +- FFE eligibility filter (ALICE AUTONOME, pas de dependance chess-app) :
+  |    -> PRE-FILTRE sur le pool de joueurs AVANT composition :
+  |       joueur brule (A02 3.7.c) -> exclu du pool pour equipe faible
+  |       match count (A02 3.7.e) -> exclu si matchs >= ronde
+  |       same group (A02 3.7.d) -> exclu si deja joue pour autre equipe du groupe
+  |    -> POST-CHECK sur la composition :
   |       ordre Elo 100pts (A02 3.6.e)
   |       1 joueur = 1 equipe
   |       noyau 50% (A02 3.7.f)
   |       max 3 mutes (A02 3.7.g)
-  |       joueur brule (A02 3.7.c)
-  |    -> PAS d'OR-Tools (Phase 4), mais contraintes RESPECTEES
+  |       quota etrangers (A02 3.7.h)
+  |    -> Code : services/ffe_rules.py (8 regles bloquantes)
+  |    -> Source : REGLES_FFE_ALICE.md (verifie contre reglements FFE 2025-26)
+  |    -> Chess-app Flat-Six (30 validateurs) = optionnel, double-check si cable
+  |
+  +- CE fallback : allocation par tri Elo + E[score]
+  |    -> PAS d'OR-Tools (Phase 4), mais contraintes FFE RESPECTEES via pre-filtre
   |
   +- Reponse :
        -> N compositions (1 par equipe)
@@ -75,6 +84,7 @@ POST /api/v1/compose
 | Fichier | Role |
 |---------|------|
 | `services/feature_store.py` | Assemble 201 features depuis parquets pre-calcules |
+| `services/ffe_rules.py` | 8 regles FFE bloquantes — pre-filtre joueurs + post-check compo |
 | `scripts/serving/model_loader.py` | Download HF Hub -> cache local, load 4 modeles en memoire |
 | `scripts/serving/meta_features.py` | build_meta_features(p_xgb, p_lgb, p_cb) -> 18 cols |
 

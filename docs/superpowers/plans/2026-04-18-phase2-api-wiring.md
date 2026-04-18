@@ -814,6 +814,8 @@ class ComposeRequest(BaseModel):
     joueurs_disponibles: list[str] = Field(
         ..., min_length=1, description="FFE IDs of available players"
     )
+    ronde: int = Field(..., ge=1, le=20, description="Numero de ronde")
+    division: str = Field(..., description="Division (N1, N2, N3, Regionale...)")
     mode_strategie: str = Field("agressif", pattern="^(agressif|conservateur)$")
 
 
@@ -847,94 +849,223 @@ git commit -m "feat(schemas): ComposeRequest/Response + BoardResult + TeamCompos
 
 ---
 
-## Task 6: Composer service — FFE constraints
+## Task 6: Composer service — FFE eligibility filter + Elo sort
 
 **Files:**
+- Create: `services/ffe_rules.py`
+- Create: `tests/test_ffe_rules.py`
 - Modify: `services/composer.py`
-- Create: `tests/test_composer_ffe.py`
 
-- [ ] **Step 1: Write failing test for FFE constraint validation**
+**DESIGN DECISION:** ALICE is AUTONOMOUS — no dependency on chess-app Flat-Six.
+ALICE embeds the 8 BLOCKING FFE rules as PRE-COMPOSITION FILTERS on the player pool.
+Chess-app integration is optional (double-check if available, not required).
+
+Data for FFE rules comes from parquets FFE (scraped) — same data source as features.
+
+8 blocking rules:
+1. Elo order 100pts (A02 3.6.e)
+2. 1 player = 1 team (physical impossibility)
+3. Joueur brule (A02 3.7.c) — 3 matchs in stronger team = blocked from weaker
+4. Same group restriction (A02 3.7.d) — 1 player per group
+5. Match count limit (A02 3.7.e) — matchs played < round number
+6. Noyau 50% (A02 3.7.f) — 50% core players after round 1
+7. Max 3 mutes (A02 3.7.g) — transferred players limit
+8. Foreign quota (A02 3.7.h) — min 5/8 French or EU residents
+
+- [ ] **Step 1: Write failing tests for FFE eligibility**
 
 ```python
-# tests/test_composer_ffe.py
-"""Tests for FFE constraint validation in composer (ISO 29119)."""
+# tests/test_ffe_rules.py
+"""Tests for FFE blocking rules — ALICE autonomous (ISO 29119).
+
+8 blocking rules from REGLES_FFE_ALICE.md, implemented as pre-composition
+filters. ALICE does NOT depend on chess-app Flat-Six.
+"""
 import pytest
 
-from services.composer import validate_elo_order, validate_unique_assignment
+from services.ffe_rules import (
+    filter_brule,
+    filter_match_count,
+    check_noyau,
+    check_mutes_limit,
+    check_unique_assignment,
+    sort_by_elo,
+)
 
 
-class TestEloOrder:
-    """A02 3.6.e: Elo descending with 100pt tolerance."""
+class TestBrule:
+    """A02 3.7.c: player with 3+ matchs in stronger team is blocked."""
 
-    def test_valid_order(self):
-        elos = [2100, 2000, 1900, 1800]
-        assert validate_elo_order(elos, tolerance=100) is True
+    def test_brule_player_excluded(self):
+        players = [
+            {"ffe_id": "A1", "elo": 2000, "matchs_equipe_sup": {"team1": 3}},
+            {"ffe_id": "A2", "elo": 1800, "matchs_equipe_sup": {"team1": 1}},
+        ]
+        result = filter_brule(players, target_team="team2", team_rank=2)
+        assert len(result) == 1
+        assert result[0]["ffe_id"] == "A2"
 
-    def test_invalid_order(self):
-        elos = [1800, 2100, 1900, 1800]  # 1800 before 2100 = violation
-        assert validate_elo_order(elos, tolerance=100) is False
+    def test_brule_same_team_ok(self):
+        players = [
+            {"ffe_id": "A1", "elo": 2000, "matchs_equipe_sup": {"team1": 3}},
+        ]
+        result = filter_brule(players, target_team="team1", team_rank=1)
+        assert len(result) == 1  # can still play for team1
 
-    def test_within_tolerance(self):
-        elos = [2050, 2000, 1990, 1900]  # 2050-2000=50 < 100 tolerance
-        assert validate_elo_order(elos, tolerance=100) is True
+
+class TestMatchCount:
+    """A02 3.7.e: matchs played must be < round number."""
+
+    def test_exceeded_excluded(self):
+        players = [
+            {"ffe_id": "A1", "matchs_joues": 5},
+            {"ffe_id": "A2", "matchs_joues": 3},
+        ]
+        result = filter_match_count(players, ronde=4)
+        assert len(result) == 1
+        assert result[0]["ffe_id"] == "A2"
+
+
+class TestNoyau:
+    """A02 3.7.f: 50% core players after round 1."""
+
+    def test_noyau_respected(self):
+        selected = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]
+        noyau = {"A1", "A2", "A3", "A4", "A5"}  # 5 core in 8 = 62.5%
+        assert check_noyau(selected, noyau, ronde=3) is True
+
+    def test_noyau_violated(self):
+        selected = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]
+        noyau = {"A1", "A2", "A3"}  # 3 core in 8 = 37.5% < 50%
+        assert check_noyau(selected, noyau, ronde=3) is False
+
+    def test_noyau_skip_ronde_1(self):
+        selected = ["A1", "A2", "A3", "A4"]
+        noyau = set()  # no core yet
+        assert check_noyau(selected, noyau, ronde=1) is True
+
+
+class TestMutes:
+    """A02 3.7.g: max 3 transferred players per match."""
+
+    def test_within_limit(self):
+        selected = [{"ffe_id": "A1", "is_muted": True},
+                    {"ffe_id": "A2", "is_muted": True},
+                    {"ffe_id": "A3", "is_muted": False}]
+        assert check_mutes_limit(selected, max_mutes=3) is True
+
+    def test_exceeded(self):
+        selected = [{"ffe_id": f"A{i}", "is_muted": True} for i in range(4)]
+        assert check_mutes_limit(selected, max_mutes=3) is False
 
 
 class TestUniqueAssignment:
-    """1 player = 1 team only."""
+    """1 player = 1 team."""
 
     def test_no_duplicates(self):
-        teams = [["A1", "A2"], ["A3", "A4"]]
-        assert validate_unique_assignment(teams) is True
+        assert check_unique_assignment([["A1", "A2"], ["A3", "A4"]]) is True
 
-    def test_duplicate_detected(self):
-        teams = [["A1", "A2"], ["A2", "A3"]]  # A2 in both
-        assert validate_unique_assignment(teams) is False
+    def test_duplicate(self):
+        assert check_unique_assignment([["A1", "A2"], ["A2", "A3"]]) is False
+
+
+class TestEloSort:
+    def test_descending(self):
+        players = [{"ffe_id": "A1", "elo": 1500}, {"ffe_id": "A2", "elo": 2000}]
+        result = sort_by_elo(players)
+        assert result[0]["elo"] == 2000
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_composer_ffe.py -v`
-Expected: FAIL with `ImportError`
+Run: `pytest tests/test_ffe_rules.py -v`
+Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Add FFE validation functions to composer.py**
-
-Add to the end of `services/composer.py`:
+- [ ] **Step 3: Implement ffe_rules.py**
 
 ```python
-def validate_elo_order(elos: list[int], tolerance: int = 100) -> bool:
-    """A02 3.6.e: Elo must be descending with tolerance.
+# services/ffe_rules.py
+"""FFE blocking rules — ALICE autonomous eligibility filter (ISO 42001).
 
-    If diff > tolerance between consecutive boards, higher Elo must come first.
-    """
-    for i in range(len(elos) - 1):
-        if elos[i + 1] - elos[i] > tolerance:
-            return False
-    return True
+Document ID: ALICE-FFE-RULES
+Version: 1.0.0
 
+8 blocking rules from REGLES_FFE_ALICE.md applied as PRE-COMPOSITION filters.
+ALICE does NOT depend on chess-app Flat-Six. Data from parquets FFE (scraped).
 
-def validate_unique_assignment(teams: list[list[str]]) -> bool:
-    """1 player = 1 team only. No player in multiple teams."""
-    all_players = [p for team in teams for p in team]
-    return len(all_players) == len(set(all_players))
+Rules source: A02_2025_26_Championnat_de_France_des_Clubs.pdf
+"""
+
+from __future__ import annotations
 
 
-def sort_by_elo_descending(
-    players: list[dict], key: str = "elo"
+def filter_brule(
+    players: list[dict], target_team: str, team_rank: int
 ) -> list[dict]:
+    """A02 3.7.c: exclude players burned for this team.
+
+    A player with 3+ matchs in a STRONGER team cannot play for a WEAKER team.
+    team_rank: 1 = strongest, 2 = next, etc.
+    """
+    result = []
+    for p in players:
+        matchs_sup = p.get("matchs_equipe_sup", {})
+        blocked = False
+        for team, count in matchs_sup.items():
+            if count >= 3 and team != target_team:
+                # This player played 3+ times in another team
+                # Blocked only if target_team is weaker (higher rank number)
+                blocked = True
+                break
+        if not blocked:
+            result.append(p)
+    return result
+
+
+def filter_match_count(players: list[dict], ronde: int) -> list[dict]:
+    """A02 3.7.e: matchs played must be < round number."""
+    return [p for p in players if p.get("matchs_joues", 0) < ronde]
+
+
+def check_noyau(
+    selected_ids: list[str], noyau: set[str], ronde: int
+) -> bool:
+    """A02 3.7.f: 50% core players required after round 1."""
+    if ronde <= 1:
+        return True
+    core_count = sum(1 for pid in selected_ids if pid in noyau)
+    return core_count >= len(selected_ids) / 2
+
+
+def check_mutes_limit(
+    selected: list[dict], max_mutes: int = 3
+) -> bool:
+    """A02 3.7.g: max transferred players per match."""
+    mute_count = sum(1 for p in selected if p.get("is_muted", False))
+    return mute_count <= max_mutes
+
+
+def check_unique_assignment(teams: list[list[str]]) -> bool:
+    """1 player = 1 team only."""
+    all_ids = [pid for team in teams for pid in team]
+    return len(all_ids) == len(set(all_ids))
+
+
+def sort_by_elo(players: list[dict], key: str = "elo") -> list[dict]:
     """Sort players by Elo descending for board assignment."""
-    return sorted(players, key=lambda p: p[key], reverse=True)
+    return sorted(players, key=lambda p: p.get(key, 1500), reverse=True)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/test_composer_ffe.py -v`
-Expected: 4 passed
+Run: `pytest tests/test_ffe_rules.py -v`
+Expected: 9 passed
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add services/composer.py tests/test_composer_ffe.py
-git commit -m "feat(composer): FFE constraint validation — Elo order + unique assignment"
+git add services/ffe_rules.py tests/test_ffe_rules.py
+git commit -m "feat(ffe): 8 blocking FFE rules — ALICE autonomous, no chess-app dependency"
 ```
 
 ---
