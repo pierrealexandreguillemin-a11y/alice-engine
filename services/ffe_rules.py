@@ -18,14 +18,19 @@ def filter_brule(
 ) -> list[dict]:
     """A02 3.7.c: exclude players burned for this team.
 
-    Player with seuil+ matchs in a stronger team cannot play for weaker team.
+    Player with seuil+ matchs in a STRONGER team (lower rank) cannot play for weaker team.
+    team_rank: 1 = strongest, higher = weaker.
     """
     result = []
     for p in players:
         matchs_sup = p.get("matchs_equipe_sup", {})
         blocked = False
-        for team, count in matchs_sup.items():
-            if count >= seuil and team != target_team:
+        for team, info in matchs_sup.items():
+            # info can be int (count) or dict with rank
+            count = info if isinstance(info, int) else info.get("count", 0)
+            team_r = 0 if isinstance(info, int) else info.get("rank", 0)
+            # Blocked only if played in stronger team (lower rank) >= seuil times
+            if count >= seuil and team != target_team and team_r < team_rank:
                 blocked = True
                 break
         if not blocked:

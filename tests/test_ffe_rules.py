@@ -24,8 +24,16 @@ class TestBrule:
 
     def test_brule_player_excluded(self):
         players = [
-            {"ffe_id": "A00001", "elo": 2000, "matchs_equipe_sup": {"team1": 3}},
-            {"ffe_id": "A00002", "elo": 1800, "matchs_equipe_sup": {"team1": 1}},
+            {
+                "ffe_id": "A00001",
+                "elo": 2000,
+                "matchs_equipe_sup": {"team1": {"count": 3, "rank": 1}},
+            },
+            {
+                "ffe_id": "A00002",
+                "elo": 1800,
+                "matchs_equipe_sup": {"team1": {"count": 1, "rank": 1}},
+            },
         ]
         result = filter_brule(players, target_team="team2", team_rank=2)
         assert len(result) == 1

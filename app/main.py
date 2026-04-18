@@ -192,6 +192,7 @@ async def health_check(request: Request) -> dict[str, Any]:
         "fallback_mode": fallback_mode,
         "model_version": model_version,
         "feature_store_loaded": feature_store is not None,
+        "feature_store_age_hours": round(feature_store.age_hours, 1) if feature_store else None,
         "checks": {
             "api": "ok",
             "model": "loaded" if models_loaded else "not_loaded",
