@@ -179,36 +179,8 @@ class ModelInfoResponse(BaseModel):
 
 
 # ============================================================
-# SCHEMAS ENTRAINEMENT
-# ============================================================
-
-
-class TrainRequest(BaseModel):
-    """Requete d'entrainement."""
-
-    club_id: str | None = Field(None, description="Si absent, modele global")
-    force_retrain: bool = Field(False, description="Forcer meme si donnees insuffisantes")
-
-
-class TrainResponse(BaseModel):
-    """Reponse d'entrainement."""
-
-    success: bool
-    message: str
-    job_id: str
-    estimated_duration: str | None = None
-
-
-# ============================================================
 # SCHEMAS ERREUR
 # ============================================================
-
-
-class ErrorDetail(BaseModel):
-    """Detail d'une erreur."""
-
-    field: str | None = None
-    error: str
 
 
 class ErrorResponse(BaseModel):
