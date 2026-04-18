@@ -80,11 +80,11 @@ Résumé session : `memory/project_session_resume.md`
 
 | Couche | Statut |
 |--------|--------|
-| ML Training | **CHAMPION: MLP(32,16) stacking** (0.5530, ECE_draw 0.0016). OOF DONE. AG ÉLIMINÉ (ADR-011). |
-| API FastAPI | COMPLET (stubs) |
-| Câblage routes→services | MANQUANT (après Training Final) |
-| ALI prédiction adverse | MANQUANT (Phase 3) |
-| CE multi-équipe | MANQUANT (Phase 4) |
+| ML Training | **DONE** — Champion MLP(32,16) stacking 0.5530, ECE_draw 0.0016. AG ÉLIMINÉ (ADR-011). |
+| API FastAPI | **DONE** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). |
+| ALI prédiction adverse | **FALLBACK** — Elo ranking (Phase 3 = Monte Carlo 20 scénarios) |
+| CE multi-équipe | **FALLBACK** — Tri Elo + E[score] (Phase 4 = OR-Tools) |
+| Deploy Oracle VM | MANQUANT (Phase 5) |
 
 ## TRAINING RULES (V8/V9)
 
@@ -110,7 +110,7 @@ Résumé session : `memory/project_session_resume.md`
 
 Inference : `compute_elo_baseline → init_scores → *= alpha_per_model → predict_with_init`
 
-**ADR** : `docs/architecture/DECISIONS.md` (ADR-001 à ADR-011)
+**ADR** : `docs/architecture/DECISIONS.md` (ADR-001 à ADR-012)
 
 ## COMMANDES
 

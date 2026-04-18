@@ -4,7 +4,7 @@ Index complet de tous les docs du projet. Consulter AVANT de poser des questions
 
 ## Architecture & ADR
 - `docs/architecture/ARCHITECTURE.md` — Vue d'ensemble architecture
-- `docs/architecture/DECISIONS.md` — Registre des decisions (ADR-001 a ADR-011, incl. ADR-011 AG YAGNI)
+- `docs/architecture/DECISIONS.md` — Registre des decisions (ADR-001 a ADR-012, incl. ADR-011 AG YAGNI, ADR-012 FFE autonome)
 - `docs/architecture/ADR-002-inference-feature-construction.md` — Feature store decision
 - `docs/architecture/ADR-003-single-model-kernels.md` — Architecture 4 kernels V8
 
