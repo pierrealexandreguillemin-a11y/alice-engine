@@ -224,3 +224,71 @@ class ErrorResponse(BaseModel):
             }
         ],
     )
+
+
+# ============================================================
+# SCHEMAS COMPOSE (Phase 2)
+# ============================================================
+
+
+class OpponentPrediction(BaseModel):
+    """Predicted opponent on a specific board."""
+
+    board: int = Field(..., ge=1, le=16)
+    joueur: str
+    elo: int = Field(..., ge=500, le=3000)
+
+
+class BoardResult(BaseModel):
+    """ML prediction result for one board assignment."""
+
+    board: int = Field(..., ge=1, le=16)
+    joueur: str
+    elo: int
+    adversaire: str
+    adversaire_elo: int
+    p_win: float = Field(..., ge=0, le=1)
+    p_draw: float = Field(..., ge=0, le=1)
+    p_loss: float = Field(..., ge=0, le=1)
+    e_score: float = Field(..., ge=0, le=1)
+
+
+class TeamComposition(BaseModel):
+    """Composition for one team."""
+
+    equipe: str
+    division: str
+    adversaire: str
+    adversaire_predit: list[OpponentPrediction]
+    boards: list[BoardResult]
+    e_score_total: float
+    contraintes_ok: bool
+    validated_by_flatsix: bool = False
+
+
+class ComposeRequest(BaseModel):
+    """Request for team composition optimization."""
+
+    club_id: str = Field(..., description="Club FFE ID")
+    joueurs_disponibles: list[str] = Field(
+        ..., min_length=1, description="FFE IDs of available players"
+    )
+    ronde: int = Field(..., ge=1, le=20, description="Numero de ronde")
+    division: str = Field(..., description="Division (N1, N2, N3, Regionale...)")
+    mode_strategie: str = Field("agressif", pattern="^(agressif|conservateur)$")
+
+
+class ComposeResponse(BaseModel):
+    """Response with optimal compositions for all teams."""
+
+    compositions: list[TeamComposition]
+    metadata: dict[str, Any]
+
+
+class RecomposeRequest(BaseModel):
+    """Request to adjust composition after player change."""
+
+    club_id: str
+    joueurs_disponibles: list[str] = Field(..., min_length=1)
+    composition_precedente: list[TeamComposition]
+    mode: str = Field("global", pattern="^(remplacement|global)$")
