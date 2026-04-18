@@ -220,16 +220,31 @@ et utiles (probas calibrees ECE_draw 0.0016).
 
 ---
 
-## ISO Deliverables Phase 2
+## Conformite ISO — 14 normes (contraintes de conception)
 
-| Norme | Artefact |
-|-------|---------|
-| ISO 42001 | Model Card updated (serving endpoint documente) |
-| ISO 5259 | Feature Store lineage (hash, date, coverage par joueur) |
-| ISO 27034 | Input validation (Pydantic schemas, rate limiting) |
-| ISO 25059 | Serving metrics (latence P50/P99, throughput) |
-| ISO 42010 | ADR feature store architecture |
-| ISO 29119 | Integration tests (POST /compose E2E avec vrai modele) |
+### Code quality (applique a CHAQUE fichier Phase 2)
+
+| Norme | Contrainte | Verification |
+|-------|-----------|-------------|
+| **ISO 5055** | Max 300 lignes/fichier, 50/fonction, complexite <= B, SRP | `radon`, `xenon`, `wc -l`. feature_store.py, inference.py, model_loader.py DOIVENT respecter. Si >300 lignes → split. |
+| **ISO 27001** | Secrets en env vars (HF_TOKEN, MONGODB_URI). Audit logs sur chaque appel /compose. SHA-256 checksum des parquets feature store. | Gitleaks pre-commit. HF_TOKEN JAMAIS dans le code. Audit via data_loader._audit_log(). |
+| **ISO 27034** | Validation Pydantic sur TOUTES les entrees. Sanitization ffe_id (regex). Rate limiting /compose (30/min). Erreurs structurees (ErrorResponse). | schemas.py validators. Rejet 422 si format invalide. Pas de stack trace en production. |
+| **ISO 25010** | Latence /compose < 5s (10 joueurs x 8 boards = 80 predictions). Disponibilite : fallback LGB+Dirichlet si GBM fail. Memory < 4GB (modeles + feature store). | Benchmark pytest. health endpoint reporte memory usage. |
+| **ISO 29119** | Coverage >70%. Docstring structure (ID, Version, Count) sur chaque module. Fixtures pytest pour feature store mock, model mock. Classes de test par composant. | `make test-cov`. Tests unitaires + integration. |
+| **ISO 42010** | ADR pour feature store architecture (nouvelle decision). Mise a jour ARCHITECTURE.md avec le pipeline serving. | `docs/architecture/DECISIONS.md` ADR-012. |
+| **ISO 15289** | Mise a jour MkDocs avec la doc API (endpoints, schemas). CHANGELOG.md entry Phase 2. | `mkdocs build --strict`. |
+
+### ML serving (specifique au pipeline inference)
+
+| Norme | Contrainte | Verification |
+|-------|-----------|-------------|
+| **ISO 42001** | Model Card du pipeline stacking complet : 3 GBMs + MLP + temp scaling. Documenter : versions modeles, alpha per-model (LGB=0.1, XGB=0.5, CB=0.3), T=1.02, 18 meta-features. Documenter le fallback LGB+Dirichlet. | metadata.json servi par /health. Model card dans MODEL_SPECS.md deja fait. |
+| **ISO 42005** | Impact assessment MISE A JOUR : le modele guide maintenant de VRAIES decisions de composition. Nouveau risque : feature store stale → predictions basees sur donnees obsoletes. Risque : fallback silencieux → capitaine ne sait pas que la qualite a baisse. | docs/iso/AI_RISK_ASSESSMENT.md mise a jour. |
+| **ISO 23894** | Risk register MISE A JOUR. Nouveaux risques : (1) feature store stale >14j (2) modele HF corrompu au download (3) fallback silencieux sans notification (4) MongoDB indisponible → pas de joueurs club. Mitigations documentees. | docs/iso/AI_RISK_REGISTER.md mise a jour. |
+| **ISO 5259** | Feature store lineage : hash SHA-256 de chaque parquet, date de derniere mise a jour, nombre de joueurs couverts, % NaN par feature. Alerte si age >7j (warning) ou >14j (critical). | feature_store.py log le hash + age au chargement. /health reporte feature_store_age. |
+| **ISO 25059** | Quality gates du serving : (1) P(W/D/L) sum=1 par prediction (2) aucun NaN en sortie (3) mean_p_draw > 1% (4) latence < 5s. Monitoring continu, pas juste au training. | Assertions dans inference.py. /health reporte les metriques. |
+| **ISO 24029** | Robustesse serving : que se passe-t-il si Elo manquant (→ 1500 default) ? Si joueur inconnu du feature store (→ features par defaut) ? Si HF Hub down au startup (→ cache local) ? Chaque cas documente et teste. | Tests unitaires : inputs degrades → output valide (pas crash). |
+| **ISO 24027** | Fairness serving : le pipeline ne doit pas discriminer par club (petit vs grand), par division, par genre. Verifier que les compositions sont equitables. Note : la fairness du MODELE est validee Phase 1. Phase 2 verifie que le SERVING ne degrade pas. | Test : meme joueurs, meme adversaires, clubs differents → memes probas. |
 
 ---
 
