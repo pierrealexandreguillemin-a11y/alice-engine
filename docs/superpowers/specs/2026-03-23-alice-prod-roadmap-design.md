@@ -2,21 +2,25 @@
 
 **Date:** 2026-03-23
 **Status:** APPROVED
-**Last updated:** 2026-04-17 (Phase 1 COMPLETE, Phase 2 next)
-**Scope:** From V8 training fix to production deployment (5 phases)
-**Architecture:** Vercel (chess-app) → Oracle VM (FastAPI + ML) → HF Hub (model storage)
+**Last updated:** 2026-04-19 (Phase 1+2 COMPLETE, Phase 3 active, roadmap étendue SaaS + GTM)
+**Scope:** From V8 training fix to SaaS multi-tenant + go-to-market (7 phases)
+**Ambition confirmée 2026-04-19** : déployer ALICE au max de clubs FFE France, en option dans chess-app OR standalone
+**Architecture cible** : SaaS multi-tenant (Phase 5) + SDK/UI (Phase 6) + pricing tiers (Phase 7)
 
 ---
 
-## Status Overview (2026-04-17)
+## Status Overview (2026-04-19)
 
 | Phase | Status | Key result |
 |-------|--------|-----------|
 | **Phase 1** | **COMPLETE** | Champion MLP(32,16) stacking 0.5530 ll, ECE_draw 0.0016 |
-| Phase 2 | **NEXT** | API stubs exist, wiring pending |
-| Phase 3 | Blocked by Phase 2 | ALI features computed, logic pending |
-| Phase 4 | Blocked by Phase 3 | OR-Tools spec ready |
-| Phase 5 | Blocked by Phase 4 | Oracle VM spec ready |
+| **Phase 2** | **COMPLETE** | API /compose + /recompose wired, 11 FFE rules (ADR-012), stacking E2E |
+| **Phase 3** | **ACTIVE** | ALI Monte Carlo SOTA hybride (spec 2026-04-19 approved) |
+| Phase 3.5 | Blocked by Phase 3 | J02/Coupes (D3/D4) + fairness/robustness full (D8) |
+| Phase 4 | Blocked by Phase 3 | CE OR-Tools multi-équipe multi-objectif |
+| **Phase 5** | Blocked by Phase 4 | **SaaS multi-tenant** — Oracle VM + auth multi-tenant + monitoring stack infra |
+| **Phase 6** | Blocked by Phase 5 | **Go-to-market** — SDK Python chess-app integration OR standalone Next.js UI |
+| **Phase 7** | Blocked by Phase 6 | **Monétisation** — pricing tiers (freemium), CGU, droit oubli, SLA contractuel |
 
 ---
 
@@ -315,7 +319,24 @@ with same E[score] but different variance thanks to P(draw).
 
 ---
 
-## Phase 5: Deploy + Monitoring — STATUS: BLOCKED (Phase 4)
+## Phase 5: **SaaS multi-tenant Deploy + Monitoring Stack** — STATUS: BLOCKED (Phase 4)
+
+> **Scope étendu 2026-04-19** : l'ambition confirmée de servir max clubs FFE France
+> requiert un déploiement multi-tenant, pas mono-user. Monitoring stack complet
+> (Grafana + Alertmanager infra) remplace le monitoring custom Phase 3 minimaliste.
+>
+> **Multi-tenant deliverables** :
+> - Auth OIDC/JWT avec gestion comptes capitaines (Clerk, Auth0, ou Descope via Vercel Marketplace)
+> - Isolation tenant : audit log partitionné, rate limiting per-tenant (déjà prêt Phase 3)
+> - Dashboards Grafana Cloud (free tier pour démarrage) + Alertmanager
+> - Logs aggregation Loki ou Grafana Cloud Logs
+> - Retraining cadence automated (hebdo ou mensuel, GitHub Actions → Kaggle GPU)
+> - CGU + politique confidentialité capitaines (données d'usage = données personnelles)
+>
+> **Monitoring stack Phase 5** complète le DIY custom Phase 3 (Prometheus exports déjà là).
+>
+> Dette D6/D7 (DVC versioning ML) résorbées Phase 5.
+
 
 > **Architecture change (2026-04-15):** batch ML hebdo + CE on-demand <2s.
 > Model artifacts on HF Hub `Pierrax/alice-engine/v9/`. Oracle VM downloads
@@ -413,22 +434,77 @@ Monthly (or if drift detected):
 
 ---
 
-## Dependencies (updated 2026-04-17)
+## Dependencies (updated 2026-04-19)
 
 ```
 Phase 1 (Training) ─── COMPLETE ──────────┐
   Champion: MLP stacking 0.5530           │
   Models on HF Hub v9/                    ▼
-Phase 2 (Feature Store + API) ──────► Phase 3 (ALI)
-  *** CURRENT ***                         │
-  API stubs exist, wiring pending         ▼
-                                    Phase 4 (CE V9)
+Phase 2 (API Wiring) ──── COMPLETE ──────► Phase 3 (ALI Monte Carlo SOTA)
+  11 FFE rules, stacking E2E              │  *** ACTIVE *** (spec 2026-04-19)
+  ADR-012 autonomous                      ▼
+                                    Phase 3.5 (J02/Coupes + Fairness/Robust full)
                                           │
                                           ▼
-                                    Phase 5 (Deploy)
+                                    Phase 4 (CE V9 OR-Tools multi-équipe)
+                                          │
+                                          ▼
+                                    Phase 5 (SaaS multi-tenant deploy)
+                                          │
+                                          ▼
+                                    Phase 6 (Go-to-market : SDK chess-app OR standalone UI)
+                                          │
+                                          ▼
+                                    Phase 7 (Monétisation + SLA contractuel)
 ```
 
-**Phase 1 lock LIFTED.** Phase 2 can proceed immediately.
-Phase 2 deliverables: feature store assembly, model loading from HF,
-inference pipeline (3 GBMs → MLP stacking → temp scaling → P(W/D/L)),
-integration tests, batch predict cron.
+---
+
+## Phase 6: Go-to-Market — STATUS: BLOCKED (Phase 5)
+
+> **Nouvelle phase 2026-04-19** suite à l'ambition confirmée "max clubs FFE France".
+
+Deux canaux non exclusifs :
+
+### 6.A Chess-app integration (SDK)
+- SDK Python `alice-engine-sdk` publié PyPI
+- chess-app (Next.js backend) appelle ALICE via SDK HTTPS
+- Partenariat chess-app : ALICE = option premium ou feature native
+
+### 6.B Standalone UI (Next.js)
+- Frontend Next.js dédié ALICE (App Router, Server Components)
+- Déployé Vercel (architecture recommandée stack)
+- Onboarding capitaine, composition par drag-drop, visualisation scénarios + explanations
+- Auth = même backend SaaS Phase 5
+
+### Livrables Phase 6
+- SDK Python packagé (PyPI) + documentation API
+- UI Next.js standalone (frontend-design skill utilisable)
+- Marketing landing page
+- Documentation user-facing capitaines (guide FFE français)
+- Open source release (si modèle freemium OSS + paid features)
+
+---
+
+## Phase 7: Monétisation + SLA — STATUS: BLOCKED (Phase 6)
+
+> **Nouvelle phase 2026-04-19** si modèle freemium/pro confirmé.
+
+### 7.1 Pricing tiers
+- **Free** : 1 /compose/mois par club, pas d'overrides, support communautaire
+- **Pro** : illimité /compose, overrides, feedback prioritaire, SLA 99% uptime
+- **Club Elite** : multi-équipes N1/N2, intégration privée chess-app, SLA 99.9%
+
+### 7.2 Compliance
+- CGU capitaines (données usage personnelles → RGPD applicable)
+- Politique confidentialité
+- Droit à l'oubli (purge audit logs à la demande)
+- SLA contractuel tier Pro/Elite
+
+### 7.3 Business operations
+- Billing (Stripe via Vercel Marketplace intégration)
+- Customer support tier
+- Incident response process
+
+**Phase 1 lock LIFTED.** Phase 2 COMPLETE, Phase 3 ACTIVE avec spec 2026-04-19.
+Roadmap étendue à 7 phases suite ambition multi-clubs France confirmée.

@@ -84,7 +84,9 @@ Résumé session : `memory/project_session_resume.md`
 | API FastAPI | **DONE (avec dette)** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). Dette : voir ci-dessous. |
 | ALI prédiction adverse | **FALLBACK** — Elo ranking (Phase 3 = Monte Carlo 20 scénarios) |
 | CE multi-équipe | **FALLBACK** — Tri Elo + E[score] (Phase 4 = OR-Tools) |
-| Deploy Oracle VM | MANQUANT (Phase 5) |
+| Deploy SaaS multi-tenant | MANQUANT (Phase 5 — scope étendu 2026-04-19) |
+| SDK Python / UI standalone | MANQUANT (Phase 6 nouvelle) |
+| Monétisation + SLA | MANQUANT (Phase 7 nouvelle) |
 
 ### DETTE TECHNIQUE VISIBLE (ne pas laisser enfouie)
 

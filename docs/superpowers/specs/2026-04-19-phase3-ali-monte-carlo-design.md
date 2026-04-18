@@ -40,6 +40,8 @@ Phase 2 a wired le ML et le CE avec fallback (ALI = tri Elo 1 scénario, joueurs
 13. **Capacity planning benchmark** + SLO documenté (p95 latence, RPS sustainable)
 14. **Peer review gate** avant merge via skill `superpowers:requesting-code-review`
 15. **Property-based testing** via Hypothesis sur RuleEngine + fuzzing JSON inputs
+16. **Observability DIY custom 100%** (~440 lignes, 0 nouvelle dépendance externe) — Prometheus metrics, structured JSON logging, drift tracker weekly, alerting webhook, health check enrichi
+17. **Multi-tenant-ready design** (sans implémentation full multi-tenant Phase 3) : API versioning `/v1/compose`, rate limiting per-`user_club_id`, `tenant_id` dans audit log — ambition SaaS multi-clubs France confirmée
 
 ### 1.3 Hors scope Phase 3 (traçabilité en dette)
 - **D3** : jeunes J02 (Phase 3.5)
@@ -289,6 +291,44 @@ Seuils tunés backtest :
 
 API retourne ce tier → capitaine informé de la fiabilité.
 
+### 4.15 Observability DIY custom (package `services/observability/`)
+**100% custom Python, aucune dep externe nouvelle.** Intégré Phase 3.
+
+**4.15.1 `metrics.py` (~100 lignes)** — Prometheus text format export
+- `Counter`, `Histogram`, `Gauge` custom thread-safe
+- Endpoint `GET /metrics` retourne text format Prometheus stable
+- Metrics exposées : `compose_requests_total`, `compose_duration_seconds`, `scenario_generation_duration`, `mc_rejection_rate`, `copula_fit_duration`, `ali_mode_gauge` (sota=1/fallback=0/hybrid=0.5)
+
+**4.15.2 `logging.py` (~50 lignes)** — Structured JSON logging
+- `logging.Formatter` custom output JSON ligne par ligne
+- Context binding via `contextvars` : `request_id`, `user_id`, `tenant_id` propagés automatiquement
+- Rotation fichier JSONL (déjà en place pour audit log, étendu général)
+
+**4.15.3 `drift_tracker.py` (~200 lignes)** — Weekly data/model drift
+- Tracker pandas hebdomadaire : KL divergence features input + PSI (Population Stability Index) + Brier score per-week + rejection rate hebdo
+- Seuils configurables (`config/observability.yaml`) : drift warning si KL > 0.1, drift alert si KL > 0.3
+- Output : `reports/drift/weekly_YYYY-WW.parquet` + MongoDB collection `ali_drift_history`
+
+**4.15.4 `alerting.py` (~50 lignes)** — Webhooks Slack/email
+- `send_webhook(url, payload)` via httpx (déjà là)
+- Template messages : "ALI drift critical", "Latency p95 breach", "Rejection rate >50%"
+- Throttle : pas plus de 1 alerte/type/heure
+
+**4.15.5 `health.py` (~40 lignes)** — Health check enrichi
+- `/health` retourne : `cache_age_seconds`, `cache_sigs`, `model_versions`, `ali_mode`, `last_Brier`, `last_rejection_rate`, `lineage_hash_prefix`
+- Status degradé si cache_age > 7 jours OU drift > threshold
+
+**Pas de deps externes ajoutées**. httpx déjà présent (Phase 2), pandas/numpy déjà présents (core stack).
+
+### 4.16 Multi-tenant-ready tweaks (Phase 3 design, implémentation Phase 5)
+- **API versioning** : routes passent de `/compose` à `/v1/compose` (~2 lignes `routes.py`)
+- **Rate limiting per-tenant** : config slowapi key function = `user_club_id` au lieu de IP (~1 ligne)
+- **tenant_id dans audit log** : ajout field dans `AuditEntry` + log format (~2 lignes, mapping = `user_club_id` Phase 3)
+- **Cache structure partitionnable** : déjà partitionné par `club_id` (no change)
+- **user_club_id explicite** dans ComposeRequest : déjà Phase 2 (no change)
+
+Pas d'auth multi-tenant réelle en Phase 3 (Phase 5). Juste les crochets.
+
 ### 4.14 FeedbackCollector (`services/ali/feedback.py`) — D17 intégré Phase 3
 ~100 lignes. Endpoint `POST /feedback/scenario` pour capitaine :
 
@@ -515,6 +555,8 @@ Toutes listées explicitement dans `ALI_MODEL_CARD.md` (ISO 42001 exige justific
 - [ ] KillSwitch `ALI_MODE` opérationnel (sota/fallback/hybrid)
 - [ ] ConfidenceLevel metadata exposée
 - [ ] FeedbackCollector endpoint `POST /feedback/scenario` actif
+- [ ] Observability DIY complète (metrics, logging, drift tracker, alerting, health) — 0 dep nouvelle
+- [ ] Multi-tenant-ready : `/v1/compose`, rate limit per-tenant, tenant_id audit
 
 ### Gates process
 - [ ] MkDocs build strict pass
