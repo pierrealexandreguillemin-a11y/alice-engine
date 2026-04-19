@@ -82,6 +82,10 @@ class ALIDataCache:
         age = (datetime.now(UTC) - self.loaded_at).total_seconds()
         return age > max_age_days * 86400
 
+    def lineage_ok(self) -> bool:
+        """Sanity check : signatures SHA-256 présentes et non-vides."""
+        return bool(self.parquet_sig_joueurs) and bool(self.parquet_sig_echiquiers)
+
     def lookup_club(self, club_id: str) -> pd.DataFrame:
         """Return joueurs subset for a given club_id. Empty DataFrame if unknown."""
         return self.joueurs_by_club.get(
