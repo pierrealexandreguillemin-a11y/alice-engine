@@ -55,3 +55,21 @@ def test_cache_is_stale_by_age() -> None:
         datetime(2020, 1, 1, tzinfo=UTC),
     )
     assert cache.is_stale(max_age_days=7) is True
+
+
+def test_lookup_club_returns_subset(ali_data_cache: ALIDataCache) -> None:
+    first_club = next(iter(ali_data_cache.joueurs_by_club.keys()))
+    subset = ali_data_cache.lookup_club(first_club)
+    assert len(subset) > 0
+    assert all(str(v) == first_club for v in subset["club"].unique())
+
+
+def test_lookup_club_unknown_returns_empty_df(ali_data_cache: ALIDataCache) -> None:
+    subset = ali_data_cache.lookup_club("UNKNOWN_CLUB_XYZ_999")
+    assert subset.empty
+
+
+def test_lookup_history_returns_union_of_colors(ali_data_cache: ALIDataCache) -> None:
+    first_name = next(iter(ali_data_cache.echiquiers_by_player.keys()))
+    hist = ali_data_cache.lookup_history([first_name])
+    assert len(hist) > 0

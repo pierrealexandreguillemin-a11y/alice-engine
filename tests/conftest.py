@@ -16,8 +16,11 @@ Last Updated: 2026-01-14
 from __future__ import annotations
 
 import gc
+from pathlib import Path
 
 import pytest
+
+from services.ali.cache import ALIDataCache
 
 # Load fixtures from specialized conftest modules
 pytest_plugins = [
@@ -27,6 +30,16 @@ pytest_plugins = [
     "tests.conftest_bias",
     "tests.conftest_ml",
 ]
+
+
+@pytest.fixture(scope="session")
+def ali_data_cache() -> ALIDataCache:
+    """Session-scoped cache to avoid 110s reload per test."""
+    path_j = Path("data/joueurs.parquet")
+    path_e = Path("data/echiquiers.parquet")
+    if not (path_j.exists() and path_e.exists()):
+        pytest.skip("data parquets absent du runner")
+    return ALIDataCache.load_from_parquets(path_j, path_e)
 
 
 @pytest.fixture(autouse=True)

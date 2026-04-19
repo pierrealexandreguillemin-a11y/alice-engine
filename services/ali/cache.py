@@ -81,3 +81,21 @@ class ALIDataCache:
         """Return True si l'age du cache depasse max_age_days (UTC)."""
         age = (datetime.now(UTC) - self.loaded_at).total_seconds()
         return age > max_age_days * 86400
+
+    def lookup_club(self, club_id: str) -> pd.DataFrame:
+        """Return joueurs subset for a given club_id. Empty DataFrame if unknown."""
+        return self.joueurs_by_club.get(
+            str(club_id),
+            self.joueurs_total.iloc[0:0],
+        )
+
+    def lookup_history(self, player_names: list[str]) -> pd.DataFrame:
+        """Return echiquiers rows where blanc_nom OR noir_nom in player_names."""
+        parts: list[pd.DataFrame] = []
+        for name in player_names:
+            df = self.echiquiers_by_player.get(str(name))
+            if df is not None:
+                parts.append(df)
+        if not parts:
+            return self.echiquiers_total.iloc[0:0]
+        return pd.concat(parts, ignore_index=True).drop_duplicates()
