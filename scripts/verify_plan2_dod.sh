@@ -58,6 +58,12 @@ echo "  OK (Sklar 1959, McKay, Hammersley citees)"
 echo "=== P2G16 MkDocs --strict ==="
 mkdocs build --strict
 
+echo "=== Structural: services/ffe_rules.py supprimé (D-P3-11 résolu) ==="
+if [ -f services/ffe_rules.py ]; then
+  echo "FAIL: services/ffe_rules.py still exists"; exit 1
+fi
+echo "  OK"
+
 echo "=== Structural: scenario.py exporte 4 dataclasses ==="
 python -c "
 from services.ali.scenario import BoardAssignment, Lineup, Scenario, ScenarioSet

@@ -1,8 +1,10 @@
 # ADR-015 : `services/ffe_rules.py` maintenu Plan 2, suppression Plan 3
 
 **Date** : 2026-04-19
-**Status** : ACCEPTED
+**Status** : **SUPERSEDED** (2026-04-19, commit à venir — migration complète Plan 2)
 **Context** : Plan 2 Phase 3 Task 9 audit + peer review Plan 2
+
+> **SUPERSEDED NOTE (2026-04-19)** : Finalement résolu en Plan 2 (D-P3-11), contrairement au plan initial de différer. Migration complète `services/ffe_rules.py` → `services.ffe.rule_engine` effectuée dans le même commit. ADR conservé pour historique du raisonnement initial. Voir section "Implémentation finale" ci-dessous.
 
 ## Contexte
 
@@ -72,3 +74,17 @@ Plan 3 couvrira :
 - Peer review Plan 2 finding important #1 (2026-04-19)
 - ADR-013 : RuleEngine JSON-driven replaces Python FFE rules
 - ISO 42010 : architecture decisions documented
+
+## Implémentation finale (2026-04-19, ADR SUPERSEDED)
+
+Le plan Plan 3 décrit plus haut a été exécuté **en Plan 2 même** après re-priorisation (D-P3-11 résolu). Livrables :
+
+- **RuleEngine étendu** : 6 nouveaux checkers (`check_brule`, `check_match_count`, `check_same_group`, `check_noyau`, `check_foreign_quota`, `check_fr_gender`) + helper `filter_by_article` + helper statique `check_unique_assignment`. Articles couverts : 3.6.e, 3.7.a, 3.7.c, 3.7.d, 3.7.e, 3.7.f, 3.7.g, 3.7.h, 3.7.i, 3.7.j (10 articles).
+- **Split ISO 5055** : extraction de `services/ffe/checkers.py` (227 lignes, 10 fonctions pures rang A) et `services/ffe/filters.py` (65 lignes) pour garder `rule_engine.py` à 183 lignes.
+- **Types étendus** : `services/ali/types.py` gagne 6 champs legacy sur `PlayerCandidate` (matchs_joues, matchs_equipe_sup, group_history, is_french_eu, is_french, sexe) + 6 champs sur `CompetitionContext` (target_team_id, target_team_rank, target_group, noyau, brule_seuil, min_fr_eu) — tous avec defaults backward-compat.
+- **routes.py refactor** : split en `app/api/compose_helpers.py` (88 lignes, FFE helpers) + `app/api/compose_scenarios.py` (243 lignes, ALI pipeline) pour respecter ISO 5055. routes.py passe de 440 à 170 lignes.
+- **18 nouveaux tests** dans `tests/test_rule_engine.py` couvrant les 6 nouveaux articles + `filter_by_article` + `check_unique_assignment` (31 tests au total, 31/31 PASS).
+- **Fichiers supprimés** : `services/ffe_rules.py`, `tests/test_ffe_rules.py`. Références résiduelles (`tests/test_iso_serving.py`) mises à jour.
+- **Gate structural** : `scripts/verify_plan2_dod.sh` vérifie désormais `! test -f services/ffe_rules.py`.
+
+Dette D-P3-11 : **RESOLUE Plan 2**.

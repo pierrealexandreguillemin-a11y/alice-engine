@@ -1,14 +1,18 @@
 """FFE RuleEngine - generic JSON-driven rules interpreter.
 
-ISO 5055 : SRP, module < 300 lignes.
+ISO 5055 : SRP, module < 300 lignes. Dispatchers delegate to
+services.ffe.checkers (lineup validation) and services.ffe.filters
+(pre-composition eligibility).
 ISO 42001 : traceability via UUID + source_ref per rule.
 ISO 5259 : lineage_hash SHA-256 of loaded JSON.
 ISO 27034 : Pydantic validation at load.
 
-Replaces services/ffe_rules.py (ADR-013).
+Replaces services/ffe_rules.py (ADR-013, ADR-015 migration Plan 2 Task 9).
+Covers 10 articles : 3.6.e, 3.7.a, 3.7.c, 3.7.d, 3.7.e, 3.7.f, 3.7.g,
+3.7.h, 3.7.i, 3.7.j.
 
 Document ID: ALICE-FFE-RULE-ENGINE
-Version: 1.0.0
+Version: 2.0.0
 """
 
 from __future__ import annotations
@@ -18,12 +22,33 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from services.ali.types import CompetitionContext, PlayerCandidate, RuleViolation
+from services.ffe import checkers as chk
+from services.ffe import filters as flt
 from services.ffe.schemas import RuleModel, RulesDocument
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
+
+    from services.ali.types import CompetitionContext, PlayerCandidate, RuleViolation
+
+
+# Dispatcher maps article -> checker function.
+_CHECKERS: dict[
+    str,
+    Callable[[Rule, list[PlayerCandidate], CompetitionContext], RuleViolation | None],
+] = {
+    "3.7.a": chk.check_team_size,
+    "3.6.e": chk.check_elo_order,
+    "3.7.c": chk.check_brule,
+    "3.7.d": chk.check_same_group,
+    "3.7.e": chk.check_match_count,
+    "3.7.f": chk.check_noyau,
+    "3.7.g": chk.check_mutes_limit,
+    "3.7.h": chk.check_foreign_quota,
+    "3.7.i": chk.check_fr_gender,
+    "3.7.j": chk.check_elo_max,
+}
 
 
 @dataclass(frozen=True)
@@ -67,6 +92,7 @@ class RuleEngine:
         engine = RuleEngine.from_json_file(Path("config/ffe_rules/a02.json"))
         violations = engine.validate_lineup(lineup, context)
         pool = engine.filter_candidates(pool, context)
+        pool = engine.filter_by_article(pool, "3.7.c", context)
     """
 
     def __init__(self, rules: list[Rule], source_sha256: str) -> None:
@@ -102,7 +128,7 @@ class RuleEngine:
 
         Currently applies article 3.7.j (elo_max if set). Most eligibility
         rules require external data (brule history, same-group) and are
-        applied in validate_lineup.
+        applied via filter_by_article.
         """
         out = list(pool)
         for rule in self._rules:
@@ -111,6 +137,32 @@ class RuleEngine:
             if rule.article == "3.7.j" and context.elo_max is not None:
                 out = [p for p in out if p.elo <= context.elo_max]
         return out
+
+    def filter_by_article(
+        self,
+        pool: list[PlayerCandidate],
+        article: str,
+        context: CompetitionContext,
+    ) -> list[PlayerCandidate]:
+        """Eligibility filter par article (D-P3-11 Plan 2 migration).
+
+        Supports 3.7.c (brule), 3.7.d (same_group), 3.7.e (match_count),
+        3.7.j (elo_max). Returns pool unchanged if article unsupported.
+        """
+        if article == "3.7.c":
+            return flt.filter_brule(pool, context)
+        if article == "3.7.d":
+            return flt.filter_same_group(pool, context)
+        if article == "3.7.e":
+            return flt.filter_match_count(pool, context)
+        if article == "3.7.j":
+            return flt.filter_elo_max(pool, context)
+        return list(pool)
+
+    @staticmethod
+    def check_unique_assignment(teams: list[list[str]]) -> bool:
+        """1 joueur = 1 equipe par match (cross-team helper)."""
+        return flt.check_unique_assignment(teams)
 
     def validate_lineup(
         self,
@@ -122,111 +174,10 @@ class RuleEngine:
         for rule in self._rules:
             if rule.effet != "restrict_team_composition":
                 continue
-            v = self._check_rule(rule, lineup, context)
+            checker = _CHECKERS.get(rule.article)
+            if checker is None:
+                continue
+            v = checker(rule, lineup, context)
             if v is not None:
                 violations.append(v)
         return violations
-
-    def _check_rule(
-        self,
-        rule: Rule,
-        lineup: list[PlayerCandidate],
-        context: CompetitionContext,
-    ) -> RuleViolation | None:
-        """Dispatcher per-article check. Returns RuleViolation or None.
-
-        Handles articles 3.7.a (team_size), 3.6.e (elo ordering),
-        3.7.g (max mutes), 3.7.j (elo_max). Each checker is rank A.
-        """
-        checkers: dict[
-            str,
-            Callable[[Rule, list[PlayerCandidate], CompetitionContext], RuleViolation | None],
-        ] = {
-            "3.7.a": self._check_team_size,
-            "3.6.e": self._check_elo_order,
-            "3.7.g": self._check_mutes_limit,
-            "3.7.j": self._check_elo_max,
-        }
-        checker = checkers.get(rule.article)
-        if checker is None:
-            return None
-        return checker(rule, lineup, context)
-
-    @staticmethod
-    def _check_team_size(
-        rule: Rule,
-        lineup: list[PlayerCandidate],
-        context: CompetitionContext,
-    ) -> RuleViolation | None:
-        """Article 3.7.a : lineup length matches expected team_size."""
-        expected_raw = rule.conditions.get("team_size", context.team_size)
-        expected = int(expected_raw) if expected_raw is not None else context.team_size
-        if len(lineup) != expected:
-            return RuleViolation(
-                rule_uuid=rule.uuid,
-                rule_article=rule.article,
-                message=f"team_size: expected {expected}, got {len(lineup)}",
-                severity="error",
-            )
-        return None
-
-    @staticmethod
-    def _check_elo_order(
-        rule: Rule,
-        lineup: list[PlayerCandidate],
-        context: CompetitionContext,  # noqa: ARG004  (dispatcher signature parity)
-    ) -> RuleViolation | None:
-        """Article 3.6.e : Elo descending across boards within tolerance."""
-        tolerance_raw = rule.conditions.get("elo_tolerance", 100)
-        tolerance = int(tolerance_raw)
-        elos = [p.elo for p in lineup]
-        for i in range(len(elos) - 1):
-            if elos[i + 1] - elos[i] > tolerance:
-                return RuleViolation(
-                    rule_uuid=rule.uuid,
-                    rule_article=rule.article,
-                    message=(
-                        f"elo order: board {i + 1}={elos[i]} "
-                        f"< board {i + 2}={elos[i + 1]} + tol"
-                    ),
-                    severity="error",
-                )
-        return None
-
-    @staticmethod
-    def _check_mutes_limit(
-        rule: Rule,
-        lineup: list[PlayerCandidate],
-        context: CompetitionContext,
-    ) -> RuleViolation | None:
-        """Article 3.7.g : number of muted players within allowed max."""
-        max_m_raw = rule.conditions.get("max_mutes", context.max_mutes)
-        max_m = int(max_m_raw) if max_m_raw is not None else context.max_mutes
-        muted = sum(1 for p in lineup if p.mute)
-        if muted > max_m:
-            return RuleViolation(
-                rule_uuid=rule.uuid,
-                rule_article=rule.article,
-                message=f"mutes: {muted} > max {max_m}",
-                severity="error",
-            )
-        return None
-
-    @staticmethod
-    def _check_elo_max(
-        rule: Rule,
-        lineup: list[PlayerCandidate],
-        context: CompetitionContext,
-    ) -> RuleViolation | None:
-        """Article 3.7.j : no player above optional elo_max cap."""
-        if context.elo_max is None:
-            return None
-        over = [p for p in lineup if p.elo > context.elo_max]
-        if over:
-            return RuleViolation(
-                rule_uuid=rule.uuid,
-                rule_article=rule.article,
-                message=f"elo_max: {len(over)} players above {context.elo_max}",
-                severity="error",
-            )
-        return None

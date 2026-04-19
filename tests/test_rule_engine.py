@@ -160,3 +160,314 @@ def test_rule_3_7_j_not_applied_when_no_cap():
     lineup = [_player(f"X{i}", 2500) for i in range(8)]
     violations = engine.validate_lineup(lineup, _ctx())  # elo_max=None
     assert not any(v.rule_article == "3.7.j" for v in violations)
+
+
+# ---------------------------------------------------------------------------
+# D-P3-11 Plan 2 Task 9 : new articles (3.7.c, 3.7.d, 3.7.e, 3.7.f, 3.7.h, 3.7.i)
+# + filter_by_article + check_unique_assignment
+# ---------------------------------------------------------------------------
+
+
+def _ctx_n3_ronde(ronde: int = 3) -> CompetitionContext:
+    """N3 context, no fr_gender requirement."""
+    return CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=ronde,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+    )
+
+
+def _player_full(
+    nr: str,
+    elo: int = 1900,
+    matchs_joues: int = 0,
+    matchs_equipe_sup: tuple[tuple[str, int, int], ...] | None = None,
+    group_history: str | None = None,
+    is_french_eu: bool = True,
+    is_french: bool = True,
+    sexe: str = "M",
+    mute: bool = False,
+) -> PlayerCandidate:
+    """Full PlayerCandidate with all Plan 2 extension fields."""
+    return PlayerCandidate(
+        nr_ffe=nr,
+        nom=f"P{nr}",
+        prenom="X",
+        elo=elo,
+        club="C1",
+        mute=mute,
+        genre="M",
+        categorie="SE",
+        licence_active=True,
+        matchs_joues=matchs_joues,
+        matchs_equipe_sup=matchs_equipe_sup,
+        group_history=group_history,
+        is_french_eu=is_french_eu,
+        is_french=is_french,
+        sexe=sexe,
+    )
+
+
+def test_rule_3_7_c_brule():
+    """3.7.c : player with matchs_equipe_sup >= seuil in team rank < target -> violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    # target team rank 2, player burned on stronger team (rank 1) with 3 matches
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(7)]
+    burned = _player_full("X7", 1650, matchs_equipe_sup=(("CLUB_1", 3, 1),))
+    lineup.append(burned)
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+        target_team_id="CLUB_2",
+        target_team_rank=2,
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert any(v.rule_article == "3.7.c" for v in violations)
+
+
+def test_rule_3_7_c_brule_same_team_ok():
+    """3.7.c : matches played in the SAME team don't burn."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [
+        _player_full(f"X{i}", 2000 - i * 50, matchs_equipe_sup=(("CLUB_2", 5, 2),))
+        for i in range(8)
+    ]
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+        target_team_id="CLUB_2",
+        target_team_rank=2,
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert not any(v.rule_article == "3.7.c" for v in violations)
+
+
+def test_rule_3_7_e_match_count():
+    """3.7.e : player with matchs_joues >= ronde -> violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50, matchs_joues=0) for i in range(7)]
+    lineup.append(_player_full("X7", 1650, matchs_joues=3))  # exceeds ronde=3
+    violations = engine.validate_lineup(lineup, _ctx_n3_ronde(ronde=3))
+    assert any(v.rule_article == "3.7.e" for v in violations)
+
+
+def test_rule_3_7_d_same_group():
+    """3.7.d : player with group_history != target_group -> violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(7)]
+    lineup.append(_player_full("X7", 1650, group_history="groupA"))
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+        target_group="groupB",
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert any(v.rule_article == "3.7.d" for v in violations)
+
+
+def test_rule_3_7_f_noyau_ronde_1_passes():
+    """3.7.f : ronde 1 -> noyau check always passes."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(8)]
+    violations = engine.validate_lineup(lineup, _ctx_n3_ronde(ronde=1))
+    assert not any(v.rule_article == "3.7.f" for v in violations)
+
+
+def test_rule_3_7_f_noyau_ronde_2_violates():
+    """3.7.f : ronde >= 2 with <50% in noyau -> violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(8)]
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+        noyau=frozenset({"X0", "X1", "X2"}),  # only 3/8 in noyau
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert any(v.rule_article == "3.7.f" for v in violations)
+
+
+def test_rule_3_7_f_noyau_ronde_2_passes():
+    """3.7.f : ronde >= 2 with >=50% in noyau -> no violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(8)]
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+        noyau=frozenset({"X0", "X1", "X2", "X3", "X4"}),  # 5/8 in noyau
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert not any(v.rule_article == "3.7.f" for v in violations)
+
+
+def test_rule_3_7_h_foreign_quota():
+    """3.7.h : <5 FR/UE -> violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50, is_french_eu=(i < 4)) for i in range(8)]
+    ctx = _ctx_n3_ronde(ronde=3)
+    violations = engine.validate_lineup(lineup, ctx)
+    assert any(v.rule_article == "3.7.h" for v in violations)
+
+
+def test_rule_3_7_i_fr_gender_n1_requires_fr_male_female():
+    """3.7.i : N1 without 1 FR male + 1 FR female -> violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(8)]  # all FR male
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N1",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert any(v.rule_article == "3.7.i" for v in violations)
+
+
+def test_rule_3_7_i_fr_gender_n1_passes_with_mixed():
+    """3.7.i : N1 with 1 FR male + 1 FR female -> no violation."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(7)]
+    lineup.append(_player_full("X7", 1650, sexe="F"))
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N1",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert not any(v.rule_article == "3.7.i" for v in violations)
+
+
+def test_rule_3_7_i_fr_gender_n3_no_constraint():
+    """3.7.i : Not N1/N2/Top16 -> no check."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player_full(f"X{i}", 2000 - i * 50) for i in range(8)]  # all FR male
+    violations = engine.validate_lineup(lineup, _ctx_n3_ronde(ronde=3))
+    assert not any(v.rule_article == "3.7.i" for v in violations)
+
+
+def test_check_unique_assignment_no_duplicates():
+    """1 joueur = 1 equipe (cross-team OK)."""
+    assert RuleEngine.check_unique_assignment([["A1", "A2"], ["A3", "A4"]]) is True
+
+
+def test_check_unique_assignment_duplicate():
+    """1 joueur = 1 equipe (cross-team duplicate)."""
+    assert RuleEngine.check_unique_assignment([["A1", "A2"], ["A2", "A3"]]) is False
+
+
+def test_filter_by_article_brule():
+    """filter_by_article('3.7.c') removes burned players."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    pool = [
+        _player_full("OK", 1900),
+        _player_full("BAD", 2000, matchs_equipe_sup=(("CLUB_1", 3, 1),)),
+    ]
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+        target_team_id="CLUB_2",
+        target_team_rank=2,
+    )
+    out = engine.filter_by_article(pool, "3.7.c", ctx)
+    assert len(out) == 1
+    assert out[0].nr_ffe == "OK"
+
+
+def test_filter_by_article_match_count():
+    """filter_by_article('3.7.e') removes players at quota."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    pool = [
+        _player_full("OK", 1900, matchs_joues=1),
+        _player_full("BAD", 2000, matchs_joues=3),
+    ]
+    out = engine.filter_by_article(pool, "3.7.e", _ctx_n3_ronde(ronde=3))
+    assert len(out) == 1
+    assert out[0].nr_ffe == "OK"
+
+
+def test_filter_by_article_same_group():
+    """filter_by_article('3.7.d') removes players with different group_history."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    pool = [
+        _player_full("OK", 1900, group_history="groupA"),
+        _player_full("BAD", 2000, group_history="groupB"),
+        _player_full("NEW", 1800, group_history=None),  # untouched
+    ]
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N3",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+        target_group="groupA",
+    )
+    out = engine.filter_by_article(pool, "3.7.d", ctx)
+    assert {p.nr_ffe for p in out} == {"OK", "NEW"}
+
+
+def test_filter_by_article_elo_max():
+    """filter_by_article('3.7.j') removes over-Elo players."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    pool = [_player_full("OK", 2300), _player_full("BAD", 2500)]
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N4",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=2400,
+    )
+    out = engine.filter_by_article(pool, "3.7.j", ctx)
+    assert len(out) == 1
+    assert out[0].nr_ffe == "OK"
+
+
+def test_filter_by_article_unknown_returns_pool():
+    """Unknown article returns pool unchanged."""
+    engine = RuleEngine.from_json_file(REAL_A02)
+    pool = [_player_full("A", 1900), _player_full("B", 2000)]
+    out = engine.filter_by_article(pool, "99.9.x", _ctx_n3_ronde())
+    assert len(out) == 2

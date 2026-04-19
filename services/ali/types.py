@@ -25,6 +25,11 @@ class PlayerCandidate:
 
     Champs optionnels : features historiques (brule) non requises
     pour les regles de base. Alimentes par le feature_store en Phase 3.
+
+    Extension Plan 2 Task 9 (D-P3-11) : champs legacy-migration pour
+    permettre a RuleEngine de couvrir articles 3.7.c (brule),
+    3.7.d (same_group), 3.7.e (match_count), 3.7.h (foreign_quota),
+    3.7.i (fr_gender). Defaults backward-compat preserves.
     """
 
     nr_ffe: str
@@ -46,6 +51,14 @@ class PlayerCandidate:
     echiquier_prefere: int | None = None
     role_type: str | None = None
 
+    # Plan 2 legacy extension (D-P3-11 migration RuleEngine)
+    matchs_joues: int = 0
+    matchs_equipe_sup: tuple[tuple[str, int, int], ...] | None = None
+    group_history: str | None = None
+    is_french_eu: bool = True
+    is_french: bool = True
+    sexe: str = "M"
+
 
 @dataclass(frozen=True)
 class CompetitionContext:
@@ -53,6 +66,12 @@ class CompetitionContext:
 
     Porte les parametres competition-specifiques (noyau, max_mutes,
     elo_max) qui surchargent ou completent les `conditions` des Rules.
+
+    Extension Plan 2 Task 9 (D-P3-11) : champs pour permettre a
+    RuleEngine d'evaluer les articles 3.7.c (brule), 3.7.d
+    (same_group), 3.7.f (noyau), 3.7.h (foreign_quota). Defaults
+    backward-compat preserves (target_team_id non restrictif,
+    noyau vide -> check_noyau retourne True).
     """
 
     competition_code: str
@@ -62,6 +81,12 @@ class CompetitionContext:
     noyau_min: int
     max_mutes: int
     elo_max: int | None
+    target_team_id: str = "_1"
+    target_team_rank: int = 1
+    target_group: str = "default"
+    noyau: frozenset[str] = frozenset()
+    brule_seuil: int = 3
+    min_fr_eu: int = 5
 
 
 @dataclass(frozen=True)

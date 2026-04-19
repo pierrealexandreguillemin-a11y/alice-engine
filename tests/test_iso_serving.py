@@ -10,14 +10,18 @@ class TestISO5055CodeQuality:
     """ISO 5055: file size and complexity limits."""
 
     def test_file_sizes_under_300_lines(self):
-        """No Phase 2 file exceeds 300 lines."""
+        """No Phase 2/3 file exceeds 300 lines (D-P3-11 : ffe_rules.py removed)."""
         phase2_files = [
             "scripts/serving/meta_features.py",
             "scripts/serving/model_loader.py",
             "services/feature_store.py",
             "services/inference.py",
-            "services/ffe_rules.py",
+            "services/ffe/rule_engine.py",
+            "services/ffe/checkers.py",
+            "services/ffe/filters.py",
             "app/api/routes.py",
+            "app/api/compose_helpers.py",
+            "app/api/compose_scenarios.py",
             "app/api/schemas.py",
         ]
         for f in phase2_files:

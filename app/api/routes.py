@@ -1,238 +1,55 @@
 """Module: routes.py - Controller Layer (SRP).
 
 Responsabilite unique: Gestion HTTP (validation, serialisation).
-La logique metier est deleguee aux services.
+La logique metier est deleguee a app.api.compose_helpers.
 
 ISO Compliance:
 - ISO/IEC 27001 - Information Security (audit logs)
 - ISO/IEC 27034 - Secure Coding (input validation, CWE-20)
 - ISO/IEC 42010 - Architecture (Controller layer, SRP)
 - ISO/IEC 25010 - System Quality (securite, fiabilite)
+- ISO/IEC 5055 - File <= 300 lignes (D-P3-11 split compose_helpers)
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from app.api.compose_helpers import (
+    apply_pre_filters,
+    build_player_pool,
+    validate_ffe,
+)
+from app.api.compose_scenarios import (
+    ComposeCtx,
+    build_metadata,
+    compose_boards_and_predictions,
+    make_competition_context,
+)
 from app.api.schemas import (
-    BoardResult,
     ComposeRequest,
     ComposeResponse,
-    OpponentPrediction,
     RecomposeRequest,
     TeamComposition,
 )
 from app.logging_config import get_audit_logger, get_logger
-from services.ali.aggregation import (
-    AggregatedBoard,
-    ScenarioAggregationCtx,
-    aggregate_from_scenarios,
-)
-from services.ali.types import CompetitionContext
 from services.audit import OperationType
-from services.ffe_rules import (
-    check_elo_max,
-    check_elo_order,
-    check_foreign_quota,
-    check_fr_gender,
-    check_mutes_limit,
-    check_noyau,
-    check_team_size,
-    check_unique_assignment,
-    filter_brule,
-    filter_match_count,
-    filter_same_group,
-    sort_by_elo,
-)
 from services.inference import StackingInferenceService
 
 if TYPE_CHECKING:
     from services.ali.scenario import ScenarioSet
+    from services.ffe.rule_engine import RuleEngine
 
 logger = get_logger(__name__)
 audit_logger = get_audit_logger()
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/v1", tags=["ALICE"])
-
-
-def _build_player_pool(body: ComposeRequest) -> list[dict]:
-    """Build synthetic player pool (Phase 2: no MongoDB, all Elo 1500)."""
-    return [
-        {"ffe_id": fid, "elo": 1500, "matchs_joues": 0, "matchs_equipe_sup": {}}
-        for fid in body.joueurs_disponibles
-    ]
-
-
-def _apply_pre_filters(players: list[dict], body: ComposeRequest) -> list[dict]:
-    """FFE pre-filter: remove ineligible players before composition."""
-    eligible = filter_brule(players, target_team=f"{body.club_id}_1", team_rank=1)
-    eligible = filter_match_count(eligible, ronde=body.ronde)
-    return filter_same_group(eligible, target_group="default", group_history={})
-
-
-@dataclass
-class _BoardContext:
-    """Context for a single board prediction."""
-
-    player: dict
-    opp_elo: int
-    board_num: int
-    ronde: int
-    division: str
-
-
-def _predict_board(
-    inference: StackingInferenceService, ctx: _BoardContext, feature_store: Any
-) -> BoardResult:
-    """Predict P(W/D/L) for one board assignment (Phase 2 fallback path)."""
-    if feature_store is not None:
-        feat = np.asarray(
-            feature_store.assemble(
-                player_name=ctx.player["ffe_id"],
-                player_elo=ctx.player["elo"],
-                opponent_elo=ctx.opp_elo,
-                context={"ronde": ctx.ronde, "division": ctx.division},
-            ).values
-        )
-    else:
-        feat = np.zeros((1, 201))
-    try:
-        r = inference.predict_board(
-            player_elo=ctx.player["elo"], opponent_elo=ctx.opp_elo, features=feat
-        )
-        p_win, p_draw, p_loss, e_score = r.p_win, r.p_draw, r.p_loss, r.e_score
-    except Exception:
-        logger.exception("Inference failed for player %s", ctx.player["ffe_id"])
-        p_win, p_draw, p_loss, e_score = 0.45, 0.15, 0.40, 0.525
-    return BoardResult(
-        board=ctx.board_num,
-        joueur=ctx.player["ffe_id"],
-        elo=ctx.player["elo"],
-        adversaire=f"OPP_{ctx.board_num}",
-        adversaire_elo=ctx.opp_elo,
-        p_win=round(p_win, 4),
-        p_draw=round(p_draw, 4),
-        p_loss=round(p_loss, 4),
-        e_score=round(e_score, 4),
-    )
-
-
-def _validate_ffe(boards: list[BoardResult], body: ComposeRequest, team_size: int) -> bool:
-    """FFE post-check: validate composed team against 11 blocking rules."""
-    elos = [b.elo for b in boards]
-    selected = [
-        {
-            "ffe_id": b.joueur,
-            "elo": b.elo,
-            "is_muted": False,
-            "is_french_eu": True,
-            "is_french": True,
-            "sexe": "M",
-        }
-        for b in boards
-    ]
-
-    checks = [
-        check_elo_order(elos),
-        check_team_size(len(boards), required=team_size),
-        check_unique_assignment([[b.joueur for b in boards]]),
-        check_noyau([b.joueur for b in boards], noyau=set(), ronde=body.ronde),
-        check_mutes_limit(selected, max_mutes=3),
-        check_foreign_quota(selected, min_fr_eu=5),
-    ]
-
-    if body.division in ("N1", "N2"):
-        checks.append(check_fr_gender(selected))
-    if body.division == "N4":
-        checks.append(check_elo_max(selected, elo_max=2400))
-
-    return all(checks)
-
-
-def _make_competition_context(body: ComposeRequest, team_size: int) -> CompetitionContext:
-    """Build CompetitionContext for the ScenarioGenerator from a ComposeRequest."""
-    return CompetitionContext(
-        competition_code="A02",
-        niveau=body.division,
-        ronde=body.ronde,
-        team_size=team_size,
-        noyau_min=50,
-        max_mutes=3,
-        elo_max=2400 if body.division == "N4" else None,
-    )
-
-
-def _try_generate_scenarios(
-    request: Request,
-    body: ComposeRequest,
-    team_size: int,
-) -> ScenarioSet | None:
-    """Invoke ALI ScenarioGenerator if available and Phase 3 fields present.
-
-    Returns None on any failure; caller falls back to Phase 2 Elo synthetic.
-    ISO 25010 : no hard failure on ALI absence; degraded path preserved.
-    """
-    generator = getattr(request.app.state, "scenario_generator", None)
-    if generator is None or body.opponent_club_id is None:
-        return None
-    round_date = body.round_date or datetime.now(UTC).strftime("%Y-%m-%d")
-    saison = body.saison or datetime.now(UTC).year
-    current_round = body.current_round or body.ronde
-    nb_rondes_total = body.nb_rondes_total or 11
-    ctx = _make_competition_context(body, team_size)
-    try:
-        result: ScenarioSet = generator.generate(
-            opponent_club_id=body.opponent_club_id,
-            round_date=round_date,
-            context=ctx,
-            saison=saison,
-            current_round=current_round,
-            nb_rondes_total=nb_rondes_total,
-            overrides=body.player_overrides,
-        )
-    except Exception:
-        logger.exception("ali_generator_failed club=%s", body.opponent_club_id)
-        return None
-    return result
-
-
-def _to_board_and_pred(agg: AggregatedBoard) -> tuple[BoardResult, OpponentPrediction]:
-    """Adapt aggregated service result -> API schemas (routes controller role)."""
-    board = BoardResult(
-        board=agg.board,
-        joueur=agg.user_ffe_id,
-        elo=agg.user_elo,
-        adversaire=agg.mode_opponent_ffe,
-        adversaire_elo=agg.mean_opponent_elo,
-        p_win=agg.p_win,
-        p_draw=agg.p_draw,
-        p_loss=agg.p_loss,
-        e_score=agg.e_score,
-    )
-    pred = OpponentPrediction(
-        board=agg.board, joueur=agg.mode_opponent_ffe, elo=agg.mean_opponent_elo
-    )
-    return board, pred
-
-
-def _default_opponent(
-    selected: list[dict[str, Any]], team_size: int
-) -> tuple[list[int], list[OpponentPrediction]]:
-    """Phase 2 fallback: opponent Elo = user Elo - 50 (ALICE-TEST-CE-001 style)."""
-    opponent_elos = [int(p["elo"]) - 50 for p in selected[:team_size]]
-    predictions = [
-        OpponentPrediction(board=i + 1, joueur=f"OPP_{i + 1}", elo=e)
-        for i, e in enumerate(opponent_elos)
-    ]
-    return opponent_elos, predictions
 
 
 async def _audit_compose(
@@ -269,97 +86,6 @@ async def _audit_compose(
     )
 
 
-def _build_boards(
-    inference: StackingInferenceService,
-    selected: list[dict[str, Any]],
-    opponent_elos: list[int],
-    body: ComposeRequest,
-    feature_store: Any,
-) -> list[BoardResult]:
-    """Run StackingInferenceService.predict_board for each (player, opp_elo) pair."""
-    return [
-        _predict_board(
-            inference,
-            _BoardContext(
-                player=player,
-                opp_elo=opp_elo,
-                board_num=i + 1,
-                ronde=body.ronde,
-                division=body.division,
-            ),
-            feature_store,
-        )
-        for i, (player, opp_elo) in enumerate(zip(selected, opponent_elos, strict=False))
-    ]
-
-
-@dataclass
-class _ComposeCtx:
-    """Context bundle for compose flow (ISO 5055 PLR0913 compliance)."""
-
-    request: Request
-    body: ComposeRequest
-    selected: list[dict[str, Any]]
-    team_size: int
-    inference: StackingInferenceService
-    feature_store: Any
-
-
-def _compose_boards_and_predictions(
-    ctx: _ComposeCtx,
-) -> tuple[ScenarioSet | None, list[BoardResult], list[OpponentPrediction], str, str]:
-    """Resolve opponent + compute per-board predictions.
-
-    ALI path : aggregate 20 scenarios weighted (D-P2-06 fix, spec §2 §4.7).
-    Fallback path : Phase 2 Elo synthetic, 1 inference call per board.
-
-    Returns (scenario_set, boards, opp_predictions, ali_mode, adversaire_label).
-    """
-    scenario_set = _try_generate_scenarios(ctx.request, ctx.body, ctx.team_size)
-    if scenario_set is not None:
-        agg_ctx = ScenarioAggregationCtx(
-            scenario_set=scenario_set,
-            user_lineup=ctx.selected,
-            team_size=ctx.team_size,
-            ronde=ctx.body.ronde,
-            division=ctx.body.division,
-        )
-        aggregated = aggregate_from_scenarios(ctx.inference, ctx.feature_store, agg_ctx)
-        boards = []
-        preds = []
-        for agg in aggregated:
-            b, p = _to_board_and_pred(agg)
-            boards.append(b)
-            preds.append(p)
-        return (
-            scenario_set,
-            boards,
-            preds,
-            "scenario_generator",
-            f"{ctx.body.opponent_club_id} (ALI 20-scenario weighted avg)",
-        )
-    opp_elos, preds = _default_opponent(ctx.selected, ctx.team_size)
-    boards = _build_boards(ctx.inference, ctx.selected, opp_elos, ctx.body, ctx.feature_store)
-    return None, boards, preds, "elo_fallback", "Adversaire (ALI fallback)"
-
-
-def _build_metadata(
-    bundle: Any, ali_mode: str, duration_ms: float, scenario_set: ScenarioSet | None
-) -> dict[str, Any]:
-    """Assemble response metadata with lineage_hash when ALI active."""
-    metadata: dict[str, Any] = {
-        "model_version": bundle.version if bundle else "none",
-        "ali_mode": ali_mode,
-        "fallback": bundle.fallback_mode if bundle else True,
-        "timestamp": datetime.now(UTC).isoformat(),
-        "duration_ms": round(duration_ms, 2),
-    }
-    if scenario_set is not None:
-        metadata["lineage_hash"] = scenario_set.lineage_hash
-        metadata["n_scenarios"] = len(scenario_set.scenarios)
-    return metadata
-
-
 @router.post("/compose", response_model=ComposeResponse)
 @limiter.limit("30/minute")
 async def compose_teams(body: ComposeRequest, request: Request) -> ComposeResponse:
@@ -371,13 +97,16 @@ async def compose_teams(body: ComposeRequest, request: Request) -> ComposeRespon
         raise HTTPException(status_code=503, detail="Models not loaded")
 
     inference = StackingInferenceService(bundle)
-    pool = _build_player_pool(body)
-    eligible = _apply_pre_filters(pool, body)
-    sorted_players = sort_by_elo(eligible)
-    team_size = min(8, len(sorted_players))
+    engine: RuleEngine | None = getattr(request.app.state, "rule_engine", None)
+    pool = build_player_pool(body)
+    team_size_target = 8
+    pre_ctx = make_competition_context(body, team_size_target)
+    eligible = apply_pre_filters(engine, pool, pre_ctx)
+    sorted_players = sorted(eligible, key=lambda p: -p.elo)
+    team_size = min(team_size_target, len(sorted_players))
     selected = sorted_players[:team_size]
 
-    compose_ctx = _ComposeCtx(
+    compose_ctx = ComposeCtx(
         request=request,
         body=body,
         selected=selected,
@@ -385,10 +114,11 @@ async def compose_teams(body: ComposeRequest, request: Request) -> ComposeRespon
         inference=inference,
         feature_store=feature_store,
     )
-    scenario_set, boards, opp_preds, ali_mode, opp_label = _compose_boards_and_predictions(
+    scenario_set, boards, opp_preds, ali_mode, opp_label = compose_boards_and_predictions(
         compose_ctx
     )
-    all_ok = _validate_ffe(boards, body, team_size)
+    validate_ctx = make_competition_context(body, team_size)
+    all_ok = validate_ffe(engine, boards, selected, validate_ctx)
 
     composition = TeamComposition(
         equipe=f"{body.club_id} - Equipe 1",
@@ -415,7 +145,7 @@ async def compose_teams(body: ComposeRequest, request: Request) -> ComposeRespon
     )
     await _audit_compose(request, body, scenario_set, all_ok, duration_ms)
 
-    metadata = _build_metadata(bundle, ali_mode, duration_ms, scenario_set)
+    metadata = build_metadata(bundle, ali_mode, duration_ms, scenario_set)
     return ComposeResponse(compositions=[composition], metadata=metadata)
 
 
