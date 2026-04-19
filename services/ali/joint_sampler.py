@@ -62,6 +62,16 @@ class CopulaJointSampler:
             raise RuntimeError(msg)
         return self._correlation_matrix.copy()
 
+    @property
+    def is_fit(self) -> bool:
+        """Return True iff fit() has been called with valid data."""
+        return self._marginales is not None and self._cholesky is not None
+
+    @property
+    def n_players(self) -> int:
+        """Return the number of players (marginales dimension)."""
+        return self._n_players
+
     def fit(  # noqa: PLR0913
         self,
         history: pd.DataFrame,
@@ -128,6 +138,29 @@ class CopulaJointSampler:
         u = norm.cdf(y)
         # Inverse-CDF binaire : x_i = 1 si u_i < p_i
         result: NDArray[np.int8] = (u < self._marginales).astype(np.int8)
+        return result
+
+    def transform_uniform_to_presence(
+        self,
+        u: NDArray[np.float64],
+    ) -> NDArray[np.int8]:
+        """Inverse-transform u uniform [0,1]^N -> presence binaire via copule.
+
+        Pour integration avec MonteCarloSampler (LHS samples) :
+            u -> z = Phi^-1(u)  (gaussian inverse CDF)
+            y = L @ z           (apply Cholesky correlation)
+            u_corr = Phi(y)     (back to uniform)
+            x_i = 1 if u_corr_i < marginales_i
+        """
+        if self._cholesky is None or self._marginales is None:
+            msg = "CopulaJointSampler not fit yet"
+            raise RuntimeError(msg)
+        # Clip to avoid Phi^-1(0) = -inf
+        u_clipped = np.clip(u, 1e-9, 1 - 1e-9)
+        z = norm.ppf(u_clipped)
+        y = self._cholesky @ z
+        u_corr = norm.cdf(y)
+        result: NDArray[np.int8] = (u_corr < self._marginales).astype(np.int8)
         return result
 
     def _taux_presence(  # noqa: PLR0913

@@ -162,18 +162,19 @@ class MonteCarloSampler:
                 return self._build_scenario(lineup)
         return None
 
-    @staticmethod
     def _u_to_presence(
+        self,
         u: NDArray[np.float64],
         pool: list[PlayerCandidate],
     ) -> NDArray[np.int8]:
-        """Inverse-transform via copula : u uniform -> presence binary.
+        """Inverse-transform via copule fittee (structure correlation preservee).
 
-        Simplified : threshold directly on marginales (taux_presence_effectif).
-        The full copula chain (Cholesky, Phi) is encapsulated in
-        CopulaJointSampler.sample(); here we use the uniform draw as the
-        marginal CDF and threshold against p_i.
+        Si copula a ete fittee sur le bon pool, appel transform_uniform_to_presence.
+        Sinon (copula non fittee ou mismatch), fallback threshold direct sur marginales pool.
         """
+        if self._copula.is_fit and self._copula.n_players == len(pool):
+            return self._copula.transform_uniform_to_presence(u)
+        # Fallback : threshold marginal (pool-based, no correlation)
         marginales = np.array([(p.taux_presence_effectif or _DEFAULT_TAUX) for p in pool])
         presence: NDArray[np.int8] = (u < marginales).astype(np.int8)
         return presence

@@ -110,3 +110,19 @@ def test_sampler_correlated_players_co_occur() -> None:
     p_a = (samples[:, 0] == 1).mean()
     p_b = (samples[:, 1] == 1).mean()
     assert p_a_and_b > p_a * p_b * 1.1  # 10% above independence baseline
+
+
+def test_transform_uniform_returns_binary_with_correct_marginales() -> None:
+    """Uniform inputs -> binary presence with marginales empiriques ~ taux."""
+    hist = _build_history()
+    sampler = CopulaJointSampler(decay_lambda=1.0)
+    sampler.fit(hist, ["A", "B", "C"], saison=2024, nb_rondes_total=5, current_round=6)
+    rng = np.random.default_rng(99)
+    samples = []
+    for _ in range(2000):
+        u = rng.uniform(size=3)
+        samples.append(sampler.transform_uniform_to_presence(u))
+    arr = np.array(samples)
+    assert ((arr == 0) | (arr == 1)).all()
+    # Marginales empiriques ~ 0.6 (3/5 each)
+    np.testing.assert_allclose(arr.mean(axis=0), [0.6, 0.6, 0.6], atol=0.06)
