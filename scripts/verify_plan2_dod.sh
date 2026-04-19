@@ -94,9 +94,11 @@ grep -q "_init_ali_generator" app/main.py
 grep -q "ScenarioGenerator" app/main.py
 echo "  OK"
 
-echo "=== Structural: app/api/routes.py wires ScenarioGenerator ==="
-grep -q "_try_generate_scenarios" app/api/routes.py
-grep -q "scenario_generator" app/api/routes.py
+echo "=== Structural: app/api/routes.py wires ScenarioGenerator (via compose_scenarios helpers) ==="
+grep -q "compose_scenarios" app/api/routes.py
+grep -q "ScenarioSet" app/api/routes.py
+grep -q "try_generate_scenarios" app/api/compose_scenarios.py
+grep -q "compose_boards_and_predictions" app/api/compose_scenarios.py
 echo "  OK"
 
 echo "=== Structural: ComposeRequest +6 ALI fields ==="
