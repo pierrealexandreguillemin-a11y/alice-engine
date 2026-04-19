@@ -1,8 +1,8 @@
 # ALI — Architecture (Phase 3)
 
-**Last updated** : 2026-04-19 (Plan 1 Foundations complète)
-**Status** : Plan 1 livré, Plan 2 Générateur SOTA à venir
-**Référence ADR** : ADR-013 (RuleEngine JSON-driven replaces Python rules)
+**Last updated** : 2026-04-19 (Plan 2 Generator SOTA livré)
+**Status** : Plans 1+2 livrés, Plan 3 backtest validation à venir
+**Référence ADR** : ADR-013 (RuleEngine JSON) + ADR-014 (ALI MC hybride SOTA)
 
 ## Vue d'ensemble Plan 1
 
@@ -104,9 +104,83 @@ Aucune nouvelle dépendance ajoutée en Plan 1. Réutilise pandas, pydantic, pat
 | ISO 24027 | F7 survivor filter assumption documentée |
 | ISO 15289 | MkDocs build --strict pass, documentation ALI_ARCHITECTURE.md livrée |
 
-## Suite (Plans 2-5)
+## Plan 2 — Générateur SOTA (livré 2026-04-19)
 
-- **Plan 2** : CopulaJointSampler (F6 SOTA) + TopKEnumerator + MonteCarloSampler (F5 LHS/antithetic) + ScenarioGenerator + wire /compose
-- **Plan 3** : Walk-forward backtest + 10 gates T13-T22 + Model Card
-- **Plan 4** : ScenarioExplainer + ConfidenceLevel + FeedbackCollector + Artefacts ISO 19 normes
-- **Plan 5** : Observability DIY + KillSwitch + STRIDE + Capacity + Property-based testing + Multi-tenant-ready
+### Composants ajoutés
+
+```
+services/ali/
+  ├── scenario.py          (frozen types: BoardAssignment, Lineup, Scenario, ScenarioSet)
+  ├── joint_sampler.py     (CopulaJointSampler — F6 Sklar 1959)
+  ├── topk.py              (TopKEnumerator — branch-and-bound déterministe)
+  ├── monte_carlo.py       (MonteCarloSampler + LHS + antithetic — F5 McKay 1979)
+  └── generator.py         (ScenarioGenerator — orchestrateur 10 TopK + 10 MC = 20)
+
+app/
+  ├── main.py              (lifespan : _init_ali_generator)
+  └── api/
+      ├── routes.py        (compose_route wired ScenarioGenerator)
+      └── schemas.py       (ComposeRequest +6 fields ALI optional)
+```
+
+### Pipeline /compose avec ALI
+
+```
+POST /compose request
+  ├── club_id + joueurs_disponibles + ronde + division (Phase 2)
+  ├── opponent_club_id + round_date + saison + current_round + nb_rondes_total (Plan 2)
+  └── player_overrides? (optional)
+       │
+       ▼
+ScenarioGenerator.generate(opponent_club_id, ...)
+  1. PlayerPoolLoader.load_pool (F7 implicit via membership)
+  2. HistoryEnricher.enrich (F2 recency + F3 streak)
+  3. CopulaJointSampler.fit (Spearman rank correlation matrix)
+  4. RuleEngine.filter_candidates (10 PUBLIC rules A02)
+  5. TopKEnumerator.enumerate (10 lineups deterministic)
+  6. MonteCarloSampler.sample (10 lineups LHS + antithetic via copule)
+  7. _merge_and_pad : dedup distincts (T20), boucle si < 20
+  8. _renormalize : sum(weights) = 1.0 (T18)
+  9. ScenarioSet.validate (T18, T19)
+  10. lineage_hash = SHA-256(opp + date + ctx + saison + round + lambda + rules_sig + parquet_sigs)
+       │
+       ▼
+ScenarioSet (20 scenarios, lineage_hash)
+       │
+       ▼
+Boucle inférence Phase 2 × 20 scenarios → CE moyenne pondérée
+       │
+       ▼
+ComposeResponse {
+  lineup, expected_score, per_board_probabilities,
+  metadata: { lineage_hash, ali_mode: "scenario_generator", n_scenarios: 20, rule_uuids: [...] }
+}
+```
+
+### F1/F5/F6 — Composants SOTA Plan 2
+
+| Composant | Source littérature |
+|-----------|---------------------|
+| F1 — Joint distribution sampling (CopulaJointSampler) | Sklar 1959, Genest & Favre 2007, Nelsen 2006 |
+| F5 — Latin Hypercube + antithetic variates (MonteCarloSampler) | McKay, Beckman, Conover 1979 ; Hammersley & Morton 1956 ; Owen 2013 |
+| F6 — Copule gaussienne (extension F1, méthode `transform_uniform_to_presence`) | Sklar 1959, Cholesky |
+
+### Quality gates Plan 2 — 16 P2G + 7 structural
+
+Voir `docs/superpowers/plans/2026-04-19-phase3-plan2-generator-sota.md` §DoD pour la table complète. Gates clés :
+- T18 sum(weights)=1±1e-4
+- T19 len(scenarios)=20
+- T20 distincts garantis (ScenarioGenerator._merge_and_pad)
+- T21 MC rejection_rate ≤ 30%
+- Latence p95 /compose ≤ 2000ms (mesuré)
+- Coverage ≥ 75% (Plan 1+2 combinés)
+
+### Backward compatibility Phase 2
+
+Si `opponent_club_id` absent dans la request, `_try_generate_scenarios` retourne None → fallback Phase 2 inchangé (Elo synthétique + tri Elo). Tests `tests/test_compose_e2e.py` 11/11 PASS sans régression.
+
+## Suite (Plans 3-5)
+
+- **Plan 3** : Walk-forward backtest + 10 gates T13-T22 + Model Card SOTA + suppression `services/ffe_rules.py` legacy (D-P3-11)
+- **Plan 4** : ScenarioExplainer + ConfidenceLevel + FeedbackCollector + AI_RISK_REGISTER (R-ALI-*)
+- **Plan 5** : Observability DIY + KillSwitch + STRIDE + Capacity benchmark + Property-based testing + Multi-tenant-ready
