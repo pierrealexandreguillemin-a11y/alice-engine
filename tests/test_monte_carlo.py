@@ -42,7 +42,7 @@ def _player(nr: str, elo: int, taux: float = 0.7) -> PlayerCandidate:
 def _ctx(team_size: int = 8) -> CompetitionContext:
     return CompetitionContext(
         competition_code="A02",
-        niveau="N2",
+        niveau="N3",
         ronde=3,
         team_size=team_size,
         noyau_min=50,

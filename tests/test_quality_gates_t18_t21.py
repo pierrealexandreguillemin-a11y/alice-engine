@@ -36,7 +36,7 @@ CLASSIF = Path("config/ffe_rules/alice_verifiability.json")
 def _ctx(team_size: int = 8) -> CompetitionContext:
     return CompetitionContext(
         competition_code="A02",
-        niveau="N2",
+        niveau="N3",
         ronde=5,
         team_size=team_size,
         noyau_min=50,
