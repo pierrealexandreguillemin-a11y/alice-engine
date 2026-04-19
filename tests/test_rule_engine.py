@@ -106,3 +106,57 @@ def test_validate_lineup_happy_path() -> None:
     violations = engine.validate_lineup(lineup, _ctx())
     hard_errors = [v for v in violations if v.severity == "error"]
     assert not any(v.rule_article == "3.7.a" for v in hard_errors)
+
+
+def _lineup_ok():
+    return [_player(f"X{i}", 2000 - i * 50) for i in range(8)]
+
+
+def test_rule_3_7_a_too_few():
+    engine = RuleEngine.from_json_file(REAL_A02)
+    violations = engine.validate_lineup(_lineup_ok()[:7], _ctx())
+    assert any(v.rule_article == "3.7.a" for v in violations)
+
+
+def test_rule_3_7_a_too_many():
+    engine = RuleEngine.from_json_file(REAL_A02)
+    violations = engine.validate_lineup(_lineup_ok() + [_player("X8", 1000)], _ctx())
+    assert any(v.rule_article == "3.7.a" for v in violations)
+
+
+def test_rule_3_6_e_bad_order():
+    engine = RuleEngine.from_json_file(REAL_A02)
+    # Ecart > 100 Elo entre 2 boards consecutifs = violation
+    lineup = [_player("X0", 1600)] + [_player(f"X{i}", 2500) for i in range(1, 8)]
+    violations = engine.validate_lineup(lineup, _ctx())
+    assert any(v.rule_article == "3.6.e" for v in violations)
+
+
+def test_rule_3_7_g_too_many_mutes():
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player(f"X{i}", 2000 - i * 50, mute=(i < 4)) for i in range(8)]
+    violations = engine.validate_lineup(lineup, _ctx())
+    assert any(v.rule_article == "3.7.g" for v in violations)
+
+
+def test_rule_3_7_j_elo_max():
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player(f"X{i}", 2500) for i in range(8)]
+    ctx = CompetitionContext(
+        competition_code="A02",
+        niveau="N4",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=2400,
+    )
+    violations = engine.validate_lineup(lineup, ctx)
+    assert any(v.rule_article == "3.7.j" for v in violations)
+
+
+def test_rule_3_7_j_not_applied_when_no_cap():
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player(f"X{i}", 2500) for i in range(8)]
+    violations = engine.validate_lineup(lineup, _ctx())  # elo_max=None
+    assert not any(v.rule_article == "3.7.j" for v in violations)
