@@ -20,14 +20,16 @@ from services.ffe.rule_engine import RuleEngine
 REAL_A02 = Path("config/ffe_rules/a02.json")
 
 
-def _player(nr: str, elo: int, taux: float = 0.8) -> PlayerCandidate:
+def _player(
+    nr: str, elo: int, taux: float = 0.8, *, mute: bool = False,
+) -> PlayerCandidate:
     return PlayerCandidate(
         nr_ffe=nr,
         nom=f"P{nr}",
         prenom="X",
         elo=elo,
         club="C1",
-        mute=False,
+        mute=mute,
         genre="M",
         categorie="SE",
         licence_active=True,
@@ -119,3 +121,54 @@ def test_topk_returns_scenarios_with_source_topk():
     scenarios = enumerator.enumerate(pool, _ctx(team_size=8), k=2)
     for s in scenarios:
         assert s.source == "topk"
+
+
+def test_topk_backtracking_explores_beyond_single_swap():
+    """B&B : top-K explore par priority queue DESC sur joint_prob.
+
+    Verifie la propriete cle de l'algo B&B priorise (spec §4.6) :
+    - K lineups distincts meme avec beaucoup de reserves disponibles
+    - joint_prob DESC strict (priority queue le garantit)
+    """
+    pool = [_player(f"P{i}", 2200 - i * 30, taux=0.9 - i * 0.05) for i in range(14)]
+    engine = RuleEngine.from_json_file(REAL_A02)
+    enumerator = TopKEnumerator(engine=engine)
+    scenarios = enumerator.enumerate(pool, _ctx(team_size=8), k=5)
+
+    # Les 5 lineups doivent etre distincts par signature canonique (nr_ffe, board)
+    sigs = {
+        tuple((a.player.nr_ffe, a.board) for a in s.lineup.assignments)
+        for s in scenarios
+    }
+    assert len(sigs) == 5, f"expected 5 distinct lineups, got {len(sigs)}"
+
+    # joint_prob DESC strict (priority queue le garantit)
+    probs = [s.joint_prob for s in scenarios]
+    for i in range(len(probs) - 1):
+        assert probs[i] >= probs[i + 1], f"not DESC: {probs}"
+
+
+def test_topk_respects_rule_engine_constraints_during_backtracking():
+    """B&B : neighbors invalides (contraintes FFE violees) sont pruned.
+
+    Avec 6 mutes dans un pool de 12 et max_mutes=3, tout lineup de 8
+    contenant > 3 mutes doit etre rejete par le B&B (prune via
+    RuleEngine.validate_lineup). Comme le top initial contient deja 6 mutes,
+    on ajoute un pool majoritairement non-mute pour tester le prune.
+    """
+    # 8 non-mutes (plus forts) + 6 mutes (plus faibles) = 14 total
+    non_mutes = [
+        _player(f"NM{i}", 2200 - i * 20, taux=0.9 - i * 0.02) for i in range(8)
+    ]
+    mutes = [
+        _player(f"M{i}", 2050 - i * 20, taux=0.5, mute=True) for i in range(6)
+    ]
+    pool = non_mutes + mutes
+    engine = RuleEngine.from_json_file(REAL_A02)
+    enumerator = TopKEnumerator(engine=engine)
+    scenarios = enumerator.enumerate(pool, _ctx(team_size=8), k=5)
+
+    # Tous les lineups retournes doivent respecter max_mutes=3
+    for s in scenarios:
+        muted = sum(1 for a in s.lineup.assignments if a.player.mute)
+        assert muted <= 3, f"scenario has {muted} mutes > 3 (prune failed)"
