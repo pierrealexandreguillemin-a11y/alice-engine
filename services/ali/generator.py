@@ -22,6 +22,7 @@ from services.ali.joint_sampler import CopulaJointSampler
 from services.ali.monte_carlo import MonteCarloSampler
 from services.ali.scenario import Scenario, ScenarioSet
 from services.ali.topk import TopKEnumerator
+from services.ffe.rule_engine import RuleEngine
 
 if TYPE_CHECKING:
     from services.ali.cache import ALIDataCache
@@ -29,7 +30,6 @@ if TYPE_CHECKING:
     from services.ali.pool_loader import PlayerPoolLoader
     from services.ali.types import CompetitionContext, PlayerCandidate
     from services.ali.verifiability import VerifiabilityClassifier
-    from services.ffe.rule_engine import RuleEngine
 
 
 _EXPECTED_TOTAL = 20
@@ -92,16 +92,23 @@ class ScenarioGenerator:
             nb_rondes_total=nb_rondes_total,
         )
 
-        # 4. TopK enumeration (deterministic)
-        topk_enum = TopKEnumerator(engine=self._engine)
+        # 4. Partition rules PUBLIC / PRIVATE (spec §4.7 step 5)
+        public_rules, _private_rules = self._classifier.partition_rules(self._engine.rules)
+        public_engine = RuleEngine(
+            rules=list(public_rules),
+            source_sha256=f"{self._engine.lineage_hash()}+public",
+        )
+
+        # 5. TopK enumeration (public rules uniquement, spec step 6)
+        topk_enum = TopKEnumerator(engine=public_engine)
         topk_scenarios = topk_enum.enumerate(enriched, context, k=n_topk)
 
-        # 5. MC sampling (LHS + antithetic + copula)
-        mc = MonteCarloSampler(engine=self._engine, copula=copula)
+        # 6. MC sampling (LHS + antithetic + copula, public rules uniquement, spec step 7)
+        mc = MonteCarloSampler(engine=public_engine, copula=copula)
         rng = np.random.default_rng(seed)
         mc_scenarios = mc.sample(enriched, context, n_pairs=n_mc_pairs, rng=rng)
 
-        # 6. Merge + dedup distinct (T20)
+        # 7. Merge + dedup distinct (T20)
         merged = self._merge_and_pad(
             list(topk_scenarios),
             list(mc_scenarios),
@@ -111,10 +118,10 @@ class ScenarioGenerator:
             rng,
         )
 
-        # 7. Renormalize weights so sum = 1.0
+        # 8. Renormalize weights so sum = 1.0
         merged = self._renormalize(merged)
 
-        # 8. Build ScenarioSet with lineage_hash
+        # 9. Build ScenarioSet with lineage_hash
         lineage = self._compute_lineage(
             opponent_club_id,
             round_date,
