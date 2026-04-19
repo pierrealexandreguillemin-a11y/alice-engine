@@ -33,7 +33,7 @@ CLASSIF = Path("config/ffe_rules/alice_verifiability.json")
 def _ctx(team_size: int = 8) -> CompetitionContext:
     return CompetitionContext(
         competition_code="A02",
-        niveau="N2",
+        niveau="N3",  # N3 : pas de contrainte 3.7.i fr_gender strict (N1/N2/Top16 only)
         ronde=5,
         team_size=team_size,
         noyau_min=50,
