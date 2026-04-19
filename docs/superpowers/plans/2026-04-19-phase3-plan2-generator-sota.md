@@ -331,25 +331,68 @@ Script analogue Plan 1, gates :
 
 ---
 
-## Definition of Done Plan 2
+## Definition of Done Plan 2 — Quality Gates ISO explicites
 
-### Quality gates
-- [ ] 14 P2G gates verts
-- [ ] Coverage `services/ali/` ≥ 75% (Plan 1 + Plan 2 combinés)
-- [ ] Latence `/compose` < 2s (benchmark mesuré)
-- [ ] xenon ≤ B, mypy strict, ruff clean
+### P2G — Plan 2 Quality Gates (16 gates, tous bloquants)
+
+| Gate | Norme ISO | Check | Seuil | Vérification |
+|------|-----------|-------|-------|--------------|
+| **P2G01** | ISO 5055 | Taille max par fichier nouveau | ≤ 300 lignes | `wc -l` sur services/ali/{joint_sampler,topk,monte_carlo,generator,scenario}.py |
+| **P2G02** | ISO 5055 | Complexité cyclomatique | xenon ≤ B (modules + average ≤ A) | `xenon --max-absolute B --max-modules B --max-average A services/ali services/ffe` |
+| **P2G03** | ISO 5055 | Type safety strict | MyPy 0 erreur | `mypy services/ali services/ffe --strict --follow-imports=silent` |
+| **P2G04** | ISO 5055 | Lint | Ruff 0 warning | `ruff check services/ali services/ffe app/api/routes.py app/main.py tests/test_*.py` |
+| **P2G05** | ISO 27001 | Secrets detection | Gitleaks 0 finding | `pre-commit run gitleaks --all-files` |
+| **P2G06** | ISO 29119 | Coverage Plan 1+2 combinée | ≥ 75% | `pytest --cov=services/ali --cov=services/ffe --cov=scripts.sync_ffe_rules --cov-fail-under=75` (long, 20 min) |
+| **P2G07** | ISO 29119 | Nombre tests Plan 2 nouveau | ≥ 30 | scenarios + sampler + topk + mc + generator + smoke = ~35-40 |
+| **P2G08** | ISO 25059 (T18) | `sum(weights) == 1.0` ± 1e-4 | strict | `ScenarioSet.validate()` |
+| **P2G09** | ISO 25059 (T19) | `len(scenarios) == 20` | strict | `ScenarioSet.validate()` |
+| **P2G10** | ISO 25059 (T20) | scenarios distincts (pair player×board) | strict | `ScenarioGenerator` enforce |
+| **P2G11** | ISO 25010 (T21) | MC rejection_rate | ≤ 30% | log dans `MonteCarloSampler.sample(...)` |
+| **P2G12** | ISO 5259 | lineage_hash propagé end-to-end | présent dans response | `metadata.lineage_hash` dans ComposeResponse |
+| **P2G13** | ISO 25010 | Latence `/compose` p95 | ≤ 2000ms | benchmark via TestClient × 20 calls |
+| **P2G14** | ISO 42010 | ADR-014 committé + référencé | présent | `test -f docs/architecture/adr/ADR-014-ali-mc-hybride-sota.md` |
+| **P2G15** | ISO 42001 | SOTA citations dans docstrings | présent | `grep -E "Sklar 1959\|McKay 1979\|Hammersley 1956" services/ali/{joint_sampler,monte_carlo}.py` |
+| **P2G16** | ISO 15289 | MkDocs --strict | PASS | `mkdocs build --strict` |
+
+### Gates structurels Plan 2 (au-delà des ISO)
+
+| Check | Seuil | Commande |
+|-------|-------|----------|
+| ScenarioSet validate() ne raise pas sur générateur réel | strict | smoke E2E |
+| services/ffe_rules.py supprimé | absent | `! test -f services/ffe_rules.py` |
+| /compose appelle ScenarioGenerator (pas _fallback_prediction) | strict | `grep -q "scenario_generator.generate" app/api/routes.py` |
+| ScenarioGenerator enforce T20 (scenarios distincts) | strict | test dédié dans test_generator.py |
+| Copule retourne PSD matrix | strict | test_joint_sampler |
+| LHS coverage stratifié | strict | test_monte_carlo |
+| Antithetic pairs neg corrélés | strict | test_monte_carlo |
 
 ### Résorption dette
-- [ ] D2 (ALI = tri Elo 1 scénario) → résolue
-- [ ] D5 (services/composer.py legacy) → décision finale (supprimé ou documenté)
-- [ ] D-P3-04 (F7 schema) → résolue Task 1
-- [ ] D-P3-08 (filter_candidates couvre que 3.7.j) → résolue ou tracée Plan 3
+- [ ] D2 (ALI = tri Elo 1 scénario) → **résolue Plan 2** (Task 8 wire)
+- [ ] D5 (services/composer.py legacy) → décision finale (supprimé ou documenté Task 9)
+- [ ] D-P3-04 (F7 schema) → **résolue Task 1**
+- [ ] D-P3-08 (filter_candidates couvre que 3.7.j) → tracée Plan 3 si pas critique
 
-### Artefacts
-- [ ] ADR-014 ALI MC hybride SOTA
-- [ ] ALI_ARCHITECTURE.md mis à jour
-- [ ] Smoke E2E /compose passe avec données réelles
-- [ ] Peer review APPROVED
+### Artefacts livrés (checklist)
+- [ ] `services/ali/scenario.py` (frozen types + validate)
+- [ ] `services/ali/joint_sampler.py` (CopulaJointSampler F6)
+- [ ] `services/ali/topk.py` (TopKEnumerator)
+- [ ] `services/ali/monte_carlo.py` (MonteCarloSampler + LHS + antithetic F5)
+- [ ] `services/ali/generator.py` (ScenarioGenerator)
+- [ ] `app/main.py::lifespan` étendu
+- [ ] `app/api/routes.py::compose_route` wired
+- [ ] `services/ffe_rules.py` supprimé
+- [ ] ADR-014 + ALI_ARCHITECTURE.md update
+- [ ] `scripts/verify_plan2_dod.sh`
+- [ ] Smoke E2E `tests/test_phase3_plan2_smoke.py`
+- [ ] CLAUDE.md table couches mise à jour : ALI = DONE-SOTA
 
-### Process
+### Process gates finaux
+- [ ] 16 P2G01-P2G16 PASS via `verify_plan2_dod.sh`
+- [ ] 7 gates structurels PASS
+- [ ] Tous artefacts livrés
+- [ ] Peer review skill `superpowers:requesting-code-review` exécuté, 0 finding critique
 - [ ] Checkpoint user final avant merge
+
+### Script de vérification (Task 13)
+
+`scripts/verify_plan2_dod.sh` agrège tous les P2G + gates structurels. Exit 0 = DoD satisfaite.
