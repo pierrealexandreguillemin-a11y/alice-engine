@@ -15,10 +15,42 @@ from pathlib import Path
 
 import pytest  # noqa: F401  (imported per spec; pytest discovery)
 
+from services.ali.types import CompetitionContext, PlayerCandidate
 from services.ffe.rule_engine import Rule, RuleEngine
 
 REAL_A02 = Path("config/ffe_rules/a02.json")
 MINI = Path(__file__).parent / "fixtures" / "ffe_rules" / "mini_a02.json"
+
+
+def _ctx() -> CompetitionContext:
+    return CompetitionContext(
+        competition_code="A02",
+        niveau="N2",
+        ronde=3,
+        team_size=8,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=None,
+    )
+
+
+def _player(
+    nr: str,
+    elo: int,
+    mute: bool = False,
+    licence_active: bool = True,
+) -> PlayerCandidate:
+    return PlayerCandidate(
+        nr_ffe=nr,
+        nom=f"P{nr}",
+        prenom="X",
+        elo=elo,
+        club="C1",
+        mute=mute,
+        genre="M",
+        categorie="SE",
+        licence_active=licence_active,
+    )
 
 
 def test_rule_engine_loads_real_a02() -> None:
@@ -52,3 +84,25 @@ def test_lineage_hash_changes_with_content(tmp_path: Path) -> None:
     f.write_text(json.dumps(base), encoding="utf-8")
     e2 = RuleEngine.from_json_file(f)
     assert e1.lineage_hash() != e2.lineage_hash()
+
+
+def test_filter_candidates_returns_list() -> None:
+    engine = RuleEngine.from_json_file(REAL_A02)
+    pool = [_player("A1", 2000), _player("A2", 1500)]
+    out = engine.filter_candidates(pool, _ctx())
+    assert isinstance(out, list)
+    assert len(out) <= len(pool)
+
+
+def test_validate_lineup_empty_returns_team_size_violation() -> None:
+    engine = RuleEngine.from_json_file(REAL_A02)
+    violations = engine.validate_lineup([], _ctx())
+    assert any(v.rule_article == "3.7.a" for v in violations)
+
+
+def test_validate_lineup_happy_path() -> None:
+    engine = RuleEngine.from_json_file(REAL_A02)
+    lineup = [_player(f"X{i}", 2000 - i * 50) for i in range(8)]
+    violations = engine.validate_lineup(lineup, _ctx())
+    hard_errors = [v for v in violations if v.severity == "error"]
+    assert not any(v.rule_article == "3.7.a" for v in hard_errors)

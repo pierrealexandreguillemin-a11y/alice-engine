@@ -18,6 +18,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from services.ali.types import CompetitionContext, PlayerCandidate, RuleViolation
 from services.ffe.schemas import RuleModel, RulesDocument
 
 if TYPE_CHECKING:
@@ -26,9 +27,14 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Rule:
-    """One FFE rule, domain dataclass (frozen for ISO 29119 testability)."""
+    """One FFE rule, domain dataclass (frozen for ISO 29119 testability).
+
+    ISO 42001 : `uuid_rfc4122` = canonical UUID used cross-system for rule
+    traceability (joined with audit logs and chess-app). `uuid` = human id.
+    """
 
     uuid: str
+    uuid_rfc4122: str
     id: str
     source_ref: str
     article: str
@@ -42,6 +48,7 @@ class Rule:
         """Build a Rule from a validated Pydantic RuleModel."""
         return cls(
             uuid=model.uuid,
+            uuid_rfc4122=model.uuid_rfc4122,
             id=model.id,
             source_ref=model.source_ref,
             article=model.article,
@@ -84,3 +91,97 @@ class RuleEngine:
         doc = RulesDocument.model_validate(data)
         rules = [Rule.from_model(m) for m in doc.rules]
         return cls(rules=rules, source_sha256=source_sha256)
+
+    def filter_candidates(
+        self,
+        pool: list[PlayerCandidate],
+        context: CompetitionContext,
+    ) -> list[PlayerCandidate]:
+        """Filter pool with rules that restrict player ELIGIBILITY.
+
+        Currently applies article 3.7.j (elo_max if set). Most eligibility
+        rules require external data (brule history, same-group) and are
+        applied in validate_lineup.
+        """
+        out = list(pool)
+        for rule in self._rules:
+            if rule.effet != "restrict_team_composition":
+                continue
+            if rule.article == "3.7.j" and context.elo_max is not None:
+                out = [p for p in out if p.elo <= context.elo_max]
+        return out
+
+    def validate_lineup(
+        self,
+        lineup: list[PlayerCandidate],
+        context: CompetitionContext,
+    ) -> list[RuleViolation]:
+        """Validate a full lineup against all composition rules."""
+        violations: list[RuleViolation] = []
+        for rule in self._rules:
+            if rule.effet != "restrict_team_composition":
+                continue
+            v = self._check_rule(rule, lineup, context)
+            if v is not None:
+                violations.append(v)
+        return violations
+
+    def _check_rule(
+        self,
+        rule: Rule,
+        lineup: list[PlayerCandidate],
+        context: CompetitionContext,
+    ) -> RuleViolation | None:
+        """Per-rule check. Returns RuleViolation or None.
+
+        Handles articles 3.7.a (team_size), 3.6.e (elo ordering),
+        3.7.g (max mutes), 3.7.j (elo_max).
+        """
+        art = rule.article
+
+        if art == "3.7.a":
+            expected_raw = rule.conditions.get("team_size", context.team_size)
+            expected = int(expected_raw) if expected_raw is not None else context.team_size
+            if len(lineup) != expected:
+                return RuleViolation(
+                    rule_uuid=rule.uuid,
+                    rule_article=art,
+                    message=f"team_size: expected {expected}, got {len(lineup)}",
+                    severity="error",
+                )
+        elif art == "3.6.e":
+            tolerance_raw = rule.conditions.get("elo_tolerance", 100)
+            tolerance = int(tolerance_raw)
+            elos = [p.elo for p in lineup]
+            for i in range(len(elos) - 1):
+                if elos[i + 1] - elos[i] > tolerance:
+                    return RuleViolation(
+                        rule_uuid=rule.uuid,
+                        rule_article=art,
+                        message=(
+                            f"elo order: board {i + 1}={elos[i]} "
+                            f"< board {i + 2}={elos[i + 1]} + tol"
+                        ),
+                        severity="error",
+                    )
+        elif art == "3.7.g":
+            max_m_raw = rule.conditions.get("max_mutes", context.max_mutes)
+            max_m = int(max_m_raw) if max_m_raw is not None else context.max_mutes
+            muted = sum(1 for p in lineup if p.mute)
+            if muted > max_m:
+                return RuleViolation(
+                    rule_uuid=rule.uuid,
+                    rule_article=art,
+                    message=f"mutes: {muted} > max {max_m}",
+                    severity="error",
+                )
+        elif art == "3.7.j" and context.elo_max is not None:
+            over = [p for p in lineup if p.elo > context.elo_max]
+            if over:
+                return RuleViolation(
+                    rule_uuid=rule.uuid,
+                    rule_article=art,
+                    message=f"elo_max: {len(over)} players above {context.elo_max}",
+                    severity="error",
+                )
+        return None
