@@ -1,0 +1,24 @@
+{
+  "metadata": {
+    "description": "Annotations locales ALICE : classification PUBLIC/PRIVATE des règles FFE",
+    "version": "1.0.0",
+    "date": "2026-04-19",
+    "scope": "A02 interclubs (Phase 3)"
+  },
+  "classifications": {
+    "N1-N4_3.7.a_001": {"verifiability": "public", "reason": "team_size trivialement vérifiable", "data_source": "-"},
+    "N1-N4_3.7.b_001": {"verifiability": "private", "reason": "composition groupes décidée par CTF/Ligue, pas joueur", "data_source": "-"},
+    "N1-N4_3.6.e_001": {"verifiability": "public", "reason": "Elo publics FFE", "data_source": "joueurs.parquet"},
+    "N1-N4_3.7.c_001": {"verifiability": "public", "reason": "brûlé déductible via historique matchs", "data_source": "echiquiers.parquet"},
+    "N1-N4_3.7.d_001": {"verifiability": "public", "reason": "same_group déductible historique", "data_source": "echiquiers.parquet"},
+    "N1-N4_3.7.e_001": {"verifiability": "public", "reason": "match_count historique saison", "data_source": "echiquiers.parquet"},
+    "N1-N4_3.2_001": {"verifiability": "private", "reason": "désignation titulaires décidée par club", "data_source": "-"},
+    "N1-N3_3.7.f_001": {"verifiability": "private", "reason": "noyau déclaré début saison par club, non public", "data_source": "-"},
+    "N1-N4_3.7.g_001": {"verifiability": "public", "reason": "mute = flag licence FFE publique", "data_source": "joueurs.parquet"},
+    "N1-N4_3.7.h_001": {"verifiability": "public", "reason": "nationalité = code FFE publique", "data_source": "joueurs.parquet"},
+    "Top16-N2_3.7.i_001": {"verifiability": "public", "reason": "genre + nationalité publics", "data_source": "joueurs.parquet"},
+    "N4_3.7.j_001": {"verifiability": "public", "reason": "Elo publics", "data_source": "joueurs.parquet"},
+    "N1-N4_3.7.k_001": {"verifiability": "public", "reason": "matchs de barrage : article 3.7 reste applicable (meta-pointer)", "data_source": "echiquiers.parquet"},
+    "N1-N2_3.7_001": {"verifiability": "private", "reason": "règle arbitrage, pas composition", "data_source": "-"}
+  }
+}
