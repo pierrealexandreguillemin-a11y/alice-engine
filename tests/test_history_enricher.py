@@ -10,12 +10,23 @@ Version: 1.0.0
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 import pandas as pd
 
 from services.ali.history import (
+    HistoryEnricher,
     compute_recency_weighted_presence,
     compute_streak_features,
 )
+from services.ali.types import PlayerCandidate
+
+if TYPE_CHECKING:
+    from services.ali.cache import ALIDataCache
+
+J = Path("data/joueurs.parquet")
+E = Path("data/echiquiers.parquet")
 
 
 def _hist(rows: list[tuple[str, int, int, int]]) -> pd.DataFrame:
@@ -116,3 +127,26 @@ def test_streak_current_round_1_all_false() -> None:
     assert lag1 is False
     assert lag2 is False
     assert lag3 is False
+
+
+def test_enricher_integration_real_parquets(ali_data_cache: ALIDataCache) -> None:
+    """Smoke test : enricher tourne end-to-end sur vrais parquets."""
+    first_club = next(iter(ali_data_cache.joueurs_by_club.keys()))
+    first_row = ali_data_cache.joueurs_by_club[first_club].iloc[0]
+    candidate = PlayerCandidate(
+        nr_ffe=str(first_row["nr_ffe"]),
+        nom=str(first_row["nom"]),
+        prenom=str(first_row.get("prenom", "")),
+        elo=int(first_row.get("elo") or 1500),
+        club=first_club,
+        mute=False,
+        genre="M",
+        categorie="SE",
+        licence_active=True,
+    )
+    enricher = HistoryEnricher(ali_data_cache, decay_lambda=0.9)
+    enriched = enricher.enrich([candidate], saison=2024, current_round=10, nb_rondes_total=11)
+    assert len(enriched) == 1
+    assert enriched[0].taux_presence_effectif is not None
+    assert 0.0 <= enriched[0].taux_presence_effectif <= 1.0
+    assert enriched[0].played_lag1 is not None
