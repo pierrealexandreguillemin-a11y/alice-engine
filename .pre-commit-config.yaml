@@ -238,3 +238,19 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+
+  # ============================================================================
+  # D10 : ALICE <-> chess-app FFE rules drift alert (Phase 3)
+  # ISO 42001 (AI traceability) + ISO 5259 (data lineage)
+  # Fails commit if config/ffe_rules/*.json drifts from chess-app source
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: ffe-rules-drift
+        name: "ISO 42001 | FFE rules drift check (chess-app -> ALICE)"
+        description: "Alert if FFE rules config drifts from chess-app canonical source"
+        entry: python scripts/sync_ffe_rules.py --check
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
