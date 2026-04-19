@@ -61,7 +61,7 @@ class ScenarioAggregationCtx:
 
 def _assemble_features(
     player: dict[str, Any], opp_elo: int, ronde: int, division: str, feature_store: Any
-) -> np.ndarray:
+) -> np.ndarray[Any, Any]:
     """Build feature vector for one (user, opponent) board pair."""
     if feature_store is None:
         return np.zeros((1, 201))
@@ -78,7 +78,7 @@ def _safe_predict(
     inference: StackingInferenceService,
     player_elo: int,
     opp_elo: int,
-    feat: np.ndarray,
+    feat: np.ndarray[Any, Any],
 ) -> tuple[float, float, float]:
     """Call inference.predict_board with fallback on failure.
 
