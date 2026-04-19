@@ -51,10 +51,21 @@ data/
 - Capture l'effet "joueur qui a joué les 3 dernières rondes → P(jouer prochaine) > taux moyen"
 - Sources : Box & Jenkins 1970 (ARIMA), Pappalardo 2019 (soccer squad rotation)
 
-### F7 — Survivor bias filter
-- Filter `licence_active == True` dans PlayerPoolLoader
-- Évite les joueurs qui ont quitté le club (pollue proba présence)
-- Source : Brown, Goetzmann, Ross, Ibbotson 1992 (finance → sport transposition)
+### F7 — Survivor bias filter (interprétation FFE)
+
+`joueurs.parquet` est la base FFE des licences actives au moment du scraping.
+Les joueurs ayant quitté un club n'apparaissent plus dans `joueurs_by_club[club_id]`,
+donc F7 est enforcé **implicitement** via la composition du parquet.
+
+`_row_licence_active` retourne True pour toutes les lignes — pas de flag
+ARCHIVE/INACTIVE observé sur 83K joueurs (valeurs `elo_type` ∈ {E, F, N, ''}).
+
+**Override** : un capitaine peut passer `licence_active: false` dans `overrides`
+pour signaler une licence en cours de renouvellement (cas exceptionnel hors
+fenêtre de scraping).
+
+Source : audit schema réel 2026-04-19 (Plan 2 Task 1, finding D-P3-04).
+Référence théorique : Brown, Goetzmann, Ross, Ibbotson 1992 (finance → sport).
 
 ## Classification PUBLIC/PRIVATE (A02)
 

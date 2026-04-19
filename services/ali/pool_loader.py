@@ -69,11 +69,19 @@ def _row_to_candidate(row: Any) -> PlayerCandidate:
     )
 
 
-def _row_licence_active(row: Any) -> bool:
-    """Deduce licence active. Conservative: True unless explicit flag."""
-    elo_type = str(row.get("elo_type", "")).upper()
-    if elo_type in {"ARCHIVE", "INACTIVE"}:
-        return False
+def _row_licence_active(row: Any) -> bool:  # noqa: ARG001
+    """Return True : joueurs.parquet ne contient que des licences actives FFE.
+
+    F7 (survivor bias) est enforce via la composition meme du parquet :
+    joueurs.parquet est mis a jour regulierement par scraping FFE actif.
+    Joueurs ayant quitte le club n'apparaissent plus dans
+    joueurs_by_club[club_id] -> filtre implicite par membership.
+
+    Source : analyse schema reel 2026-04-19 (D-P3-04), valeurs elo_type
+    dans {E, F, N, ''}. Aucune valeur ARCHIVE/INACTIVE observee sur
+    83K lignes. Override possible via overrides[*].licence_active = false
+    (capitaine signale licence en cours de renouvellement, cas exceptionnel).
+    """
     return True
 
 
