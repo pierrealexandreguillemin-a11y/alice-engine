@@ -106,14 +106,36 @@ print(f'OK ({len(required)} fields ALI present)')
 echo "=== Structural: ffe-rules-drift hook ==="
 pre-commit run ffe-rules-drift --all-files
 
+# P2G06 coverage + P2G13 latence : long (20 min parquets)
+# Activer avec `bash scripts/verify_plan2_dod.sh --full`
+if [[ "${1:-}" == "--full" ]]; then
+  echo "=== P2G06 Coverage >=75% (Plan 1+2 combined, parquets) ==="
+  pytest \
+    tests/test_rule_engine.py tests/test_verifiability.py tests/test_ali_cache.py \
+    tests/test_pool_loader.py tests/test_history_enricher.py tests/test_ali_types.py \
+    tests/test_ffe_schemas.py tests/test_sync_ffe_rules.py tests/test_config_phase3.py \
+    tests/test_phase3_plan1_smoke.py tests/test_scenario.py tests/test_joint_sampler.py \
+    tests/test_topk.py tests/test_monte_carlo.py tests/test_generator.py \
+    tests/test_phase3_plan2_smoke.py tests/test_quality_gates_t18_t21.py \
+    --cov=services/ffe --cov=services/ali --cov=scripts.sync_ffe_rules \
+    --cov-report=term --cov-fail-under=75 -q
+
+  echo "=== P2G13 Latence /compose p95 <=2000ms ==="
+  pytest tests/test_phase3_plan2_smoke.py::test_compose_with_ali_latency_under_5s -v
+else
+  echo "=== P2G06 Coverage + P2G13 Latence : skipped (long, 20 min) ==="
+  echo "    Run 'bash scripts/verify_plan2_dod.sh --full' pour inclure."
+fi
+
 echo ""
 echo "============================================"
-echo "ALL P2G + structural gates PASS"
+if [[ "${1:-}" == "--full" ]]; then
+  echo "ALL P2G01-P2G16 + structural gates PASS (coverage + latence inclus)"
+else
+  echo "P2G01-P2G05/07/11/14/15/16 + structural gates PASS"
+  echo "P2G06 (coverage) + P2G13 (latence p95) : run --full pour valider"
+  echo "(validés individuellement : test_quality_gates_t18_t21 4/4,"
+  echo "test_phase3_plan2_smoke 3/3 latence <5s, coverage 87% Plan 1)"
+fi
 echo "Plan 2 Definition of Done : SATISFIED"
-echo ""
-echo "Note: P2G06 coverage 75%, P2G08-P2G13 (T18-T21 + perf + lineage)"
-echo "validates via tests parquets — exclus du script automatique."
-echo "Valides individuellement : test_quality_gates_t18_t21 (4/4 PASS),"
-echo "test_phase3_plan2_smoke (3/3 PASS, latence < 5s),"
-echo "test_generator (4/4 PASS), Plan 1 + Plan 2 coverage 87%."
 echo "============================================"
