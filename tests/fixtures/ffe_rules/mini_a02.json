@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "championship": "Test Champ",
+    "description": "Fixture minimale Phase 3",
+    "version": "2025-26",
+    "source": "test"
+  },
+  "rules": [
+    {
+      "uuid": "TEST_001",
+      "uuid_rfc4122": "00000000-0000-4000-8000-000000000001",
+      "id": "Test_3.7.a_001",
+      "source_ref": "test_ref.pdf",
+      "document": "Test doc",
+      "version": "2025-26",
+      "article": "3.7.a",
+      "texte": "Chaque équipe = 8 joueurs.",
+      "conditions": {"team_size": 8},
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2025-07-01"
+    }
+  ]
+}
