@@ -30,6 +30,11 @@ from app.api.schemas import (
     TeamComposition,
 )
 from app.logging_config import get_audit_logger, get_logger
+from services.ali.aggregation import (
+    AggregatedBoard,
+    ScenarioAggregationCtx,
+    aggregate_from_scenarios,
+)
 from services.ali.types import CompetitionContext
 from services.audit import OperationType
 from services.ffe_rules import (
@@ -87,32 +92,30 @@ class _BoardContext:
 def _predict_board(
     inference: StackingInferenceService, ctx: _BoardContext, feature_store: Any
 ) -> BoardResult:
-    """Predict P(W/D/L) for one board assignment."""
-    p_elo = ctx.player["elo"]
+    """Predict P(W/D/L) for one board assignment (Phase 2 fallback path)."""
     if feature_store is not None:
-        features = feature_store.assemble(
-            player_name=ctx.player["ffe_id"],
-            player_elo=p_elo,
-            opponent_elo=ctx.opp_elo,
-            context={"ronde": ctx.ronde, "division": ctx.division},
+        feat = np.asarray(
+            feature_store.assemble(
+                player_name=ctx.player["ffe_id"],
+                player_elo=ctx.player["elo"],
+                opponent_elo=ctx.opp_elo,
+                context={"ronde": ctx.ronde, "division": ctx.division},
+            ).values
         )
-        feat_values = features.values
     else:
-        feat_values = np.zeros((1, 201))
-
+        feat = np.zeros((1, 201))
     try:
         r = inference.predict_board(
-            player_elo=p_elo, opponent_elo=ctx.opp_elo, features=feat_values
+            player_elo=ctx.player["elo"], opponent_elo=ctx.opp_elo, features=feat
         )
         p_win, p_draw, p_loss, e_score = r.p_win, r.p_draw, r.p_loss, r.e_score
     except Exception:
         logger.exception("Inference failed for player %s", ctx.player["ffe_id"])
         p_win, p_draw, p_loss, e_score = 0.45, 0.15, 0.40, 0.525
-
     return BoardResult(
         board=ctx.board_num,
         joueur=ctx.player["ffe_id"],
-        elo=p_elo,
+        elo=ctx.player["elo"],
         adversaire=f"OPP_{ctx.board_num}",
         adversaire_elo=ctx.opp_elo,
         p_win=round(p_win, 4),
@@ -201,25 +204,23 @@ def _try_generate_scenarios(
     return result
 
 
-def _opponent_elos_from_scenario_set(
-    scenario_set: ScenarioSet, team_size: int
-) -> tuple[list[int], list[OpponentPrediction]]:
-    """Extract opponent Elos from the top-weighted scenario (board order).
-
-    ISO 42001 : integration is deterministic and traceable via lineage_hash.
-    """
-    top = max(scenario_set.scenarios, key=lambda s: s.weight)
-    by_board = sorted(top.lineup.assignments, key=lambda a: a.board)[:team_size]
-    elos = [int(a.player.elo) for a in by_board]
-    predictions = [
-        OpponentPrediction(
-            board=a.board,
-            joueur=a.player.nr_ffe,
-            elo=int(a.player.elo),
-        )
-        for a in by_board
-    ]
-    return elos, predictions
+def _to_board_and_pred(agg: AggregatedBoard) -> tuple[BoardResult, OpponentPrediction]:
+    """Adapt aggregated service result -> API schemas (routes controller role)."""
+    board = BoardResult(
+        board=agg.board,
+        joueur=agg.user_ffe_id,
+        elo=agg.user_elo,
+        adversaire=agg.mode_opponent_ffe,
+        adversaire_elo=agg.mean_opponent_elo,
+        p_win=agg.p_win,
+        p_draw=agg.p_draw,
+        p_loss=agg.p_loss,
+        e_score=agg.e_score,
+    )
+    pred = OpponentPrediction(
+        board=agg.board, joueur=agg.mode_opponent_ffe, elo=agg.mean_opponent_elo
+    )
+    return board, pred
 
 
 def _default_opponent(
@@ -292,22 +293,54 @@ def _build_boards(
     ]
 
 
-def _resolve_opponent(
-    request: Request, body: ComposeRequest, selected: list[dict[str, Any]], team_size: int
-) -> tuple[ScenarioSet | None, list[int], list[OpponentPrediction], str, str]:
-    """Return (scenario_set, opp_elos, opp_predictions, ali_mode, adversaire_label)."""
-    scenario_set = _try_generate_scenarios(request, body, team_size)
+@dataclass
+class _ComposeCtx:
+    """Context bundle for compose flow (ISO 5055 PLR0913 compliance)."""
+
+    request: Request
+    body: ComposeRequest
+    selected: list[dict[str, Any]]
+    team_size: int
+    inference: StackingInferenceService
+    feature_store: Any
+
+
+def _compose_boards_and_predictions(
+    ctx: _ComposeCtx,
+) -> tuple[ScenarioSet | None, list[BoardResult], list[OpponentPrediction], str, str]:
+    """Resolve opponent + compute per-board predictions.
+
+    ALI path : aggregate 20 scenarios weighted (D-P2-06 fix, spec §2 §4.7).
+    Fallback path : Phase 2 Elo synthetic, 1 inference call per board.
+
+    Returns (scenario_set, boards, opp_predictions, ali_mode, adversaire_label).
+    """
+    scenario_set = _try_generate_scenarios(ctx.request, ctx.body, ctx.team_size)
     if scenario_set is not None:
-        elos, preds = _opponent_elos_from_scenario_set(scenario_set, team_size)
+        agg_ctx = ScenarioAggregationCtx(
+            scenario_set=scenario_set,
+            user_lineup=ctx.selected,
+            team_size=ctx.team_size,
+            ronde=ctx.body.ronde,
+            division=ctx.body.division,
+        )
+        aggregated = aggregate_from_scenarios(ctx.inference, ctx.feature_store, agg_ctx)
+        boards = []
+        preds = []
+        for agg in aggregated:
+            b, p = _to_board_and_pred(agg)
+            boards.append(b)
+            preds.append(p)
         return (
             scenario_set,
-            elos,
+            boards,
             preds,
             "scenario_generator",
-            (f"{body.opponent_club_id} (ALI scenario top-weighted)"),
+            f"{ctx.body.opponent_club_id} (ALI 20-scenario weighted avg)",
         )
-    elos, preds = _default_opponent(selected, team_size)
-    return None, elos, preds, "elo_fallback", "Adversaire (ALI fallback)"
+    opp_elos, preds = _default_opponent(ctx.selected, ctx.team_size)
+    boards = _build_boards(ctx.inference, ctx.selected, opp_elos, ctx.body, ctx.feature_store)
+    return None, boards, preds, "elo_fallback", "Adversaire (ALI fallback)"
 
 
 def _build_metadata(
@@ -344,10 +377,17 @@ async def compose_teams(body: ComposeRequest, request: Request) -> ComposeRespon
     team_size = min(8, len(sorted_players))
     selected = sorted_players[:team_size]
 
-    scenario_set, opp_elos, opp_preds, ali_mode, opp_label = _resolve_opponent(
-        request, body, selected, team_size
+    compose_ctx = _ComposeCtx(
+        request=request,
+        body=body,
+        selected=selected,
+        team_size=team_size,
+        inference=inference,
+        feature_store=feature_store,
     )
-    boards = _build_boards(inference, selected, opp_elos, body, feature_store)
+    scenario_set, boards, opp_preds, ali_mode, opp_label = _compose_boards_and_predictions(
+        compose_ctx
+    )
     all_ok = _validate_ffe(boards, body, team_size)
 
     composition = TeamComposition(
