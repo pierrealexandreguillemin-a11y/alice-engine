@@ -103,6 +103,11 @@ Dette ouverte après Phase 2 — détail et plan de résorption : `memory/projec
 | D7 | Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel | Historique | **Phase 5** |
 | D8 | ALI fairness/robustness breakdown (genre, taille club, niveau) + stress Elo | Phase 3 (scope) | **Phase 3.5 STRICT** (bloquant Phase 4) |
 | D9 | Adaptive Importance Sampling + drift monitoring prod (ratio TopK:MC dynamique) | Phase 3 (brainstorm finding) | **Phase 5+** (après volume data prod) |
+| D-P2-02 | VerifiabilityClassifier injecté mais pas consommé (biais MC conservateur) | Plan 2 peer review | **Plan 3 STRICT** (avant backtest) |
+| D-P2-03 | `_EXPECTED_SCENARIOS=20` hardcodé fragile | Plan 2 peer review | Plan 3 |
+| D-P2-04 | seed=42 fixe dans generator | Plan 2 peer review | Plan 3 |
+| D-P3-11 | Suppression `services/ffe_rules.py` legacy | Plan 2 (différée) | Plan 3 (refactor /compose complet) |
+| D-P3-12 | MonteCarloSampler `_u_to_presence` fallback résiduel | Plan 2 Task 6 | Plan 3 cleanup |
 | ~~D10~~ | ~~Sync chess-app JSON~~ | ~~Phase 3~~ | **RESOLUE Plan 1** (2026-04-19, commits ff94a19 + 1a2445c) |
 | D11 | Completeness audit : PDF FFE → chess-app JSON (toutes règles capturées ?) | Phase 3 finding | **Phase ultérieure** (tâche NLP, pocket-arbiter stale) |
 | ~~D12~~ | ~~Autoregressive streak~~ | ~~Audit F3~~ | **REMONTÉ PHASE 3** (F3 intégré, option B) |
