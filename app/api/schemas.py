@@ -240,7 +240,11 @@ class TeamComposition(BaseModel):
 
 
 class ComposeRequest(BaseModel):
-    """Request for team composition optimization."""
+    """Request for team composition optimization.
+
+    Phase 3 : si `opponent_club_id` fourni, ALI ScenarioGenerator est invoque.
+    Sinon, fallback Elo synthetique Phase 2 (compat).
+    """
 
     club_id: str = Field(..., description="Club FFE ID")
     joueurs_disponibles: list[str] = Field(
@@ -249,6 +253,14 @@ class ComposeRequest(BaseModel):
     ronde: int = Field(..., ge=1, le=20, description="Numero de ronde")
     division: str = Field(..., description="Division (N1, N2, N3, Regionale...)")
     mode_strategie: str = Field("agressif", pattern="^(agressif|conservateur)$")
+
+    # Phase 3 Plan 2 optional fields (ALI generator)
+    opponent_club_id: str | None = Field(None, description="Club adverse FFE ID (ALI)")
+    round_date: str | None = Field(None, description="Date ronde YYYY-MM-DD (ALI)")
+    saison: int | None = Field(None, ge=2000, le=2100, description="Saison (ALI)")
+    current_round: int | None = Field(None, ge=1, le=20, description="Ronde courante (ALI)")
+    nb_rondes_total: int | None = Field(None, ge=1, le=20, description="Total rondes (ALI)")
+    player_overrides: list[dict[str, Any]] | None = Field(None, description="Overrides pool")
 
     @field_validator("joueurs_disponibles")
     @classmethod

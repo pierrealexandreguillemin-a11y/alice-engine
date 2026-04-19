@@ -16,10 +16,12 @@ Last Updated: 2026-01-11
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -27,6 +29,15 @@ from slowapi.util import get_remote_address
 from app.api.routes import router as api_router
 from app.config import settings
 from app.logging_config import configure_logging, get_logger
+from scripts.serving.model_loader import load_models
+from services.ali.cache import ALIDataCache
+from services.ali.generator import ScenarioGenerator
+from services.ali.history import HistoryEnricher
+from services.ali.pool_loader import PlayerPoolLoader
+from services.ali.verifiability import VerifiabilityClassifier
+from services.audit import AuditConfig, AuditLogger
+from services.feature_store import FeatureStore
+from services.ffe.rule_engine import RuleEngine
 
 # Configure logging au demarrage (ISO 27001)
 configure_logging(debug=settings.debug, json_format=not settings.debug)
@@ -36,48 +47,29 @@ logger = get_logger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Manage application lifecycle.
-
-    Startup: Chargement des modeles ML + audit logger
-    Shutdown: Nettoyage des ressources
-    """
-    # Startup
-    logger.info(
-        "service_started",
-        version=settings.app_version,
-        debug=settings.debug,
-        log_level=settings.log_level,
+async def _init_audit_logger(app: FastAPI) -> AuditLogger | None:
+    """Start async audit logger if MongoDB URI configured (ISO 27001 A.8.15)."""
+    if not (settings.audit_enabled and settings.mongodb_uri):
+        return None
+    audit_client = AsyncIOMotorClient(settings.mongodb_uri)
+    audit_db = audit_client[settings.mongodb_database]
+    audit_config = AuditConfig(
+        enabled=settings.audit_enabled,
+        collection_name=settings.audit_collection,
+        batch_size=settings.audit_batch_size,
+        flush_interval_s=settings.audit_flush_interval_s,
     )
+    audit_logger = AuditLogger(db=audit_db, config=audit_config)
+    await audit_logger.start()
+    app.state.audit_logger = audit_logger
+    return audit_logger
 
-    # Audit logger (ISO 27001:2022 A.8.15)
-    audit_logger = None
-    if settings.audit_enabled and settings.mongodb_uri:
-        from motor.motor_asyncio import AsyncIOMotorClient  # noqa: PLC0415
 
-        from services.audit import AuditConfig, AuditLogger  # noqa: PLC0415
-
-        audit_client = AsyncIOMotorClient(settings.mongodb_uri)
-        audit_db = audit_client[settings.mongodb_database]
-        audit_config = AuditConfig(
-            enabled=settings.audit_enabled,
-            collection_name=settings.audit_collection,
-            batch_size=settings.audit_batch_size,
-            flush_interval_s=settings.audit_flush_interval_s,
-        )
-        audit_logger = AuditLogger(db=audit_db, config=audit_config)
-        await audit_logger.start()
-        app.state.audit_logger = audit_logger
-
-    # Load ML models from HF Hub (ISO 42001)
-    from pathlib import Path as _Path  # noqa: PLC0415
-
-    from scripts.serving.model_loader import load_models  # noqa: PLC0415
-
+def _init_model_bundle(app: FastAPI) -> None:
+    """Load the stacking ModelBundle from HF cache (ISO 42001)."""
     try:
         model_bundle = load_models(
-            cache_dir=_Path(settings.model_cache_dir),
+            cache_dir=Path(settings.model_cache_dir),
             hf_repo_id=settings.hf_repo_id,
             download=not settings.debug,
         )
@@ -87,11 +79,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("model_load_failed")
         app.state.model_bundle = None
 
-    # Load feature store
-    from services.feature_store import FeatureStore  # noqa: PLC0415
 
+def _init_feature_store(app: FastAPI) -> None:
+    """Load the feature store parquet bundle if present (ISO 5259)."""
     try:
-        feature_store = FeatureStore(_Path(settings.feature_store_path))
+        feature_store = FeatureStore(Path(settings.feature_store_path))
         feature_store.load()
         app.state.feature_store = feature_store
         logger.info("feature_store_loaded", age_hours=feature_store.age_hours)
@@ -99,9 +91,73 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("feature_store_load_failed")
         app.state.feature_store = None
 
+
+def _init_ali_generator(app: FastAPI) -> None:
+    """Wire Phase 3 ALI ScenarioGenerator (Plan 2 Task 8). Degrades on failure.
+
+    Loads ALIDataCache + RuleEngine + VerifiabilityClassifier, then
+    instantiates ScenarioGenerator. Stores None on app.state if parquets
+    or rule files are absent (Phase 2 behaviour preserved).
+    """
+    try:
+        ali_cache = ALIDataCache.load_from_parquets(
+            Path(settings.joueurs_parquet),
+            Path(settings.echiquiers_parquet),
+        )
+        rule_engine = RuleEngine.from_json_file(
+            Path(settings.ffe_rules_dir) / "a02.json",
+        )
+        classifier = VerifiabilityClassifier.from_json_file(
+            Path(settings.ffe_rules_dir) / "alice_verifiability.json",
+        )
+        pool_loader = PlayerPoolLoader(ali_cache)
+        history_enricher = HistoryEnricher(
+            ali_cache,
+            decay_lambda=settings.recency_decay_lambda,
+        )
+        generator = ScenarioGenerator(
+            engine=rule_engine,
+            classifier=classifier,
+            cache=ali_cache,
+            pool_loader=pool_loader,
+            history_enricher=history_enricher,
+            decay_lambda=settings.recency_decay_lambda,
+        )
+        app.state.ali_cache = ali_cache
+        app.state.rule_engine = rule_engine
+        app.state.verifiability_classifier = classifier
+        app.state.scenario_generator = generator
+        logger.info(
+            "ali_ready",
+            joueurs=len(ali_cache.joueurs_total),
+            rules=len(rule_engine.rules),
+            lineage=rule_engine.lineage_hash()[:12],
+            decay_lambda=settings.recency_decay_lambda,
+        )
+    except Exception:
+        logger.exception("ali_init_failed")
+        app.state.ali_cache = None
+        app.state.rule_engine = None
+        app.state.verifiability_classifier = None
+        app.state.scenario_generator = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Manage application lifecycle (startup wiring + shutdown cleanup)."""
+    logger.info(
+        "service_started",
+        version=settings.app_version,
+        debug=settings.debug,
+        log_level=settings.log_level,
+    )
+    audit_logger = await _init_audit_logger(app)
+    _init_model_bundle(app)
+    _init_feature_store(app)
+    _init_ali_generator(app)
+
     yield
 
-    # Shutdown
     if audit_logger is not None:
         await audit_logger.stop()
     logger.info("service_stopped", version=settings.app_version)

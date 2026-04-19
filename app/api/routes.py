@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Request
@@ -30,6 +30,8 @@ from app.api.schemas import (
     TeamComposition,
 )
 from app.logging_config import get_audit_logger, get_logger
+from services.ali.types import CompetitionContext
+from services.audit import OperationType
 from services.ffe_rules import (
     check_elo_max,
     check_elo_order,
@@ -45,6 +47,9 @@ from services.ffe_rules import (
     sort_by_elo,
 )
 from services.inference import StackingInferenceService
+
+if TYPE_CHECKING:
+    from services.ali.scenario import ScenarioSet
 
 logger = get_logger(__name__)
 audit_logger = get_audit_logger()
@@ -149,24 +154,129 @@ def _validate_ffe(boards: list[BoardResult], body: ComposeRequest, team_size: in
     return all(checks)
 
 
-@router.post("/compose", response_model=ComposeResponse)
-@limiter.limit("30/minute")
-async def compose_teams(body: ComposeRequest, request: Request) -> ComposeResponse:
-    """Compose optimal teams for a club (Phase 2)."""
-    bundle = getattr(request.app.state, "model_bundle", None)
-    feature_store = getattr(request.app.state, "feature_store", None)
-    if bundle is None:
-        raise HTTPException(status_code=503, detail="Models not loaded")
+def _make_competition_context(body: ComposeRequest, team_size: int) -> CompetitionContext:
+    """Build CompetitionContext for the ScenarioGenerator from a ComposeRequest."""
+    return CompetitionContext(
+        competition_code="A02",
+        niveau=body.division,
+        ronde=body.ronde,
+        team_size=team_size,
+        noyau_min=50,
+        max_mutes=3,
+        elo_max=2400 if body.division == "N4" else None,
+    )
 
-    inference = StackingInferenceService(bundle)
-    pool = _build_player_pool(body)
-    eligible = _apply_pre_filters(pool, body)
-    sorted_players = sort_by_elo(eligible)
-    team_size = min(8, len(sorted_players))
-    selected = sorted_players[:team_size]
-    opponent_elos = [p["elo"] - 50 for p in selected]
 
-    boards = [
+def _try_generate_scenarios(
+    request: Request,
+    body: ComposeRequest,
+    team_size: int,
+) -> ScenarioSet | None:
+    """Invoke ALI ScenarioGenerator if available and Phase 3 fields present.
+
+    Returns None on any failure; caller falls back to Phase 2 Elo synthetic.
+    ISO 25010 : no hard failure on ALI absence; degraded path preserved.
+    """
+    generator = getattr(request.app.state, "scenario_generator", None)
+    if generator is None or body.opponent_club_id is None:
+        return None
+    round_date = body.round_date or datetime.now(UTC).strftime("%Y-%m-%d")
+    saison = body.saison or datetime.now(UTC).year
+    current_round = body.current_round or body.ronde
+    nb_rondes_total = body.nb_rondes_total or 11
+    ctx = _make_competition_context(body, team_size)
+    try:
+        result: ScenarioSet = generator.generate(
+            opponent_club_id=body.opponent_club_id,
+            round_date=round_date,
+            context=ctx,
+            saison=saison,
+            current_round=current_round,
+            nb_rondes_total=nb_rondes_total,
+            overrides=body.player_overrides,
+        )
+    except Exception:
+        logger.exception("ali_generator_failed club=%s", body.opponent_club_id)
+        return None
+    return result
+
+
+def _opponent_elos_from_scenario_set(
+    scenario_set: ScenarioSet, team_size: int
+) -> tuple[list[int], list[OpponentPrediction]]:
+    """Extract opponent Elos from the top-weighted scenario (board order).
+
+    ISO 42001 : integration is deterministic and traceable via lineage_hash.
+    """
+    top = max(scenario_set.scenarios, key=lambda s: s.weight)
+    by_board = sorted(top.lineup.assignments, key=lambda a: a.board)[:team_size]
+    elos = [int(a.player.elo) for a in by_board]
+    predictions = [
+        OpponentPrediction(
+            board=a.board,
+            joueur=a.player.nr_ffe,
+            elo=int(a.player.elo),
+        )
+        for a in by_board
+    ]
+    return elos, predictions
+
+
+def _default_opponent(
+    selected: list[dict[str, Any]], team_size: int
+) -> tuple[list[int], list[OpponentPrediction]]:
+    """Phase 2 fallback: opponent Elo = user Elo - 50 (ALICE-TEST-CE-001 style)."""
+    opponent_elos = [int(p["elo"]) - 50 for p in selected[:team_size]]
+    predictions = [
+        OpponentPrediction(board=i + 1, joueur=f"OPP_{i + 1}", elo=e)
+        for i, e in enumerate(opponent_elos)
+    ]
+    return opponent_elos, predictions
+
+
+async def _audit_compose(
+    request: Request,
+    body: ComposeRequest,
+    scenario_set: ScenarioSet | None,
+    contraintes_ok: bool,
+    duration_ms: float,
+) -> None:
+    """Emit audit entry with lineage_hash and rule metadata (ISO 27001 A.8.15)."""
+    audit = getattr(request.app.state, "audit_logger", None)
+    if audit is None:
+        return
+    engine = getattr(request.app.state, "rule_engine", None)
+    query: dict[str, Any] = {
+        "club_id": body.club_id,
+        "ronde": body.ronde,
+        "division": body.division,
+        "contraintes_ok": contraintes_ok,
+    }
+    if scenario_set is not None:
+        query["lineage_hash"] = scenario_set.lineage_hash
+        query["n_scenarios"] = len(scenario_set.scenarios)
+        query["opponent_club_id"] = scenario_set.opponent_club_id
+    if engine is not None:
+        query["rule_uuids"] = [r.uuid_rfc4122 for r in engine.rules]
+    await audit.log(
+        operation_type=OperationType.READ,
+        collection="compose",
+        query=query,
+        result_count=1,
+        duration_ms=duration_ms,
+        success=True,
+    )
+
+
+def _build_boards(
+    inference: StackingInferenceService,
+    selected: list[dict[str, Any]],
+    opponent_elos: list[int],
+    body: ComposeRequest,
+    feature_store: Any,
+) -> list[BoardResult]:
+    """Run StackingInferenceService.predict_board for each (player, opp_elo) pair."""
+    return [
         _predict_board(
             inference,
             _BoardContext(
@@ -181,39 +291,92 @@ async def compose_teams(body: ComposeRequest, request: Request) -> ComposeRespon
         for i, (player, opp_elo) in enumerate(zip(selected, opponent_elos, strict=False))
     ]
 
+
+def _resolve_opponent(
+    request: Request, body: ComposeRequest, selected: list[dict[str, Any]], team_size: int
+) -> tuple[ScenarioSet | None, list[int], list[OpponentPrediction], str, str]:
+    """Return (scenario_set, opp_elos, opp_predictions, ali_mode, adversaire_label)."""
+    scenario_set = _try_generate_scenarios(request, body, team_size)
+    if scenario_set is not None:
+        elos, preds = _opponent_elos_from_scenario_set(scenario_set, team_size)
+        return (
+            scenario_set,
+            elos,
+            preds,
+            "scenario_generator",
+            (f"{body.opponent_club_id} (ALI scenario top-weighted)"),
+        )
+    elos, preds = _default_opponent(selected, team_size)
+    return None, elos, preds, "elo_fallback", "Adversaire (ALI fallback)"
+
+
+def _build_metadata(
+    bundle: Any, ali_mode: str, duration_ms: float, scenario_set: ScenarioSet | None
+) -> dict[str, Any]:
+    """Assemble response metadata with lineage_hash when ALI active."""
+    metadata: dict[str, Any] = {
+        "model_version": bundle.version if bundle else "none",
+        "ali_mode": ali_mode,
+        "fallback": bundle.fallback_mode if bundle else True,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "duration_ms": round(duration_ms, 2),
+    }
+    if scenario_set is not None:
+        metadata["lineage_hash"] = scenario_set.lineage_hash
+        metadata["n_scenarios"] = len(scenario_set.scenarios)
+    return metadata
+
+
+@router.post("/compose", response_model=ComposeResponse)
+@limiter.limit("30/minute")
+async def compose_teams(body: ComposeRequest, request: Request) -> ComposeResponse:
+    """Compose optimal teams. Phase 3 ALI path active if opponent_club_id fourni."""
+    t_start = datetime.now(UTC)
+    bundle = getattr(request.app.state, "model_bundle", None)
+    feature_store = getattr(request.app.state, "feature_store", None)
+    if bundle is None:
+        raise HTTPException(status_code=503, detail="Models not loaded")
+
+    inference = StackingInferenceService(bundle)
+    pool = _build_player_pool(body)
+    eligible = _apply_pre_filters(pool, body)
+    sorted_players = sort_by_elo(eligible)
+    team_size = min(8, len(sorted_players))
+    selected = sorted_players[:team_size]
+
+    scenario_set, opp_elos, opp_preds, ali_mode, opp_label = _resolve_opponent(
+        request, body, selected, team_size
+    )
+    boards = _build_boards(inference, selected, opp_elos, body, feature_store)
     all_ok = _validate_ffe(boards, body, team_size)
+
     composition = TeamComposition(
         equipe=f"{body.club_id} - Equipe 1",
         division=body.division,
-        adversaire="Adversaire (ALI fallback)",
-        adversaire_predit=[
-            OpponentPrediction(board=i + 1, joueur=f"OPP_{i + 1}", elo=e)
-            for i, e in enumerate(opponent_elos[:team_size])
-        ],
+        adversaire=opp_label,
+        adversaire_predit=opp_preds[:team_size],
         boards=boards,
         e_score_total=round(sum(b.e_score for b in boards), 4),
         contraintes_ok=all_ok,
         validated_by_flatsix=False,
     )
 
+    duration_ms = (datetime.now(UTC) - t_start).total_seconds() * 1000
     audit_logger.info(
         "compose_request",
         club_id=body.club_id,
         n_players=len(body.joueurs_disponibles),
         n_boards=len(boards),
+        ali_mode=ali_mode,
+        lineage_hash=(scenario_set.lineage_hash if scenario_set else None),
         fallback=bundle.fallback_mode if bundle else True,
         contraintes_ok=all_ok,
+        duration_ms=duration_ms,
     )
+    await _audit_compose(request, body, scenario_set, all_ok, duration_ms)
 
-    return ComposeResponse(
-        compositions=[composition],
-        metadata={
-            "model_version": bundle.version if bundle else "none",
-            "ali_mode": "elo_fallback",
-            "fallback": bundle.fallback_mode if bundle else True,
-            "timestamp": datetime.now(UTC).isoformat(),
-        },
-    )
+    metadata = _build_metadata(bundle, ali_mode, duration_ms, scenario_set)
+    return ComposeResponse(compositions=[composition], metadata=metadata)
 
 
 @router.post("/recompose", response_model=ComposeResponse)
@@ -226,6 +389,12 @@ async def recompose_teams(body: RecomposeRequest, request: Request) -> ComposeRe
         ronde=1,
         division="N3",
         mode_strategie="agressif",
+        opponent_club_id=None,
+        round_date=None,
+        saison=None,
+        current_round=None,
+        nb_rondes_total=None,
+        player_overrides=None,
     )
     result: ComposeResponse = await compose_teams(body=compose_body, request=request)
     return result
