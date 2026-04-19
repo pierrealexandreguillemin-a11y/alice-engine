@@ -63,6 +63,14 @@ class Settings(BaseSettings):
 
     default_scenario_count: int = 20
 
+    # Phase 3 : RuleEngine + ALI data
+    ffe_rules_dir: str = "./config/ffe_rules"
+    ali_cache_max_age_days: int = 7
+    joueurs_parquet: str = "./data/joueurs.parquet"
+    echiquiers_parquet: str = "./data/echiquiers.parquet"
+    recency_decay_lambda: float = 0.9
+    streak_lag_window: int = 3
+
     # Render (production)
     render_external_url: str = ""
 
