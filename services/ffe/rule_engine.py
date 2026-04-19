@@ -22,6 +22,7 @@ from services.ali.types import CompetitionContext, PlayerCandidate, RuleViolatio
 from services.ffe.schemas import RuleModel, RulesDocument
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -132,56 +133,100 @@ class RuleEngine:
         lineup: list[PlayerCandidate],
         context: CompetitionContext,
     ) -> RuleViolation | None:
-        """Per-rule check. Returns RuleViolation or None.
+        """Dispatcher per-article check. Returns RuleViolation or None.
 
         Handles articles 3.7.a (team_size), 3.6.e (elo ordering),
-        3.7.g (max mutes), 3.7.j (elo_max).
+        3.7.g (max mutes), 3.7.j (elo_max). Each checker is rank A.
         """
-        art = rule.article
+        checkers: dict[
+            str,
+            Callable[[Rule, list[PlayerCandidate], CompetitionContext], RuleViolation | None],
+        ] = {
+            "3.7.a": self._check_team_size,
+            "3.6.e": self._check_elo_order,
+            "3.7.g": self._check_mutes_limit,
+            "3.7.j": self._check_elo_max,
+        }
+        checker = checkers.get(rule.article)
+        if checker is None:
+            return None
+        return checker(rule, lineup, context)
 
-        if art == "3.7.a":
-            expected_raw = rule.conditions.get("team_size", context.team_size)
-            expected = int(expected_raw) if expected_raw is not None else context.team_size
-            if len(lineup) != expected:
+    @staticmethod
+    def _check_team_size(
+        rule: Rule,
+        lineup: list[PlayerCandidate],
+        context: CompetitionContext,
+    ) -> RuleViolation | None:
+        """Article 3.7.a : lineup length matches expected team_size."""
+        expected_raw = rule.conditions.get("team_size", context.team_size)
+        expected = int(expected_raw) if expected_raw is not None else context.team_size
+        if len(lineup) != expected:
+            return RuleViolation(
+                rule_uuid=rule.uuid,
+                rule_article=rule.article,
+                message=f"team_size: expected {expected}, got {len(lineup)}",
+                severity="error",
+            )
+        return None
+
+    @staticmethod
+    def _check_elo_order(
+        rule: Rule,
+        lineup: list[PlayerCandidate],
+        context: CompetitionContext,  # noqa: ARG004  (dispatcher signature parity)
+    ) -> RuleViolation | None:
+        """Article 3.6.e : Elo descending across boards within tolerance."""
+        tolerance_raw = rule.conditions.get("elo_tolerance", 100)
+        tolerance = int(tolerance_raw)
+        elos = [p.elo for p in lineup]
+        for i in range(len(elos) - 1):
+            if elos[i + 1] - elos[i] > tolerance:
                 return RuleViolation(
                     rule_uuid=rule.uuid,
-                    rule_article=art,
-                    message=f"team_size: expected {expected}, got {len(lineup)}",
+                    rule_article=rule.article,
+                    message=(
+                        f"elo order: board {i + 1}={elos[i]} "
+                        f"< board {i + 2}={elos[i + 1]} + tol"
+                    ),
                     severity="error",
                 )
-        elif art == "3.6.e":
-            tolerance_raw = rule.conditions.get("elo_tolerance", 100)
-            tolerance = int(tolerance_raw)
-            elos = [p.elo for p in lineup]
-            for i in range(len(elos) - 1):
-                if elos[i + 1] - elos[i] > tolerance:
-                    return RuleViolation(
-                        rule_uuid=rule.uuid,
-                        rule_article=art,
-                        message=(
-                            f"elo order: board {i + 1}={elos[i]} "
-                            f"< board {i + 2}={elos[i + 1]} + tol"
-                        ),
-                        severity="error",
-                    )
-        elif art == "3.7.g":
-            max_m_raw = rule.conditions.get("max_mutes", context.max_mutes)
-            max_m = int(max_m_raw) if max_m_raw is not None else context.max_mutes
-            muted = sum(1 for p in lineup if p.mute)
-            if muted > max_m:
-                return RuleViolation(
-                    rule_uuid=rule.uuid,
-                    rule_article=art,
-                    message=f"mutes: {muted} > max {max_m}",
-                    severity="error",
-                )
-        elif art == "3.7.j" and context.elo_max is not None:
-            over = [p for p in lineup if p.elo > context.elo_max]
-            if over:
-                return RuleViolation(
-                    rule_uuid=rule.uuid,
-                    rule_article=art,
-                    message=f"elo_max: {len(over)} players above {context.elo_max}",
-                    severity="error",
-                )
+        return None
+
+    @staticmethod
+    def _check_mutes_limit(
+        rule: Rule,
+        lineup: list[PlayerCandidate],
+        context: CompetitionContext,
+    ) -> RuleViolation | None:
+        """Article 3.7.g : number of muted players within allowed max."""
+        max_m_raw = rule.conditions.get("max_mutes", context.max_mutes)
+        max_m = int(max_m_raw) if max_m_raw is not None else context.max_mutes
+        muted = sum(1 for p in lineup if p.mute)
+        if muted > max_m:
+            return RuleViolation(
+                rule_uuid=rule.uuid,
+                rule_article=rule.article,
+                message=f"mutes: {muted} > max {max_m}",
+                severity="error",
+            )
+        return None
+
+    @staticmethod
+    def _check_elo_max(
+        rule: Rule,
+        lineup: list[PlayerCandidate],
+        context: CompetitionContext,
+    ) -> RuleViolation | None:
+        """Article 3.7.j : no player above optional elo_max cap."""
+        if context.elo_max is None:
+            return None
+        over = [p for p in lineup if p.elo > context.elo_max]
+        if over:
+            return RuleViolation(
+                rule_uuid=rule.uuid,
+                rule_article=rule.article,
+                message=f"elo_max: {len(over)} players above {context.elo_max}",
+                severity="error",
+            )
         return None
