@@ -65,6 +65,30 @@ def _played_rounds(
     return set(sub["ronde"].dropna().astype(int).tolist())
 
 
+def compute_streak_features(
+    history: pd.DataFrame,
+    player_name: str,
+    saison: int,
+    current_round: int,
+) -> tuple[bool, bool, bool]:
+    """F3 : autoregressive lag 1-3 (Box & Jenkins 1970).
+
+    Return (played_lag1, played_lag2, played_lag3) booleans.
+    lag_k = played round (current_round - k) ?
+    """
+    sub = history[(history["joueur_nom"] == player_name) & (history["saison"] == saison)]
+    played_rounds = set(sub["ronde"].dropna().astype(int).tolist())
+
+    def _played_at(r: int) -> bool:
+        return r >= 1 and r in played_rounds
+
+    return (
+        _played_at(current_round - 1),
+        _played_at(current_round - 2),
+        _played_at(current_round - 3),
+    )
+
+
 class HistoryEnricher:
     """Enrichit les PlayerCandidates avec features ALI calculees a inference time."""
 
@@ -102,7 +126,21 @@ class HistoryEnricher:
                 current_round,
                 self._lambda,
             )
-            enriched.append(replace(c, taux_presence_effectif=taux))
+            lag1, lag2, lag3 = compute_streak_features(
+                history,
+                lookup_name,
+                saison,
+                current_round,
+            )
+            enriched.append(
+                replace(
+                    c,
+                    taux_presence_effectif=taux,
+                    played_lag1=lag1,
+                    played_lag2=lag2,
+                    played_lag3=lag3,
+                )
+            )
         return enriched
 
     @staticmethod
