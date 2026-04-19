@@ -1,0 +1,331 @@
+{
+  "metadata": {
+    "championship": "A02",
+    "description": "Règles communes Adultes N1-N4",
+    "version": "1.4.2",
+    "source": "A02_2025_26_Championnat_de_France_des_Clubs.txt"
+  },
+  "rules": [
+    {
+      "uuid": "N1_000",
+      "uuid_rfc4122": "647f8b26-94fc-4955-9b7d-3532eefc66f4",
+      "id": "N1-N4_3.7.a_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.a",
+      "texte": "Licences : chaque équipe est composée de 8 joueurs et/ou joueuses possédant une licence A respectant l'article 1 des règles générales.",
+      "conditions": {
+        "divisions": ["N1", "N2", "N3", "N4"],
+        "team_size": 8,
+        "licence_required": "A",
+        "compliance_general_rules": "article_1"
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_001",
+      "uuid_rfc4122": "a1746510-fe6d-46b4-aa5f-3859eb32cc87",
+      "id": "N1-N4_3.7.b_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.b",
+      "texte": "Force des équipes : la Commission Technique Fédérale (la Ligue pour la N4) compose les groupes en numérotant les équipes appartenant à un même Club par ordre de force décroissante...",
+      "conditions": {
+        "team_order": "descending_strength",
+        "strength_metric": "average_elo",
+        "authority": {
+          "N1": "CTF",
+          "N2": "CTF",
+          "N3": "CTF",
+          "N4": "Ligue"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_002",
+      "uuid_rfc4122": "6a7c7d69-c38f-48d6-9db0-93fe8662423b",
+      "id": "N1-N4_3.6.e_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.6.e",
+      "texte": "Elo : l'Elo à prendre en compte est le dernier Elo publié. Si deux membres d'une équipe ont une différence de classement Elo de plus de 100 points, le mieux classé doit être placé devant le moins bien classé. En cas d'infraction, forfait administratif pour le(s) joueur(s) ou joueuse(s) ayant le plus fort Elo.",
+      "conditions": {
+        "elo_reference": "last_published",
+        "elo_threshold": 100,
+        "order_rule": {
+          "if_gap_gt_100": "stronger_player_first",
+          "if_gap_lte_100": "free_permutation"
+        },
+        "infraction_penalty": {
+          "type": "forfait_administratif",
+          "target": "strongest_player_wrongly_placed"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_003",
+      "uuid_rfc4122": "9720b536-876f-4c42-9b3e-b0abef3c8efb",
+      "id": "N1-N4_3.7.c_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.c",
+      "texte": "Participation dans plusieurs équipes : lorsqu'un club a plusieurs équipes engagées dans le championnat de France des clubs, un joueur ou une joueuse ne peut participer dans une équipe s'il ou elle a déjà joué trois fois dans une équipe plus forte telle que définie à l'article 3.7.b",
+      "conditions": {
+        "player_match_count": {
+          "gte": 3,
+          "team_sup": true
+        },
+        "restrict_lower_team": true
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_004",
+      "uuid_rfc4122": "9f221d7e-bfee-4656-95bf-e3a9c020bd4f",
+      "id": "N1-N4_3.7.d_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.d",
+      "texte": "Participation dans un même groupe : Lorsqu'un club a plusieurs équipes engagées dans un même groupe, la participation d'un joueur ou d'une joueuse à plusieurs équipes de ce même groupe est interdite, y compris d'éventuels barrages",
+      "conditions": {
+        "multiple_teams_same_group": true,
+        "player_participation": "prohibited"
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_005",
+      "uuid_rfc4122": "db72c45f-1624-4015-93d5-bf6bf7102de3",
+      "id": "N1-N4_3.7.e_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.e",
+      "texte": "Nombre de parties : pour disputer le match n de N1, N2, N3, N4 ou une division inférieure, un joueur/joueuse doit avoir joué moins de n matchs dans le championnat...",
+      "conditions": {
+        "match_number": "n",
+        "player_matches_played": {
+          "lt": "n"
+        },
+        "infraction_penalty": {
+          "score": -1,
+          "count_in_total": false
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_006",
+      "uuid_rfc4122": "802b37af-f423-4072-845e-c8b9d927e2fe",
+      "id": "N1-N4_3.2_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.2",
+      "texte": "Couleurs L'équipe première nommée dans les appariements des rencontres a les blancs sur les échiquiers impairs et les noirs sur les échiquiers pairs",
+      "conditions": {
+        "first_named_team": true,
+        "board_colors": {
+          "odd_boards": "white",
+          "even_boards": "black"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_007",
+      "uuid_rfc4122": "ece6918e-1cda-40f3-80a0-2f504b7e7ed4",
+      "id": "N1-N3_3.7.f_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.f",
+      "texte": "Noyau de l'équipe : en N1, N2 et N3, chaque équipe doit aligner à chaque ronde au moins 50% de personnes (appelé noyau) inscrites sur le PV ayant déjà participé au moins une fois pour le compte de cette équipe depuis le début de la saison (sauf pour la ronde 1). En cas d'infraction, en suivant l'ordre des échiquiers, on sanctionne par forfait administratif l'échiquier hors noyau qui ne respecte pas la règle des 50 % et tous ceux qui le suivent.",
+      "conditions": {
+        "divisions": ["N1", "N2", "N3"],
+        "core_team_percentage": 50,
+        "core_definition": "played_at_least_once_for_team_this_season",
+        "exception_round_1": true,
+        "infraction_penalty": {
+          "forfeit": "first_non_core_board_and_subsequent"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [
+        {
+          "round": 1,
+          "description": "Pas de noyau requis à la ronde 1"
+        }
+      ],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_008",
+      "uuid_rfc4122": "b0d8f379-339f-4b68-b98e-adc3bae784ad",
+      "id": "N1-N4_3.7.g_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.g",
+      "texte": "Joueurs mutés : pour chaque match, une équipe de N1, N2 et N3 ne peut aligner plus de 3 joueurs ou joueuses mutés de son effectif depuis la saison précédente. En N4, le nombre est limité à 1. En cas d'infraction, forfait administratif pour le(s) joueur(s) muté(s) excédentaire(s) en suivant l'ordre des échiquiers.",
+      "conditions": {
+        "divisions_limit_3": ["N1", "N2", "N3"],
+        "divisions_limit_1": ["N4"],
+        "max_transferred_players": {
+          "N1": 3,
+          "N2": 3,
+          "N3": 3,
+          "N4": 1
+        },
+        "transferred_definition": "player_joined_club_from_other_club_this_season",
+        "infraction_penalty": {
+          "forfeit": "excess_transferred_players_by_board_order"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_009",
+      "uuid_rfc4122": "fcbe624b-8bfe-436d-8fed-e7da06c173e5",
+      "id": "N1-N4_3.7.h_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.h",
+      "texte": "Joueurs étrangers : pour chaque match, une équipe de N1, N2, N3 et N4 ne peut aligner plus de 3 joueurs ou joueuses de nationalité étrangère (non française). En cas d'infraction, forfait administratif pour le(s) joueur(s) étranger(s) excédentaire(s) en suivant l'ordre des échiquiers.",
+      "conditions": {
+        "divisions": ["N1", "N2", "N3", "N4"],
+        "max_foreign_players": 3,
+        "foreign_definition": "non_french_nationality",
+        "infraction_penalty": {
+          "forfeit": "excess_foreign_players_by_board_order"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_010",
+      "uuid_rfc4122": "77f6976c-f9b8-4e40-89b9-d0c059f63862",
+      "id": "Top16-N2_3.7.i_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.i",
+      "texte": "Joueurs français : en Top 16, N1 et N2, chaque équipe doit aligner au moins un joueur et une joueuse de nationalité française. En cas d'infraction, forfait administratif pour l'équipe.",
+      "conditions": {
+        "divisions": ["Top16", "N1", "N2"],
+        "min_french_male": 1,
+        "min_french_female": 1,
+        "french_definition": "french_nationality",
+        "infraction_penalty": {
+          "forfeit": "administrative_forfeit_team"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_011",
+      "uuid_rfc4122": "243d2407-f72f-41e7-b336-ea1c6f8986d9",
+      "id": "N4_3.7.j_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.j",
+      "texte": "Limite Elo en N4 : les joueurs et joueuses ayant un classement Elo supérieur à 2400 ne peuvent pas participer au championnat de N4. En cas d'infraction, forfait administratif pour le joueur concerné.",
+      "conditions": {
+        "divisions": ["N4"],
+        "max_elo": 2400,
+        "infraction_penalty": {
+          "forfeit": "administrative_forfeit_player"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_012",
+      "uuid_rfc4122": "5da9201d-3b11-45a9-9fe7-c39f156180eb",
+      "id": "N1-N4_3.7.k_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7.k",
+      "texte": "Matchs de barrage : les dispositions de l'ensemble de l'article 3.7 restent valables pour les matchs de barrage, mais en plus, les joueurs ou joueuses participant à un tel match devront avoir joué au moins une fois dans la nationale concernée ou dans une nationale inférieure du Championnat de France des Clubs durant la saison en cours.",
+      "conditions": {
+        "divisions": ["N1", "N2", "N3", "N4"],
+        "match_type": "playoff",
+        "player_eligibility": {
+          "min_matches_in_national": 1,
+          "national_divisions": ["N1", "N2", "N3", "N4"],
+          "scope": "current_season"
+        },
+        "all_37_rules_apply": true,
+        "infraction_penalty": {
+          "forfeit": "administrative_forfeit_player"
+        }
+      },
+      "effet": "restrict_team_composition",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    },
+    {
+      "uuid": "N1_ARB_001",
+      "uuid_rfc4122": "5ea218e3-72bb-4fca-96c9-1dfa3ab344f0",
+      "id": "N1-N2_3.7_001",
+      "source_ref": "A02_2025_26_Championnat_de_France_des_Clubs.txt",
+      "document": "Championnat de France des Clubs",
+      "version": "2024-25",
+      "article": "3.7",
+      "texte": "L'arbitre en N1 et N2 ne peut pas être joueur/joueuse, même dans une autre division",
+      "conditions": {
+        "divisions": ["N1", "N2"],
+        "arbiter_role": "non_player"
+      },
+      "effet": "restrict_arbitrage",
+      "exceptions": [],
+      "priority": 1,
+      "date_version": "2024-10-01"
+    }
+  ]
+}
