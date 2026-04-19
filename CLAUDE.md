@@ -82,7 +82,7 @@ Résumé session : `memory/project_session_resume.md`
 |--------|--------|
 | ML Training | **DONE** — Champion MLP(32,16) stacking 0.5530, ECE_draw 0.0016. AG ÉLIMINÉ (ADR-011). |
 | API FastAPI | **DONE (avec dette)** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). Dette : voir ci-dessous. |
-| ALI prédiction adverse | **FALLBACK** — Elo ranking (Phase 3 = Monte Carlo 20 scénarios) |
+| ALI prédiction adverse | **DONE-SOTA Plan 2** — Monte Carlo hybride (10 TopK + 10 MC LHS+antithetic), copule gaussienne (Sklar 1959) ; fallback Elo si pas d'opponent_club_id |
 | CE multi-équipe | **FALLBACK** — Tri Elo + E[score] (Phase 4 = OR-Tools) |
 | Deploy SaaS multi-tenant | MANQUANT (Phase 5 — scope étendu 2026-04-19) |
 | SDK Python / UI standalone | MANQUANT (Phase 6 nouvelle) |
@@ -94,8 +94,8 @@ Dette ouverte après Phase 2 — détail et plan de résorption : `memory/projec
 
 | # | Dette | Origine | Phase résorption |
 |---|-------|---------|-------------------|
-| D1 | Joueurs = Elo 1500 synthétique (pas de lookup) | Phase 2 (ADR-012) | **Phase 3** (data loader `joueurs.parquet`) |
-| D2 | ALI = tri Elo 1 scénario (pas Monte Carlo) | Phase 2 | **Phase 3** (générateur scénarios) |
+| ~~D1~~ | ~~Joueurs Elo 1500 stub~~ | ~~Phase 2~~ | **RESOLUE Plan 1+2** (PlayerPoolLoader + ScenarioGenerator wirés) |
+| ~~D2~~ | ~~ALI tri Elo 1 scénario~~ | ~~Phase 2~~ | **RESOLUE Plan 2** (ScenarioGenerator 10 TopK + 10 MC SOTA, commit c4a8154) |
 | D3 | Jeunes (J02) non supportés (age_min/age_max ignorés) | Phase 2 | **Phase 3.5** (post-ALI de base) |
 | D4 | Coupes configs dispo mais non implémentées | Phase 2 | **Phase 3.5** |
 | D5 | `services/composer.py` legacy non modifié (mort-vivant) | Phase 2 | **Phase 3** (supprimer OU documenter raison) |
