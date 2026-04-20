@@ -50,13 +50,19 @@ class AggregatedBoard:
 
 @dataclass
 class ScenarioAggregationCtx:
-    """Context bundle for scenario aggregation (ISO 5055 PLR0913 compliance)."""
+    """Context bundle for scenario aggregation (ISO 5055 PLR0913 compliance).
+
+    `strict` controls behaviour when ML inference fails:
+    - False (prod default) : log + return Elo-baseline fallback (degraded observable, ISO 25010)
+    - True (backtest)      : raise (fail-fast, ISO 42001 explainability + ISO 29119 test integrity)
+    """
 
     scenario_set: ScenarioSet
     user_lineup: list[dict[str, Any]]
     team_size: int
     ronde: int
     division: str
+    strict: bool = False
 
 
 def _assemble_features(
@@ -79,8 +85,13 @@ def _safe_predict(
     player_elo: int,
     opp_elo: int,
     feat: np.ndarray[Any, Any],
+    strict: bool = False,
 ) -> tuple[float, float, float]:
-    """Call inference.predict_board with fallback on failure.
+    """Call inference.predict_board with controlled fallback semantics.
+
+    @param strict: if True, re-raise on inference failure (backtest mode,
+        ISO 42001 + 29119 fail-fast). If False, log + return Elo-baseline
+        fallback (prod degraded observable, ISO 25010).
 
     Returns (p_win, p_draw, p_loss). e_score is recomputed downstream.
     """
@@ -89,10 +100,13 @@ def _safe_predict(
         return r.p_win, r.p_draw, r.p_loss
     except Exception:
         logger.exception(
-            "ALI aggregation: inference failed for player_elo=%s opp_elo=%s",
+            "ALI aggregation: inference failed for player_elo=%s opp_elo=%s strict=%s",
             player_elo,
             opp_elo,
+            strict,
         )
+        if strict:
+            raise
         return 0.45, 0.15, 0.40
 
 
@@ -118,7 +132,13 @@ def aggregate_one_board(
         opp = assignments[board_idx].player
         opp_elo = int(opp.elo)
         feat = _assemble_features(user_player, opp_elo, ctx.ronde, ctx.division, feature_store)
-        p_win, p_draw, p_loss = _safe_predict(inference, user_player["elo"], opp_elo, feat)
+        p_win, p_draw, p_loss = _safe_predict(
+            inference,
+            user_player["elo"],
+            opp_elo,
+            feat,
+            strict=ctx.strict,
+        )
         p_loss_agg += w * p_loss
         p_draw_agg += w * p_draw
         p_win_agg += w * p_win
