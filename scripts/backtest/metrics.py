@@ -101,7 +101,9 @@ def accuracy_at_k(
     top = max(scenario_set.scenarios, key=lambda s: s.weight)
     top_names = {_canonical_name(a.player) for a in top.lineup.assignments}
     observed_names = observed.player_names()
-    k_eff = k if k is not None else len(observed.players)
+    # Use deduplicated set size for denominator coherence with numerator
+    # (M3 audit JALON #1). Caller can override via k=team_size si besoin.
+    k_eff = k if k is not None else len(observed_names)
     if k_eff == 0:
         return 0.0
     return len(observed_names & top_names) / k_eff
@@ -164,7 +166,7 @@ def brier_presence(observed: ObservedLineup, scenario_set: ScenarioSet) -> float
         return 0.0
     total = 0.0
     for name in all_players:
-        p = p_presence.get(name, 0.0)
+        p = min(p_presence.get(name, 0.0), 1.0)
         obs_flag = 1.0 if name in observed_names else 0.0
         total += (p - obs_flag) ** 2
     return total / len(all_players)

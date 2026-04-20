@@ -96,8 +96,11 @@ class BacktestHarness:
         strict: bool = True,
     ) -> BacktestMatchResult:
         """Run a single backtest match (services pre-setup)."""
-        if self.scenario_generator is None or self.inference is None:
-            raise RuntimeError("BacktestHarness not setup() yet")
+        if self.scenario_generator is None or self.inference is None or self.feature_store is None:
+            raise RuntimeError(
+                "BacktestHarness not setup() yet (missing scenario_generator, "
+                "inference, or feature_store)"
+            )
         return run_backtest_match(
             user_club_id=user_club_id,
             opponent_club_id=opponent_club_id,

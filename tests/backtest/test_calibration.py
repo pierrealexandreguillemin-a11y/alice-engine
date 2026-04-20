@@ -31,7 +31,7 @@ def _mk_player(nr: str, nom: str, prenom: str, elo: int = 1800) -> PlayerCandida
     )
 
 
-def _mk_scenario(players: list[PlayerCandidate], weight: float, source: str = "top_k") -> Scenario:
+def _mk_scenario(players: list[PlayerCandidate], weight: float, source: str = "topk") -> Scenario:
     assigns = tuple(
         BoardAssignment(board=i + 1, player=p, p_assignment=1.0) for i, p in enumerate(players)
     )
