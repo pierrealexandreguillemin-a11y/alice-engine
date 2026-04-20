@@ -1,25 +1,26 @@
-"""Integration test metrics on REAL FFE data (concern #2 audit fix).
+"""Contract test canonical names on REAL FFE data (concern #2 audit).
 
-Plan 3 V2. ISO 29119 : integration layer above unit tests.
+Plan 3 V2. ISO 27034 : input contract validation. **PAS un integration
+test** au sens ISO 29119 §4 (pas de prediction reelle, pas de harness).
 
-Prevents silent failures :
-- Canonical name matching `f"{nom} {prenom}".strip()` must resolve correctly
-  against echiquiers.parquet "NOM Prenom" format (accents, dashes, spaces).
-- Ground truth ObservedLineup.player_names() must match canonical names
-  built from joueurs.parquet → metrics non-zero on realistic data.
+Scope strict :
+- Contract round-trip `PlayerCandidate(nom, prenom) → _canonical_name()`
+  doit reproduire le format `echiquiers.parquet` "NOM Prenom" exact
+  (accents, dashes, espaces multiples, casse).
+- Ground truth `ObservedLineup.player_names()` extrait correctement
+  sur data FFE reelle.
 
-Design note (fast integration, no harness) :
-Le harness ML est couvert par tests/test_phase3_plan3_smoke.py (pilote 10
-matches). Ici, on isole SPECIFIQUEMENT la jointure des noms canoniques :
-- extraire observed lineup réel (echiquiers.blanc_nom / noir_nom)
-- construire un ScenarioSet SYNTHETIQUE avec exactement ces joueurs
-- vérifier que les metrics retournent > 0 (sinon le format est divergent)
+Si `_canonical_name(PlayerCandidate)` produisait "Nom Prenom" alors
+qu'echiquiers stocke "NOM Prenom", ce test failerait.
 
-Ce test failerait si `_canonical_name(PlayerCandidate)` produisait
-"Nom Prenom" alors qu'echiquiers stocke "NOM Prenom" (casse).
+**Ce que ce test NE valide PAS** (ISO 29119 integration scope) :
+- ALI predit quoi que ce soit (pas de generator/inference appele)
+- Erreur predictive mesuree (Pappalardo 2019 backtest requirement)
+- Wiring harness -> ML -> metrics end-to-end
+-> Responsabilite T11 Runner full walk-forward (pending).
 
-Document ID: ALICE-BACKTEST-METRICS-INTEGRATION
-Version: 1.1.0
+Document ID: ALICE-BACKTEST-CANONICAL-CONTRACT
+Version: 1.2.0
 """
 
 from __future__ import annotations
@@ -99,7 +100,7 @@ def _mk_candidate_from_observed_name(observed_name: str) -> PlayerCandidate:
     )
 
 
-def test_canonical_matching_on_real_ffe_names(cache):
+def test_canonical_contract_on_real_ffe_names(cache):
     """CRITICAL concern #2 : canonical name round-trip sur data réelle.
 
     Si `_canonical_name(PlayerCandidate(nom, prenom))` ne reproduit pas le

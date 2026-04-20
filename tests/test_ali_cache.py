@@ -69,6 +69,28 @@ def test_lookup_club_unknown_returns_empty_df(ali_data_cache: ALIDataCache) -> N
     assert subset.empty
 
 
+def test_team_to_club_built(ali_data_cache: ALIDataCache) -> None:
+    """Plan 3 H1 : team_to_club mapping echiquiers.team -> joueurs.club.
+
+    Build via majority vote. Doit contenir >= 50 teams (FFE
+    interclubs ~ >500 clubs * N divisions).
+    """
+    assert isinstance(ali_data_cache.team_to_club, dict)
+    assert len(ali_data_cache.team_to_club) >= 50
+    sample_team = next(iter(ali_data_cache.team_to_club))
+    club = ali_data_cache.team_to_club[sample_team]
+    # Club must be a known joueurs.club
+    assert club in ali_data_cache.joueurs_by_club
+
+
+def test_team_to_club_resolves_pool(ali_data_cache: ALIDataCache) -> None:
+    """T11 usage : team_name -> club -> joueurs pool non-empty."""
+    for team, club in list(ali_data_cache.team_to_club.items())[:10]:
+        pool = ali_data_cache.joueurs_by_club.get(club)
+        assert pool is not None, f"team={team} -> club={club} absent from joueurs_by_club"
+        assert len(pool) > 0
+
+
 def test_lookup_history_returns_union_of_colors(ali_data_cache: ALIDataCache) -> None:
     first_name = next(iter(ali_data_cache.echiquiers_by_player.keys()))
     hist = ali_data_cache.lookup_history([first_name])
