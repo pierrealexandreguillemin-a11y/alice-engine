@@ -1,17 +1,19 @@
 """Ground truth extraction : observed adversary lineup from echiquiers.parquet.
 
-Plan 3 V2 T2. ISO 5259 (data lineage, no leakage).
+Plan 3 V2 T2. ISO 5259 (data lineage, no leakage), ISO 24029 (robustness).
 
 For a (club_name, saison, ronde), extract the K joueurs who actually played
 + their echiquier assignment. Ground truth for backtest metrics T13-T17.
 
-Uses `blanc_equipe` / `noir_equipe` columns to identify which player belongs
-to the target club on each board (robust — no reliance on FFE board color
-parity convention). Each board is played by exactly one player of each team,
-so per match we emit one ObservedPlayer per echiquier (the club's player).
+**Defense in depth (D-P3-14)** :
+1. Filter via `blanc_equipe` / `noir_equipe` columns (data-driven, robust)
+2. Validate FFE A02 §3.6 invariant : within a match, color alternates
+   deterministically by echiquier parity (exploits domain knowledge as
+   data-quality cross-check, ISO 24029)
+Both layers combined : robust filter + fail-fast on data corruption.
 
 Document ID: ALICE-BACKTEST-GROUND-TRUTH
-Version: 1.0.0
+Version: 1.1.0 (D-P3-14 : FFE invariant check)
 """
 
 from __future__ import annotations
@@ -82,6 +84,9 @@ def extract_observed_lineup(
         )
         raise KeyError(msg)
 
+    # D-P3-14 : FFE A02 §3.6 invariant cross-check (ISO 24029 data quality)
+    _validate_ffe_color_invariant(match_rows, club_name, saison, ronde)
+
     players = _extract_players(match_rows, is_home=is_home)
     if not players:
         msg = (
@@ -120,6 +125,68 @@ def _select_match_rows(
     if not away.empty:
         return away, False
     return empty, True
+
+
+class FFEDataQualityError(ValueError):
+    """Raised when echiquiers.parquet violates FFE A02 §3.6 color alternance invariant.
+
+    ISO 24029 : fail-fast on data corruption to avoid silent propagation into metrics.
+    """
+
+
+def _validate_ffe_color_invariant(
+    match_rows: object, club_name: str, saison: int, ronde: int
+) -> None:
+    """Check FFE A02 §3.6 invariant (color alternance by echiquier parity).
+
+    Within one match, blanc_equipe must be consistent per echiquier parity
+    (odd boards one team, even boards the other). Validates data integrity :
+    if parquet scrape mis-attributed blanc_equipe, we catch it here rather
+    than propagating silently into ground truth.
+
+    @raises FFEDataQualityError on invariant violation.
+    """
+    odd_blancs = set()
+    even_blancs = set()
+    for _, row in match_rows.iterrows():  # type: ignore[attr-defined]
+        ech = int(row["echiquier"])
+        blanc_eq = str(row["blanc_equipe"])
+        noir_eq = str(row["noir_equipe"])
+        # Sanity : blanc_equipe ≠ noir_equipe (both teams on the board)
+        if blanc_eq == noir_eq:
+            msg = (
+                f"FFE invariant violated [{club_name} saison={saison} ronde={ronde} "
+                f"ech={ech}] : blanc_equipe == noir_equipe == '{blanc_eq}'"
+            )
+            raise FFEDataQualityError(msg)
+        # Collect by parity
+        if ech % 2 == 1:
+            odd_blancs.add(blanc_eq)
+        else:
+            even_blancs.add(blanc_eq)
+    # Alternance : tous odd boards ont le même blanc_equipe ; idem even
+    if len(odd_blancs) > 1:
+        msg = (
+            f"FFE invariant violated [{club_name} saison={saison} ronde={ronde}] : "
+            f"odd echiquiers have inconsistent blanc_equipe : {odd_blancs} "
+            f"(A02 §3.6 requires strict alternance)"
+        )
+        raise FFEDataQualityError(msg)
+    if len(even_blancs) > 1:
+        msg = (
+            f"FFE invariant violated [{club_name} saison={saison} ronde={ronde}] : "
+            f"even echiquiers have inconsistent blanc_equipe : {even_blancs} "
+            f"(A02 §3.6 requires strict alternance)"
+        )
+        raise FFEDataQualityError(msg)
+    # Finally : odd_blancs ∩ even_blancs should be empty (colors must swap)
+    if odd_blancs and even_blancs and odd_blancs == even_blancs:
+        msg = (
+            f"FFE invariant violated [{club_name} saison={saison} ronde={ronde}] : "
+            f"odd and even echiquiers have same blanc_equipe {odd_blancs} "
+            f"(A02 §3.6 requires color alternance)"
+        )
+        raise FFEDataQualityError(msg)
 
 
 def _extract_players(match_rows: object, *, is_home: bool) -> list[ObservedPlayer]:
