@@ -67,10 +67,16 @@ def test_runner_run_produces_report_smoke(harness: BacktestHarness) -> None:
         report.ci_ece,
     ):
         assert ci.lower <= ci.point <= ci.upper
-    # Gates summary returns dict with 6 gates
+    # Gates summary returns dict with 7 gates (P3G07..P3G11 + MAE)
     gates = report.gates_summary()
-    assert len(gates) == 6
+    assert len(gates) == 7
+    assert "P3G11_mae" in gates
     assert all(isinstance(v, bool) for v in gates.values())
+    # T12 MAE finite value
+    assert report.ci_mae.lower >= 0.0
+    # Each match has e_score fields
+    for s in report.per_match:
+        assert s.e_score_mae >= 0.0
 
 
 def test_runner_raises_if_too_few_matches(harness: BacktestHarness) -> None:

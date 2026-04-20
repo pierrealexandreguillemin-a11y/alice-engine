@@ -167,6 +167,11 @@ class BacktestRunner:
         recall_base = top_k_recall(observed, baseline_ss)
         brier_base = brier_presence(observed, baseline_ss)
 
+        # T12 : E[score] MAE (user team predicted vs observed match score)
+        e_pred = sum(b.e_score for b in result.aggregated_boards)
+        e_obs = _observed_user_score(cache, user_team, opp_team, saison, ronde)
+        e_mae = abs(e_pred - e_obs) if e_obs is not None else 0.0
+
         return MatchStats(
             saison=saison,
             ronde=ronde,
@@ -180,6 +185,9 @@ class BacktestRunner:
             recall_baseline=recall_base,
             brier_baseline=brier_base,
             bss=brier_skill_score(observed, result.scenario_set, brier_base),
+            e_score_predicted=e_pred,
+            e_score_observed=e_obs if e_obs is not None else 0.0,
+            e_score_mae=e_mae,
             ali_correct=recall_ali >= RECALL_GATE,
             baseline_correct=recall_base >= RECALL_GATE,
         )
@@ -214,9 +222,37 @@ class BacktestRunner:
             ci_jaccard=ci([s.jaccard_ali for s in stats]),  # type: ignore[arg-type]
             ci_brier=ci([s.brier_ali for s in stats]),  # type: ignore[arg-type]
             ci_ece=ci([s.ece_ali for s in stats]),  # type: ignore[arg-type]
+            ci_mae=ci([s.e_score_mae for s in stats]),  # type: ignore[arg-type]
             mean_bss=sum(s.bss for s in stats) / len(stats),
             mcnemar=mcnemar_paired(
                 [s.ali_correct for s in stats],
                 [s.baseline_correct for s in stats],
             ),
         )
+
+
+def _observed_user_score(
+    cache: object, user_team: str, opp_team: str, saison: int, ronde: int
+) -> float | None:
+    """T12 : observed user team total score from echiquiers.
+
+    @returns score_dom si user_team = equipe_dom, score_ext sinon. None si
+             row absente (match non joue ou saison/ronde hors scope).
+    """
+    df = cache.echiquiers_total  # type: ignore[attr-defined]
+    row = df[
+        (df["saison"] == saison)
+        & (df["ronde"] == ronde)
+        & (df["equipe_dom"] == user_team)
+        & (df["equipe_ext"] == opp_team)
+    ]
+    if row.empty:
+        return None
+    r = row.iloc[0]
+    score_dom = r.get("score_dom")
+    if score_dom is None:
+        return None
+    try:
+        return float(score_dom)
+    except (TypeError, ValueError):
+        return None

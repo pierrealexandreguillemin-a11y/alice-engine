@@ -24,6 +24,7 @@ JACCARD_GATE = 0.75
 BRIER_GATE = 0.20
 BSS_GATE = 0.05
 ECE_GATE = 0.05
+MAE_GATE = 1.0
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,9 @@ class MatchStats:
     recall_baseline: float
     brier_baseline: float
     bss: float
+    e_score_predicted: float
+    e_score_observed: float
+    e_score_mae: float
     ali_correct: bool
     baseline_correct: bool
 
@@ -64,6 +68,7 @@ class BacktestReport:
     ci_jaccard: BootstrapCI
     ci_brier: BootstrapCI
     ci_ece: BootstrapCI
+    ci_mae: BootstrapCI
     mean_bss: float
     mcnemar: McNemarResult
 
@@ -75,6 +80,7 @@ class BacktestReport:
             "P3G09_brier": self.ci_brier.passes_gate(BRIER_GATE, direction="le"),
             "P3G09_bss": self.mean_bss >= BSS_GATE,
             "P3G10_ece": self.ci_ece.passes_gate(ECE_GATE, direction="le"),
+            "P3G11_mae": self.ci_mae.passes_gate(MAE_GATE, direction="le"),
             "P3G11_mcnemar": self.mcnemar.passes_gate(alpha=0.05),
         }
 
