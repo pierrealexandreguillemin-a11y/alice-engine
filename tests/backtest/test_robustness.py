@@ -79,6 +79,28 @@ def test_robustness_result_frozen():
         res.recall_drop = 0.99  # type: ignore[misc]
 
 
+def test_run_stress_suite_multi_noise_levels():
+    """T16 : stress suite compute RobustnessResult pour chaque noise level."""
+    from scripts.backtest.robustness import run_stress_suite
+
+    baseline = [0.9, 0.95, 0.85, 0.92]
+    perturbed = {
+        0.05: [0.88, 0.92, 0.84, 0.90],
+        0.10: [0.80, 0.85, 0.78, 0.82],
+        0.20: [0.65, 0.70, 0.60, 0.68],
+    }
+    results = run_stress_suite(baseline, perturbed)
+    assert len(results) == 3
+    # Sorted by noise ASC
+    assert results[0].noise_pct == 0.05
+    assert results[2].noise_pct == 0.20
+    # Drops monotone croissants
+    assert results[0].recall_drop < results[1].recall_drop < results[2].recall_drop
+    # Smallest noise should pass gate, largest should fail
+    assert results[0].passes_gate() is True
+    assert results[2].passes_gate() is False
+
+
 def test_perturb_elos_mean_preserved_approx():
     """Gaussian noise centered 0 -> mean approx preserved sur large sample."""
     import numpy as np

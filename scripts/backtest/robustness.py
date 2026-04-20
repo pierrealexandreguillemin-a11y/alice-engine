@@ -93,3 +93,33 @@ def robustness_smoke(
         noise_pct=noise_pct,
         seed=seed,
     )
+
+
+def run_stress_suite(
+    baseline_recalls: list[float],
+    perturbed_recalls_by_noise: dict[float, list[float]],
+    seed: int = 42,
+) -> list[RobustnessResult]:
+    """T16 Stress-test suite : multiple noise levels sur meme set matches.
+
+    @param baseline_recalls: per-match recall list (baseline run).
+    @param perturbed_recalls_by_noise: {noise_pct: per-match recall list}.
+    @param seed: pass-through for lineage.
+
+    @returns list of RobustnessResult, un par noise_pct. P3G13 all pass
+             si tous les noise levels <= 0.10 (gate absolute drop).
+    """
+
+    def _mean(xs: list[float]) -> float:
+        return sum(xs) / len(xs) if xs else 0.0
+
+    base = _mean(baseline_recalls)
+    return [
+        robustness_smoke(
+            baseline_recall=base,
+            perturbed_recall=_mean(perturbed),
+            noise_pct=noise,
+            seed=seed,
+        )
+        for noise, perturbed in sorted(perturbed_recalls_by_noise.items())
+    ]
