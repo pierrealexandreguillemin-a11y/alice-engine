@@ -66,6 +66,44 @@ CLAUDE.md                               # D8 Plan 3.5, gates Plan 3 résolus
 
 `services/ali/aggregation.py::_safe_predict(strict=False)` ajouté. `ScenarioAggregationCtx.strict: bool = False` propagé. Tests aggregation 6/6 PASS. Backtest harness Plan 3 set `strict=True`.
 
+## Pre-Task 1 : Corrections CRITIQUES ML inference end-to-end ✅ DONE
+
+**Root causes détectées pendant P3-Task 1 pilote** (zero debt policy — 0 avancement sans fix) :
+
+### C1 : FeatureStore stub (only 3 cols vs model 201 features)
+- **Cause** : `FeatureStore` cherchait `joueur_features.parquet` inexistant. Retournait ~5 cols. Model entraîné sur 201 features → XGBoost rejetait silencieusement.
+- **Fix** : nouveau script `scripts/build_feature_store.py` qui aggrège `data/features/train.parquet` (1.14M rows × 147 cols) en :
+  - `data/feature_store/training_mean.parquet` (201-col fallback row matchant `LightGBM.txt::feature_names`)
+  - `data/feature_store/joueur_features.parquet` (95851 joueurs × 21 canonical features)
+- **FeatureStore v2.0** rewritten : `assemble()` retourne DataFrame 201-col matching model feature_names. Override blanc_*/noir_* depuis per-player aggregates + training_mean fallback pour unknowns.
+
+### C2 : `_assemble_features` retournait ndarray (lost feature_names → XGBoost refuse)
+- **Cause** : `.values` → ndarray → XGBoost Booster fail validation
+- **Fix** : `services/ali/aggregation.py::_assemble_features` retourne DataFrame (preserve feature_names) + raise RuntimeError si `feature_store=None` (ISO 42001 fail-fast)
+
+### C3 : MLP champion manquant sur HF Hub → stacking crash
+- **Cause** : `mlp_meta_learner.joblib` absent de `Pierrax/alice-engine/v9/`. Seul calibrateur Dirichlet déployé.
+- **Fix** : `scripts/serving/model_loader.py` détecte MLP absent → auto-fallback LGB+Dirichlet mode avec warning. Re-deploy MLP(32,16) scope Phase 1 futur (D-P3-13 à tracer).
+
+### C4 : `_predict_fallback` utilisait `.predict_proba` mais Dirichlet est dict (W matrix + bias)
+- **Cause** : `_predict_fallback` crashait sur `b.mlp_model.predict_proba(log_p)` (AttributeError : 'dict' object).
+- **Fix** : `services/inference.py::_predict_fallback` détecte `isinstance(b.mlp_model, dict)` → appel helper `_apply_dirichlet` qui implémente `softmax(W @ log(p) + bias)`.
+
+### C5 : harness.py avait fallback silent `self.feature_store = None`
+- **Fix** : suppression du try/except silent. FeatureStore MUST load (raise si training_mean.parquet absent) — ISO 42001 fail-fast.
+
+### Validation empirique end-to-end
+- **ML inference fonctionne** : `PredictionResult(p_loss=0.47, p_draw=0.26, p_win=0.26)`, sum=1.0 sur match test (KRAMNIK vs TREGUBOV)
+- **3/3 tests PASS** avec strict=True réel :
+  - `tests/backtest/test_harness.py` 2/2 (services bootstrap + run_match complet)
+  - `tests/test_phase3_plan3_smoke.py::test_pilot_10_matches_no_silent_fallback` 1/1 (10 matches, strict mode, pas de fallback silencieux)
+- **6/6 tests** `tests/test_compose_ali_aggregation.py` avec mock FeatureStore pattern
+
+### Tests et couverture post-fix
+- aggregation module : 6/6 PASS
+- harness + smoke : 3/3 PASS ML inference réel, feature store 201-col, latence < 5s/match
+- pilote 10 matches : 10/10 strict=True, AUCUN fallback silent
+
 ---
 
 ## P3-Task 1 : Backtest harness + pilote feasibility 10 matches

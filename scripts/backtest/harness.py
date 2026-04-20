@@ -75,25 +75,11 @@ class BacktestHarness:
         )
         self.inference = StackingInferenceService(bundle)
 
-        try:
-            fs = FeatureStore(Path(settings.feature_store_path))
-            fs.load()
-            # If joueur_features.parquet missing -> empty DF -> treat as None
-            # (avoids string features like division='N3' reaching ML models).
-            # Documented for P3-Task 7 (T17 will require real inference).
-            if fs._joueur_features is None or len(fs._joueur_features) == 0:  # noqa: SLF001
-                logger.warning(
-                    "feature_store empty (no joueur_features.parquet), "
-                    "using None (zero features fallback)",
-                )
-                self.feature_store = None
-            else:
-                self.feature_store = fs
-        except Exception:
-            logger.warning(
-                "feature_store unavailable, using None (zero features fallback)",
-            )
-            self.feature_store = None
+        # Feature store MUST be loaded for strict-mode backtest (ISO 42001).
+        # Run scripts/build_feature_store.py if training_mean.parquet absent.
+        fs = FeatureStore(Path(settings.feature_store_path))
+        fs.load()  # raises if training_mean.parquet missing
+        self.feature_store = fs
 
     def run_match(  # noqa: PLR0913
         self,

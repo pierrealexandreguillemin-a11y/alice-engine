@@ -139,3 +139,9 @@ site/
 optuna_studies/
 grid_results/
 results/
+models/cache/*.cbm
+models/cache/*.txt
+models/cache/*.ubj
+models/cache/*.joblib
+models/cache/*.parquet
+.claude/scheduled_tasks.lock

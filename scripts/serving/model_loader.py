@@ -159,6 +159,12 @@ def load_models(
         if mlp_path.exists():
             mlp_model = joblib.load(mlp_path)
             logger.info("Loaded MLP meta-learner")
+        else:
+            logger.warning(
+                "mlp_meta_learner.joblib missing — falling back to LGB+Dirichlet. "
+                "Re-deploy MLP(32,16) champion artifact to enable full stacking."
+            )
+            fallback = True  # auto-fallback if MLP champion absent
         if temp_path.exists():
             temperature = float(joblib.load(temp_path))
             logger.info("Loaded temperature: T=%.4f", temperature)

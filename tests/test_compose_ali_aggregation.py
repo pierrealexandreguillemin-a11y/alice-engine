@@ -42,6 +42,17 @@ def _mk_player(nr_ffe: str, elo: int) -> PlayerCandidate:
     )
 
 
+def _mock_feature_store():
+    """Mock FeatureStore returning dummy single-row DataFrame."""
+    import pandas as pd
+
+    mock = MagicMock()
+    mock.assemble.return_value = pd.DataFrame(
+        [{"blanc_elo": 1500, "noir_elo": 1500, "diff_elo": 0}]
+    )
+    return mock
+
+
 def _mk_scenario(players: list[tuple[str, int]], weight: float, source: str = "topk") -> Scenario:
     """Build a Scenario with given (nr_ffe, elo) board assignments."""
     assignments = tuple(
@@ -113,7 +124,7 @@ class TestAggregateOneBoard:
         )
         agg = aggregate_one_board(
             inference=inference,
-            feature_store=None,
+            feature_store=_mock_feature_store(),
             user_player=user_player,
             board_idx=0,
             ctx=ctx,
@@ -150,7 +161,7 @@ class TestAggregateOneBoard:
         )
         agg = aggregate_one_board(
             inference=inference,
-            feature_store=None,
+            feature_store=_mock_feature_store(),
             user_player=user_player,
             board_idx=0,
             ctx=ctx,
@@ -190,7 +201,7 @@ class TestAggregateOneBoard:
         )
         agg = aggregate_one_board(
             inference=inference,
-            feature_store=None,
+            feature_store=_mock_feature_store(),
             user_player=user_player,
             board_idx=0,
             ctx=ctx,
@@ -232,7 +243,7 @@ class TestAggregateFromScenarios:
             ronde=1,
             division="N3",
         )
-        aggregated = aggregate_from_scenarios(inference, None, ctx)
+        aggregated = aggregate_from_scenarios(inference, _mock_feature_store(), ctx)
 
         assert len(aggregated) == 2
         assert aggregated[0].board == 1
@@ -265,7 +276,7 @@ class TestAggregateFromScenarios:
             ronde=1,
             division="N3",
         )
-        aggregated = aggregate_from_scenarios(inference, None, ctx)
+        aggregated = aggregate_from_scenarios(inference, _mock_feature_store(), ctx)
 
         for b in aggregated:
             assert b.p_win + b.p_draw + b.p_loss == pytest.approx(1.0, abs=1e-4)
@@ -293,7 +304,7 @@ class TestAggregateFromScenarios:
             ronde=1,
             division="N3",
         )
-        aggregate_from_scenarios(inference, None, ctx)
+        aggregate_from_scenarios(inference, _mock_feature_store(), ctx)
 
         # predict_board called n_scenarios * n_boards times (vs 1 old fix = n_boards)
         assert inference.predict_board.call_count == n_scenarios * n_boards

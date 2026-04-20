@@ -21,9 +21,9 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 if TYPE_CHECKING:
+    import numpy as np  # noqa: F401
+
     from services.ali.scenario import ScenarioSet
     from services.inference import StackingInferenceService
 
@@ -66,18 +66,29 @@ class ScenarioAggregationCtx:
 
 
 def _assemble_features(
-    player: dict[str, Any], opp_elo: int, ronde: int, division: str, feature_store: Any
-) -> np.ndarray[Any, Any]:
-    """Build feature vector for one (user, opponent) board pair."""
+    player: dict[str, Any],
+    opp_elo: int,
+    ronde: int,
+    division: str,
+    feature_store: Any,
+) -> Any:
+    """Build 201-col feature DataFrame for one (user, opponent) board pair.
+
+    Returns pd.DataFrame (not ndarray) to preserve feature_names required by
+    XGBoost Booster validation (ISO 42001 schema enforcement).
+    """
     if feature_store is None:
-        return np.zeros((1, 201))
-    features = feature_store.assemble(
+        msg = (
+            "feature_store=None: strict-mode inference impossible. "
+            "Run scripts/build_feature_store.py + configure FeatureStore at lifespan."
+        )
+        raise RuntimeError(msg)
+    return feature_store.assemble(
         player_name=player["ffe_id"],
         player_elo=player["elo"],
         opponent_elo=opp_elo,
         context={"ronde": ronde, "division": division},
     )
-    return np.asarray(features.values)
 
 
 def _safe_predict(

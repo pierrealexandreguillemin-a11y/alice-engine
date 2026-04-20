@@ -99,13 +99,27 @@ class StackingInferenceService:
     def _predict_fallback(self, features: np.ndarray, init_scores: np.ndarray) -> np.ndarray:
         b = self._bundle
         p_lgb = predict_with_init(b.lgb_model, features, init_scores * ALPHA_LGB)
-        if b.mlp_model is not None:
+        if b.mlp_model is None:
+            self._validate_output(p_lgb)
+            return p_lgb
+        # Dirichlet calibrator stored as dict {model_name: (kind, W, bias)}
+        if isinstance(b.mlp_model, dict):
+            p_cal = self._apply_dirichlet(p_lgb, b.mlp_model)
+        else:
             log_p = np.log(np.clip(p_lgb, 1e-7, 1.0))
             p_cal = np.asarray(b.mlp_model.predict_proba(log_p))
-        else:
-            p_cal = p_lgb
         self._validate_output(p_cal)
         return p_cal
+
+    @staticmethod
+    def _apply_dirichlet(p: np.ndarray, calib: dict) -> np.ndarray:
+        """Apply Dirichlet multinomial logistic calibration : softmax(W @ log(p) + bias)."""
+        _, weights, bias = next(iter(calib.values()))
+        log_p = np.log(np.clip(p, 1e-7, 1.0))
+        logits = log_p @ weights.T + bias
+        logits -= logits.max(axis=1, keepdims=True)
+        exp_l = np.exp(logits)
+        return np.asarray(exp_l / exp_l.sum(axis=1, keepdims=True))
 
     @staticmethod
     def _apply_temperature(p: np.ndarray, temperature: float) -> np.ndarray:
