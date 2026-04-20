@@ -99,14 +99,14 @@ def test_ece_empty_returns_zero():
 
 
 def test_ece_gate_threshold():
-    """ECE <= 0.10 → well-calibrated (Guo 2017)."""
+    """ECE <= 0.05 → well-calibrated (Plan 3 V2 P3G10 strict)."""
     pA = _mk_player("1", "DUPONT", "Jean")
     pB = _mk_player("2", "MARTIN", "Paul")
     # 2 joueurs, 1 observé, 1 non → ECE = 0.5 (fail gate)
     ss = _mk_scenario_set((_mk_scenario([pA, pB], 1.0),))
     obs = _mk_observed(["DUPONT Jean"])
     ece = ece_presence(obs, ss)
-    assert ece > 0.10  # fail gate
+    assert ece > 0.05  # fail gate
 
 
 def test_ece_invalid_n_bins_raises():

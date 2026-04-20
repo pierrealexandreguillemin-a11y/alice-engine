@@ -7,7 +7,8 @@ Metrics fournis
 - T7 ECE 10-bins (Guo 2017) : Expected Calibration Error sur P(presence).
   ``ECE = Σ_m (|B_m| / n) × |conf(B_m) - acc(B_m)|`` où
   ``B_m`` = bin m, ``conf`` = moyenne p_presence prédite, ``acc`` = fréquence
-  observée. Gate seuil <= 0.10 (Guo 2017, well-calibrated model).
+  observée. Gate seuil <= 0.05 (Plan 3 V2 P3G10, strict vs Guo 2017 0.10
+  standard — ALICE production cible well-calibrated stricte).
 
 - T7b Reliability diagram : points (mean_p, mean_obs, n) par bin, utilisables
   pour tracer calibration curve (Bröcker 2008). Export markdown/ASCII dans
@@ -87,7 +88,7 @@ def ece_presence(
 
     Guo et al. 2017 formulation.
 
-    Gate seuil : <= 0.10 (well-calibrated).
+    Gate seuil : <= 0.05 (Plan 3 V2 P3G10, strict ALICE production).
 
     @param observed: lineup réel du club adverse.
     @param scenario_set: ScenarioSet ALI (weights normalisés).
