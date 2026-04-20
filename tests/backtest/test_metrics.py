@@ -329,3 +329,65 @@ def test_brier_skill_score_gate_threshold():
     ss = _make_scenario_set([s1])
     bss = brier_skill_score(observed, ss, baseline_brier=0.30)
     assert bss >= 0.05
+
+
+# --- Concern #5 : Déterminisme (ISO 29119) ---
+
+
+def test_metrics_deterministic_same_input():
+    """Même inputs → mêmes outputs pour toutes les metrics (pureté fonctionnelle)."""
+    observed = _make_observed(["ALPHA", "BETA", "GAMMA"])
+    s1 = _make_scenario(["ALPHA", "BETA"], 0.6)
+    s2 = _make_scenario(["GAMMA", "DELTA"], 0.4)
+    ss = _make_scenario_set([s1, s2])
+
+    # 2 appels consécutifs → mêmes résultats bit-à-bit
+    assert top_k_recall(observed, ss) == top_k_recall(observed, ss)
+    assert accuracy_at_k(observed, ss) == accuracy_at_k(observed, ss)
+    assert jaccard_max(observed, ss) == jaccard_max(observed, ss)
+    assert brier_presence(observed, ss) == brier_presence(observed, ss)
+    assert brier_skill_score(observed, ss, 0.3) == brier_skill_score(observed, ss, 0.3)
+
+
+# --- Concern #6 : Edge case observed non-vide + scenarios vide ---
+
+
+def test_brier_presence_observed_nonempty_scenarios_empty():
+    """Observed = 2 joueurs, scenarios vide → Brier = 1.0 (aucune prédiction)."""
+    observed = _make_observed(["ALPHA", "BETA"])
+    empty_ss = ScenarioSet(
+        scenarios=(),
+        opponent_club_id="C1",
+        round_date="2024-01-01",
+        generated_at="2024-01-01T00:00:00Z",
+        lineage_hash="a" * 64,
+    )
+    # p_presence empty, observed flag = 1 pour 2 joueurs
+    # (0 - 1)² + (0 - 1)² = 2 / 2 = 1.0
+    assert brier_presence(observed, empty_ss) == pytest.approx(1.0)
+
+
+def test_top_k_recall_observed_nonempty_scenarios_empty():
+    """Observed nonempty + scenarios vide → recall = 0.0."""
+    observed = _make_observed(["ALPHA", "BETA"])
+    empty_ss = ScenarioSet(
+        scenarios=(),
+        opponent_club_id="C1",
+        round_date="2024-01-01",
+        generated_at="2024-01-01T00:00:00Z",
+        lineage_hash="a" * 64,
+    )
+    assert top_k_recall(observed, empty_ss) == 0.0
+
+
+def test_jaccard_max_observed_nonempty_scenarios_empty():
+    """Observed nonempty + scenarios vide → jaccard = 0.0."""
+    observed = _make_observed(["ALPHA"])
+    empty_ss = ScenarioSet(
+        scenarios=(),
+        opponent_club_id="C1",
+        round_date="2024-01-01",
+        generated_at="2024-01-01T00:00:00Z",
+        lineage_hash="a" * 64,
+    )
+    assert jaccard_max(observed, empty_ss) == 0.0

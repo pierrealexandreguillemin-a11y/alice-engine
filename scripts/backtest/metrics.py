@@ -10,6 +10,11 @@ Metrics fournis
   lineup prediction SOTA). Gate seuil >= 0.75.
 - T14 Jaccard max : maximum Jaccard similarity across scenarios vs observed
   (spec Phase 3 §6.2). Gate seuil >= 0.75.
+  **Note SOTA** : Pappalardo 2019 (sports lineup prediction) utilise
+  accuracy@K (T13b) comme primary metric, pas Jaccard. Jaccard max peut
+  sur-évaluer si MC couvre la queue mais rate le mode. Décision Plan 3 :
+  garder Jaccard (spec §6.2) ET accuracy@K (T13b) complémentaires, à
+  documenter explicitement dans ALI_MODEL_CARD.md §Limitations.
 - T15 Brier score P(presence) : calibration per-player presence probability
   (spec Phase 3 §6.2). Gate seuil <= 0.20.
 - T6 Brier skill score : BSS = 1 - (Brier_model / Brier_baseline) vs baseline
