@@ -1,459 +1,296 @@
-# Phase 3 · Plan 3 — Validation : Backtest + Quality Gates + Model Card SOTA
+# Phase 3 · Plan 3 — Validation : Backtest + Quality Gates + Model Card SOTA (V2)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development. Tasks ordonnées avec checkbox, TDD strict.
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development.
+> **V2 (2026-04-20)** : refonte complète après audit 8 dimensions (feedback_plan_8_dimensions_audit.md).
 
-**Goal:** Mesurer empiriquement la qualité ALI sur saisons FFE historiques via walk-forward backtest + 5 quality gates T13-T17 + comparaison baseline Elo (T22). Livrer Model Card SOTA + AI_RISK_REGISTER.
+**Goal:** Mesurer empiriquement la qualité ALI SOTA sur saisons FFE historiques via walk-forward backtest rigoureux + 16 quality gates P3G01-P3G16 + comparaison baseline Elo (T22 McNemar). Livrer Model Card SOTA + AI_RISK_REGISTER + smoke fairness/robustness.
 
-**Architecture:** Backtest harness `scripts/backtest/ali_backtest.py` walk-forward sur saisons 2021-2023 (train/tune) + hold-out 2024 (validation gates). Réutilise ScenarioGenerator + StackingInferenceService Plan 2 via wrapper `run_backtest_match()` direct (pas TestClient). Métriques aggregées par run, comparées baseline Elo.
+**Architecture:** Harness backtest `scripts/backtest/*` walk-forward strict sur saisons 2021-2023 (tuning) + hold-out 2024 (validation gates). Réutilise ScenarioGenerator + StackingInferenceService + FeatureStore Plan 1+2 via `run_backtest_match()` direct. Bootstrap CI (BCa) + McNemar T22. Réutilise `scripts/robustness/`, `scripts/monitoring/bias_tracker.py`, templates existants ISO_25059.
 
-**Tech Stack:** pytest, pandas, numpy, scipy.stats (ECE bins), matplotlib (ROC/calibration plots), Pandera (schema). Pas de nouvelle dep majeure.
+**Tech Stack:** pytest, pandas, numpy, scipy.stats (ECE, McNemar, bootstrap), matplotlib (reliability diagrams). Pandera pour schemas. DVC pour backtest artifacts.
 
-**Scope:** 16 tasks (Pre-Task 0 + 15 P3-Task), ~3 semaines estim. Gates T13-T22 + smoke fairness/robustness ISO 24027/24029.
-
-**Décisions actées (brainstorming 2026-04-20)** :
-- D1 ✅ walk-forward strict (Bergmeir & Benítez 2012, ISO 25059)
-- D2 ✅ baseline Elo legitimate (tri Elo joueurs observés pré-match)
-- D3 ✅ pilote local 10 matches debug (P3-Task 1) + backtest full 2024 Kaggle (P3-Task 9)
-- D4 ✅ smoke fairness/robustness OBLIGATOIRE Plan 3 Task 12 (ISO 24027/24029 minimum, full Plan 3.5)
-- D5 ✅ Pre-Task 0 audit `_safe_predict` (DONE commit 5750112), wrapper `run_backtest_match()` direct (no TestClient overhead)
-
-**Principes directeurs :**
-- **Walk-forward strict** : pour match (S, R), data accessible = data < (S, R) only
-- **Strict mode backtest** : `_safe_predict(strict=True)` → fail-fast sur défaillance ML
-- **Sample size** : ≥ 100 matches hold-out 2024 pour significance statistique (Bergmeir)
-- **Baseline reproductible** : tri Elo joueurs observés pré-match, 1 seul scenario
-- **ISO 42001 traceability** : lineage_hash backtest run propagé dans rapports
+**Scope:** 24 tasks + Pre-Task 0/1 DONE, ~4 semaines estim. 16 P3G gates + DoD per-task + peer review intermédiaires.
 
 ---
 
-## File Structure
+## Audit Matrix (8 dimensions — respect feedback_plan_8_dimensions_audit.md)
 
-**Créer :**
+### Dim 1 : Spec Phase 3 mapping
+
+| Spec § | Content | Plan 3 Task |
+|--------|---------|-------------|
+| §6.1 walk-forward | Rigorous temporal split | T1 harness + T10 runner |
+| §6.2 T13-T17 | 5 quality gates | T3-T7 metrics |
+| §6.3 ~60 tests + property + fuzzing | Tests completeness | T19 property-based Hypothesis |
+| §7 19 normes ISO | Full compliance | T20-T24 docs ISO |
+| §8 SOTA positionnement | Alternatives audit | T11 Model Card + D-P3-10 |
+| §10 DoD | Definition of Done | **Per-task DoD** + T25 verify |
+
+### Dim 2 : Normes ML génériques
+
+| Standard | Task |
+|----------|------|
+| Walk-forward strict (Bergmeir 2012) | T1, T10 |
+| Bootstrap CI BCa | T8 CI framework |
+| McNemar test T22 | T9 statistical comparison |
+| Stratified sampling fairness | T15 stratification protocol |
+| Seed + lineage reproducibility | T1 (lineage_hash) |
+| Sample size ≥ 100 matches | T10 (Bergmeir significance) |
+
+### Dim 3 : Normes ML sports + compositions prédictives
+
+| Standard | Task |
+|----------|------|
+| Brier skill score (vs baseline) | T6 |
+| Reliability diagrams | T7 |
+| Accuracy@K lineup prediction | T3 (Top-K) + T3b Accuracy@K formally |
+| Multi-season validation CARMELO | T10 rolling multi-season |
+| Pappalardo 2019 ≥ 1000 obs | T10 ≥ 100 matches 2024 + 200+ 2023 tuning |
+
+### Dim 4 : Audit existant (réutilisation DRY)
+
+| Module existant | Réutilisation Plan 3 |
+|-----------------|---------------------|
+| `scripts/robustness/` | T16 stress-test réutilise framework |
+| `scripts/monitoring/bias_tracker.py` | T15 fairness réutilise helpers |
+| `services/feature_store.py::check_quality_gates()` | T25 pattern P3G script |
+| `reports/ISO_25059_TRAINING_REPORT_v20260117.md` | T22 template ALI_QUALITY_GATES_REPORT |
+| `scripts/features/ali/presence.py` + `patterns.py` | T2 ground truth réutilise schemas |
+| Plan 2 `services/ali/*` | T1 run_match wrapper |
+
+### Dim 5 : Inventaire exhaustivité
+
+| Task cachée | Ajoutée au plan |
+|-------------|-----------------|
+| Pandera schema inputs backtest | T2b |
+| Tests déterminisme 2 runs | T18 |
+| Edge cases (ronde 1, clubs petits) | T17 |
+| Peer review intermédiaire (Tasks 1, 9, 15, 22) | T0-gate entre phases |
+| DVC backtest results | T24 versioning |
+| D5 composer.py legacy (différé Plan 2) | T23 audit + decision |
+| D-P2-03 `_EXPECTED_SCENARIOS=20` | T23 refactor configurable |
+| D-P2-04 seed=42 | T23 expose via ComposeRequest |
+| D-P3-13 NOUVEAU MLP redeploy | T23 tracker |
+
+### Dim 6 : DAG dépendances
+
 ```
-scripts/backtest/__init__.py
-scripts/backtest/harness.py            # walk-forward orchestrator
-scripts/backtest/ground_truth.py       # extract observed lineup from echiquiers.parquet
-scripts/backtest/metrics.py            # T13-T17 implementations
-scripts/backtest/baseline_elo.py       # baseline scenario generator (1 lineup tri Elo)
-scripts/backtest/run_match.py          # run_backtest_match wrapper (réutilise Plan 2)
-scripts/backtest/runner.py             # full walk-forward main
-scripts/backtest/report.py             # aggregate metrics + comparison
-scripts/backtest/kaggle_kernel.py      # Kaggle kernel adapter pour P3-Task 9
-docs/iso/ALI_MODEL_CARD.md
-docs/iso/AI_RISK_REGISTER.md           # extension ALI (R-ALI-01..05)
-docs/iso/AI_RISK_ASSESSMENT.md         # extension ALI
-docs/iso/ALI_QUALITY_GATES_REPORT.md
-docs/iso/ALI_DATA_LINEAGE.md
-scripts/verify_plan3_dod.sh
-tests/backtest/__init__.py
-tests/backtest/test_ground_truth.py
-tests/backtest/test_metrics.py
-tests/backtest/test_baseline_elo.py
-tests/backtest/test_run_match.py
-tests/backtest/test_harness.py
-tests/test_phase3_plan3_smoke.py       # smoke pilote local 10 matches
-```
-
-**Modifier :**
-```
-docs/architecture/ALI_ARCHITECTURE.md  # update Plan 3 backtest section
-CLAUDE.md                               # D8 Plan 3.5, gates Plan 3 résolus
-```
-
----
-
-## Pre-Task 0 : Audit `_safe_predict` strict mode ✅ DONE (commit 5750112)
-
-`services/ali/aggregation.py::_safe_predict(strict=False)` ajouté. `ScenarioAggregationCtx.strict: bool = False` propagé. Tests aggregation 6/6 PASS. Backtest harness Plan 3 set `strict=True`.
-
-## Pre-Task 1 : Corrections CRITIQUES ML inference end-to-end ✅ DONE
-
-**Root causes détectées pendant P3-Task 1 pilote** (zero debt policy — 0 avancement sans fix) :
-
-### C1 : FeatureStore stub (only 3 cols vs model 201 features)
-- **Cause** : `FeatureStore` cherchait `joueur_features.parquet` inexistant. Retournait ~5 cols. Model entraîné sur 201 features → XGBoost rejetait silencieusement.
-- **Fix** : nouveau script `scripts/build_feature_store.py` qui aggrège `data/features/train.parquet` (1.14M rows × 147 cols) en :
-  - `data/feature_store/training_mean.parquet` (201-col fallback row matchant `LightGBM.txt::feature_names`)
-  - `data/feature_store/joueur_features.parquet` (95851 joueurs × 21 canonical features)
-- **FeatureStore v2.0** rewritten : `assemble()` retourne DataFrame 201-col matching model feature_names. Override blanc_*/noir_* depuis per-player aggregates + training_mean fallback pour unknowns.
-
-### C2 : `_assemble_features` retournait ndarray (lost feature_names → XGBoost refuse)
-- **Cause** : `.values` → ndarray → XGBoost Booster fail validation
-- **Fix** : `services/ali/aggregation.py::_assemble_features` retourne DataFrame (preserve feature_names) + raise RuntimeError si `feature_store=None` (ISO 42001 fail-fast)
-
-### C3 : MLP champion manquant sur HF Hub → stacking crash
-- **Cause** : `mlp_meta_learner.joblib` absent de `Pierrax/alice-engine/v9/`. Seul calibrateur Dirichlet déployé.
-- **Fix** : `scripts/serving/model_loader.py` détecte MLP absent → auto-fallback LGB+Dirichlet mode avec warning. Re-deploy MLP(32,16) scope Phase 1 futur (D-P3-13 à tracer).
-
-### C4 : `_predict_fallback` utilisait `.predict_proba` mais Dirichlet est dict (W matrix + bias)
-- **Cause** : `_predict_fallback` crashait sur `b.mlp_model.predict_proba(log_p)` (AttributeError : 'dict' object).
-- **Fix** : `services/inference.py::_predict_fallback` détecte `isinstance(b.mlp_model, dict)` → appel helper `_apply_dirichlet` qui implémente `softmax(W @ log(p) + bias)`.
-
-### C5 : harness.py avait fallback silent `self.feature_store = None`
-- **Fix** : suppression du try/except silent. FeatureStore MUST load (raise si training_mean.parquet absent) — ISO 42001 fail-fast.
-
-### Validation empirique end-to-end
-- **ML inference fonctionne** : `PredictionResult(p_loss=0.47, p_draw=0.26, p_win=0.26)`, sum=1.0 sur match test (KRAMNIK vs TREGUBOV)
-- **3/3 tests PASS** avec strict=True réel :
-  - `tests/backtest/test_harness.py` 2/2 (services bootstrap + run_match complet)
-  - `tests/test_phase3_plan3_smoke.py::test_pilot_10_matches_no_silent_fallback` 1/1 (10 matches, strict mode, pas de fallback silencieux)
-- **6/6 tests** `tests/test_compose_ali_aggregation.py` avec mock FeatureStore pattern
-
-### Tests et couverture post-fix
-- aggregation module : 6/6 PASS
-- harness + smoke : 3/3 PASS ML inference réel, feature store 201-col, latence < 5s/match
-- pilote 10 matches : 10/10 strict=True, AUCUN fallback silent
-
----
-
-## P3-Task 1 : Backtest harness + pilote feasibility 10 matches
-
-**Files:**
-- Create: `scripts/backtest/harness.py` (~150 lignes)
-- Create: `scripts/backtest/run_match.py` (~80 lignes wrapper direct, no TestClient)
-- Create: `tests/backtest/test_harness.py` (~5 tests)
-- Create: `tests/test_phase3_plan3_smoke.py` (~3 tests pilote 10 matches)
-
-**ISO:** 29119 (test integrity), 5259 (lineage_hash backtest run), 25010 (perf observable)
-
-**Spec wrapper** :
-```python
-@dataclass
-class BacktestMatchResult:
-    saison: int
-    ronde: int
-    user_club: str
-    opponent_club: str
-    scenario_set: ScenarioSet
-    aggregated_boards: list[AggregatedBoard]
-    observed_lineup: list[str]   # ground truth (filled P3-Task 2)
-    elapsed_ms: float
-    lineage_hash: str
-
-def run_backtest_match(
-    user_club_id: str,
-    opponent_club_id: str,
-    saison: int,
-    ronde: int,
-    nb_rondes_total: int,
-    division: str,
-    cache: ALIDataCache,
-    rule_engine: RuleEngine,
-    classifier: VerifiabilityClassifier,
-    pool_loader: PlayerPoolLoader,
-    history_enricher: HistoryEnricher,
-    inference: StackingInferenceService,
-    feature_store: Any,
-    user_lineup: list[dict],
-    seed: int = 42,
-) -> BacktestMatchResult:
-    """Direct wrapper: generator + aggregation, no FastAPI overhead.
-    
-    Strict mode: ScenarioAggregationCtx(strict=True) → fail-fast sur défaillance.
-    """
-    ...
+Pre-Task 0 (DONE) ── Pre-Task 1 (DONE) ── Task 1 (DONE)
+                                         │
+Task 1 ──────────────────────────────────┼── Task 2 ground truth
+                                         │   Task 2b Pandera schema
+                                         │
+Task 2 ─── Tasks 3-7 (metrics, //)       │
+                                         │
+Task 8 (Bootstrap CI) ←─ Tasks 3-7       │
+Task 9 (McNemar T22) ←─ Tasks 3-7 + T8   │
+                                         │
+Task 10 (baseline) ←─ Task 2             │
+Tasks 8,9 + T10 ─── Task 11 (Runner full 2024)
+                                         │
+GATE: Peer Review intermédiaire post-T11 │
+                                         │
+T11 ─── Tasks 12-16 (reliability, fairness, robustness, edges, determinism)
+                                         │
+T11 + T13 (fairness) + T14 (robust) ─── T17 (Model Card SOTA)
+T17 + T18 (risk reg) + T19 (risk assess) ─── T22 (Gates Report)
+                                         │
+T22 ─── T23 (dette résorption) ─── T24 (DVC) ─── T25 (verify + review + merge)
+                                         │
+Peer Review Final ─── Merge master
 ```
 
-**Walk-forward isolation** : cache joueurs.parquet OK (state actuel), mais `cache.lookup_history(names)` doit filtrer `(saison, ronde) < (target_saison, target_ronde)` pour éviter leakage. Helper `_filter_temporal()` à ajouter.
+### Dim 7 : Qualité per-task
 
-**Pilote** : 10 matches 2024 random échantillonnés, vérifier :
-- run_backtest_match termine sans raise
-- ScenarioSet contient 20 scenarios
-- AggregatedBoard probas dans [0,1] et somme=1
-- Pas de fallback silent (strict=True, ML inference doit marcher)
-- Latence par match < 5s (acceptable pour scope full)
+- **DoD per-task** : chaque task a sa checklist acceptance criteria
+- **Coverage target** : ≥ 80% per-task nouveau module
+- **TDD first** : test → rouge → impl → vert → commit
+- **Peer review intermédiaire** : skill `superpowers:requesting-code-review` à 3 jalons (T7, T11, T22)
 
----
+### Dim 8 : DoD + P3G + code reviewer
 
-## P3-Task 2 : Ground truth extraction
-
-**Files:**
-- Create: `scripts/backtest/ground_truth.py` (~100 lignes)
-- Create: `tests/backtest/test_ground_truth.py` (~5 tests)
-
-**ISO:** 5259 (data lineage), 24027 (no leakage)
-
-```python
-def extract_observed_lineup(
-    cache: ALIDataCache,
-    club_name: str,        # equipe_dom or equipe_ext (echiquiers.parquet)
-    saison: int,
-    ronde: int,
-) -> list[ObservedPlayer]:
-    """Extract real lineup from echiquiers.parquet for (club, saison, ronde).
-    
-    Returns sorted by board (échiquier 1..K). Raises if match absent ou incomplet.
-    """
-```
-
-Tests :
-- Match existant retourne lineup complet K joueurs
-- Match absent raise
-- Mapping club_id (joueurs.parquet) ↔ equipe_name (echiquiers.parquet) correct
+- **16 P3G gates** + mapping per-task (ci-dessous)
+- **verify_plan3_dod.sh** designé dès T25 (script tests tous P3G)
+- **Code reviewer final** MANDATORY avant merge (T25)
 
 ---
 
-## P3-Task 3 : Metric T13 Top-K recall
+## Pre-Task 0 ✅ DONE (commit 5750112) — `_safe_predict(strict=True)`
 
-**Files:**
-- Add to: `scripts/backtest/metrics.py` (~30 lignes)
-- Add to: `tests/backtest/test_metrics.py` (~3 tests T13)
+## Pre-Task 1 ✅ DONE (commit 7ac528e) — ML inference end-to-end
+- C1 FeatureStore v2 201-col + build_feature_store.py
+- C2 _assemble_features DataFrame preserve feature_names
+- C3 MLP champion absent → auto-fallback LGB+Dirichlet
+- C4 _apply_dirichlet helper (softmax W @ log(p) + bias)
+- C5 harness fail-fast si feature_store absent
 
-**ISO:** 25059
-
-**Formule** : `T13 = |observed_players ∩ (∪_s scenario_s.players)| / |observed_players|`
-
-Gate seuil **≥ 0.90** (au moins 90% des joueurs observés capturés dans union des 20 scenarios).
-
-Tests :
-- Tous joueurs présents dans union → T13 = 1.0
-- Aucun joueur dans union → T13 = 0.0
-- Mix → ratio correct
+## Task 1 ✅ DONE (commit 8ca30c8) — backtest harness + pilote 10 matches
 
 ---
 
-## P3-Task 4 : Metric T14 Jaccard max
+## NOUVELLES TASKS V2 (détail)
 
-**Files:**
-- Add to: `scripts/backtest/metrics.py` (~30 lignes)
-- Tests T14
+### T2. Ground truth extraction
+**Files:** `scripts/backtest/ground_truth.py` + tests
+**DoD:** extract_observed_lineup(cache, club_name, saison, ronde) retourne lineup observed, raise si absent. 5 tests incl. edge case (match absent, club inconnu).
+**P3G:** contribue P3G06 (coverage)
+**Dépend:** T1
 
-**ISO:** 25059
+### T2b. Pandera schema backtest inputs (NEW)
+**Files:** `scripts/backtest/schemas.py` Pandera definitions
+**DoD:** BacktestInputSchema (club_id, saison, ronde, division, team_size) validation + exceptions claires. Tests validation reject/accept.
+**P3G:** P3G05 (input validation ISO 27034)
 
-**Formule** : `T14 = max_s |observed ∩ s_lineup| / |observed ∪ s_lineup|`
+### T3. T13 Top-K recall
+**DoD:** top_k_recall(observed, scenarios) formule correcte, gate ≥0.90, 3 tests.
 
-Gate seuil **≥ 0.75** (au moins 1 scenario proche de la réalité).
+### T3b. Accuracy@K formalisé (NEW sports SOTA)
+**DoD:** accuracy_at_k(observed, top_k_scenario) = |obs ∩ top_scenario_k| / k. Gate ≥0.75 (SOTA sports lineup).
 
----
+### T4. T14 Jaccard max
+**DoD:** jaccard_max gate ≥0.75, 3 tests.
 
-## P3-Task 5 : Metric T15 Brier score P(présence)
+### T5. T15 Brier score
+**DoD:** brier_presence gate ≤0.20.
 
-**Files:**
-- Add to: `scripts/backtest/metrics.py` (~50 lignes)
-- Tests T15
+### T6. T15b Brier skill score (NEW sports SOTA)
+**DoD:** brier_skill_score = 1 - (Brier_model / Brier_baseline). Gate ≥0.05 (model > baseline). Pappalardo 2019.
 
-**ISO:** 25059, 24029 (calibration)
+### T7. T16 ECE 10-bins
+**DoD:** ece_10bins gate ≤0.05.
 
-**Formule** : per-player, `p_presence = Σ_s scenario_s.weight × 1[player ∈ s_lineup]`. Comparer à observed (0/1).
-`T15 = (1/N) Σ_p (p_presence_p - 1[p observed])²`
+### T7b. Reliability diagram (NEW FAccT SOTA)
+**Files:** `scripts/backtest/plots.py` + `reports/reliability_diagram_<lineage>.png`
+**DoD:** reliability_diagram(p_presence, observed) génère plot calibration. 3 tests plot.
+**Peer review intermédiaire ici** (jalon 1 : metrics framework complet)
 
-Gate seuil **≤ 0.20** (baseline Elo ~0.26 attendu).
+### T8. Bootstrap CI (BCa) framework (NEW)
+**Files:** `scripts/backtest/bootstrap.py`
+**DoD:** bootstrap_ci(values, n_resamples=1000, confidence=0.95, method='BCa'). IC à 95% pour toute métrique. 3 tests.
+**P3G:** P3G11 (toutes metrics avec IC)
 
----
+### T9. McNemar test T22 (NEW)
+**Files:** `scripts/backtest/mcnemar.py`
+**DoD:** mcnemar_test(preds_model, preds_baseline, observed) retourne stat + p-value. Gate p<0.05 pour ≥3 metrics améliorées. 3 tests.
+**P3G:** P3G11 (significance statistique baseline comparison)
 
-## P3-Task 6 : Metric T16 ECE calibration 10-bins
+### T10. Baseline Elo legitimate
+**Files:** `scripts/backtest/baseline_elo.py`
+**DoD:** baseline 1-scenario tri Elo desc joueurs observés pré-match, 3 tests.
 
-**Files:**
-- Add to: `scripts/backtest/metrics.py` (~70 lignes)
-- Tests T16
+### T11. Runner full walk-forward + Kaggle adapter
+**Files:** `scripts/backtest/runner.py` + `kaggle/kernel_backtest.py`
+**DoD:** saisons 2021-2023 tuning + 2024 hold-out ≥100 matches (Bergmeir significance). Multi-season rolling CARMELO pattern. Output parquet lineage.
+**Peer review intermédiaire ici** (jalon 2 : backtest core complet)
 
-**ISO:** 24029 (calibration robustness)
+### T12. T17 E[score] MAE (ML inference loop)
+**DoD:** mae sur team_size=8, gate ≤1.0. Sample 100 matches 2024.
+**Dépend:** T11
 
-**Formule** : 10 bins de p_presence. ECE = `Σ_b |bucket_b|/N × |mean(p_b) - freq_observed_b|`
+### T13. Smoke fairness OBLIGATOIRE (ISO 24027)
+**Files:** tests/backtest/test_fairness_smoke.py réutilise `scripts/monitoring/bias_tracker.py`
+**DoD:** breakdown T13-T17 par niveau (N1/N2/N3/N4) + taille club (quartiles). Stratified sampling.
 
-Gate seuil **≤ 0.05** (calibration acceptable).
+### T14. Smoke robustness OBLIGATOIRE (ISO 24029)
+**Files:** tests/backtest/test_robustness_smoke.py réutilise `scripts/robustness/` framework
+**DoD:** perturb Elo ±50 → variation Top-K <10%. 3 tests.
 
----
+### T15. Fairness protocol stratifié
+**Files:** `scripts/backtest/fairness.py` breakdown formalisé
+**DoD:** StratifiedSampler(level, club_size) pour fair gates T13-T17.
 
-## P3-Task 7 : Metric T17 E[score] MAE (ML inference loop)
+### T16. Robustness stress-test suite
+**Files:** `scripts/backtest/robustness.py` réutilise `scripts/robustness/`
+**DoD:** 3 stress-tests : Elo perturb, feature noise, missing data. Gates.
 
-**Files:**
-- Add to: `scripts/backtest/metrics.py` (~80 lignes)
-- Tests T17 sur 5-10 matches sample
+### T17. Edge cases tests (NEW)
+**Files:** tests/backtest/test_edge_cases.py
+**DoD:** 5 tests : ronde 1 (no history), club <12 joueurs, ronde=dernière, saison incomplète, match avec forfaits.
 
-**ISO:** 25059, 25010 (perf), 42001 (traceability ML inference)
+### T18. Determinism tests (NEW)
+**Files:** tests/backtest/test_determinism.py
+**DoD:** 2 runs seed=42 identiques → mêmes metrics (bit-identiques). Hash check ScenarioSet.
 
-**Formule** : `E[score_predicted] = Σ_k aggregated_board_k.e_score`. Comparer à observed score équipe (somme victoires + 0.5 × draws).
-`T17 = MAE = (1/N_matches) Σ |E[score_pred] - score_observed|`
+### T19. Property-based tests Hypothesis (spec §6.3)
+**Files:** tests/backtest/test_properties_hypothesis.py
+**DoD:** 15 property tests sur metrics (T13-T17) via Hypothesis : symmetries, bounds, invariants.
 
-Gate seuil **≤ 1.0** (sur team_size=8, MAE < 1 point/match acceptable).
+### T20. Model Card ALI SOTA (Mitchell 2019 FAccT)
+**Files:** `docs/iso/ALI_MODEL_CARD.md`
+**DoD:** Sections Mitchell 2019 : Model details, Intended use, Eval data, Quantitative analyses (T13-T22 + breakdown fairness), Ethical, Limitations, **SOTA comparative audit (D-P3-10)** tableau alternatives évaluées.
 
----
+### T21. AI_RISK_REGISTER R-ALI-01..05 (ISO 23894)
+**Files:** `docs/iso/AI_RISK_REGISTER.md`
+**DoD:** R-ALI-01..05 identifiés + mitigations ref + owner + status.
 
-## P3-Task 8 : Baseline Elo legitimate (tri Elo)
+### T22. AI_RISK_ASSESSMENT + Quality Gates Report (ISO 42005 + 25059)
+**Files:** `docs/iso/AI_RISK_ASSESSMENT.md` + `docs/iso/ALI_QUALITY_GATES_REPORT.md`
+**DoD:** réutilise template `ISO_25059_TRAINING_REPORT_v20260117.md`. Tableau T13-T22 + IC bootstrap + N matches.
+**Peer review intermédiaire ici** (jalon 3 : docs ISO complètes)
 
-**Files:**
-- Create: `scripts/backtest/baseline_elo.py` (~80 lignes)
-- Tests baseline (~3 tests)
+### T23. Dette résorption (NEW)
+**DoD per-item:**
+- D5 composer.py : audit + suppression OU documentation
+- D-P2-03 `_EXPECTED_SCENARIOS` : configurable via ScenarioGenerator param
+- D-P2-04 seed=42 : expose via ComposeRequest
+- D-P3-13 NOUVEAU : tracer MLP redeploy
 
-**ISO:** 25059 (baseline comparison)
+### T24. DVC versioning backtest artifacts (NEW)
+**Files:** `dvc.yaml` stage backtest + `.dvc/config`
+**DoD:** reports/backtest/ tracked DVC, lineage commit ↔ parquet results.
 
-```python
-def baseline_elo_scenario(
-    pool: list[PlayerCandidate], context: CompetitionContext,
-) -> ScenarioSet:
-    """Baseline 1-scenario : tri Elo desc des joueurs observés pré-match.
-    
-    1 lineup déterministe, weight=1.0, source='baseline_elo'.
-    """
-```
-
-Pour T22, mesurer T13-T17 sur baseline en parallèle de ALI SOTA. Comparaison tableau.
-
----
-
-## P3-Task 9 : Backtest runner full walk-forward + Kaggle adapter
-
-**Files:**
-- Create: `scripts/backtest/runner.py` (~150 lignes)
-- Create: `scripts/backtest/kaggle_kernel.py` (~80 lignes adapter)
-- Create: `kaggle/kernel_metadata_backtest.json`
-
-**ISO:** 25059 (production-grade backtest), 5259 (lineage)
-
-Walk-forward strict :
-- Saisons 2021-2023 = tuning (λ recency, n_topk, n_mc_pairs)
-- Saison 2024 = hold-out validation (T13-T22)
-- ≥ 100 matches 2024 hold-out (Bergmeir significance)
-
-**Kaggle kernel** : push code + parquets + model bundle, run full 2024 hold-out, sauve résultats parquet artifact, rapatrie.
-
-**Output** : `reports/backtest/2024_holdout_run_<lineage>.parquet` avec per-match métriques.
-
----
-
-## P3-Task 10 : Model Card ALI SOTA (D-P3-10)
-
-**Files:**
-- Create: `docs/iso/ALI_MODEL_CARD.md`
-
-**ISO:** 42001 (Model Card MANDATORY), Mitchell et al. 2019 (FAccT)
-
-Sections OBLIGATOIRES :
-- Model details (name, version, date, type, contact)
-- Intended use (ALI predicts adversary lineup pour CE composition)
-- Training data (rule-based + empirical, no ML training stricto sensu)
-- Evaluation data (saison 2024 hold-out, ≥100 matches)
-- **Quantitative analyses (T13-T22 results + breakdown fairness niveau compet)**
-- **Ethical considerations** (FFE public data, no PII)
-- **Limitations** (A02 scope only, noyau private, pool joueurs cache hebdo, etc.)
-- **SOTA comparative audit (D-P3-10)** : tableau alternatives évaluées vs choix retenus pour F1/F5/F6/F2/F3/F7
+### T25. verify_plan3_dod.sh + peer review FINAL + merge
+**Files:** `scripts/verify_plan3_dod.sh`
+**DoD:** 16 P3G gates + 7 structural gates via script. Exit 0 si all green. Peer review skill `superpowers:requesting-code-review` MANDATORY, 0 finding critique. Merge fast-forward master.
 
 ---
 
-## P3-Task 11 : AI_RISK_REGISTER.md (R-ALI-01..05)
+## P3G Quality Gates mapping per-task
 
-**Files:**
-- Modify/Create: `docs/iso/AI_RISK_REGISTER.md`
-
-**ISO:** 23894 (AI risk management)
-
-Risques identifiés :
-- R-ALI-01 : biais MC conservateur si classifier mal calibré (mitigé Plan 2 D-P2-02)
-- R-ALI-02 : F1 corrélation indépendance fausse → couvert par F6 copule
-- R-ALI-03 : F7 survivor bias hypothèse implicite (membership joueurs.parquet)
-- R-ALI-04 : silent fallback ML inference masque défaillance (mitigé Pre-Task 0)
-- R-ALI-05 : seed=42 fixe → 2 calls identiques même résultat (idempotence observable, D-P2-04)
-
----
-
-## P3-Task 12 : AI_RISK_ASSESSMENT.md ALI extension + smoke fairness/robustness OBLIGATOIRE
-
-**Files:**
-- Modify: `docs/iso/AI_RISK_ASSESSMENT.md`
-- Create: tests/backtest/test_fairness_smoke.py (~5 tests breakdown)
-- Create: tests/backtest/test_robustness_smoke.py (~3 tests stress Elo)
-
-**ISO:** 42005 (impact assessment), 24027 (fairness MANDATORY ISO + Mitchell 2019), 24029 (robustness)
-
-**Smoke fairness OBLIGATOIRE Plan 3** (NIST AI RMF "Measure" core function) :
-- Breakdown T13-T17 par niveau competition (N1/N2/N3/N4)
-- Breakdown par taille club (quartiles : Q1<10 joueurs, Q2 10-25, Q3 25-50, Q4 >50)
-- Documentation findings dans Model Card §Quantitative analyses
-
-**Smoke robustness OBLIGATOIRE Plan 3** :
-- 1 stress test : perturber Elo joueurs ±50, mesurer variation Top-K recall (gate <10%)
-
-**Plan 3.5 (D8 STRICT)** : full breakdown (incl. genre, croisé levels×sizes), full robustness suite (perturb features, adversarial, missing data).
+| Gate | ISO | Check | Task produit gate |
+|------|-----|-------|-------------------|
+| P3G01 | 5055 | Files ≤ 300 lignes | T1-T24 (tous) |
+| P3G02 | 5055 | xenon ≤ B | idem |
+| P3G03 | 5055 | mypy --strict | idem |
+| P3G04 | 5055 | ruff clean | idem |
+| P3G05 | 27001/27034 | gitleaks + Pandera | T2b |
+| P3G06 | 29119 | coverage ≥80% per new module | T1-T24 |
+| P3G07 | 25059 (T13) | Top-K recall ≥0.90 | T3 + T11 |
+| P3G08 | 25059 (T14) | Jaccard max ≥0.75 | T4 + T11 |
+| P3G09 | 25059 (T15) | Brier ≤0.20 + Brier skill ≥0.05 | T5, T6 + T11 |
+| P3G10 | 25059 (T16) | ECE ≤0.05 + reliability diagram | T7, T7b + T11 |
+| P3G11 | 25059 (T17+T22) | MAE ≤1.0 + McNemar p<0.05 | T9, T12 + T11 |
+| P3G12 | 24027 | Smoke fairness breakdown | T13, T15 |
+| P3G13 | 24029 | Smoke robustness perturb | T14, T16 |
+| P3G14 | 42001 | ALI_MODEL_CARD.md incl. SOTA audit | T20 |
+| P3G15 | 23894 | AI_RISK_REGISTER R-ALI-01..05 | T21 |
+| P3G16 | 5259/42010 | Lineage + ADR Plan 3 | T24 + T22 |
 
 ---
 
-## P3-Task 13 : ALI_QUALITY_GATES_REPORT.md hold-out 2024
+## Definition of Done Plan 3 (global + per-task)
 
-**Files:**
-- Create: `docs/iso/ALI_QUALITY_GATES_REPORT.md`
+### Global
+- [ ] 16 P3G gates verts via `verify_plan3_dod.sh`
+- [ ] 3 peer reviews intermédiaires (après T7b, T11, T22) + 1 final (T25)
+- [ ] Backtest hold-out 2024 ≥100 matches
+- [ ] T22 ≥3 metrics améliorées baseline (McNemar p<0.05)
+- [ ] Dettes D5, D-P2-03, D-P2-04, D-P3-10 résorbées
 
-**ISO:** 25059 (quality gates report)
-
-Tableau résultats T13-T22 sur hold-out 2024 :
-- Cible vs réalisé
-- Pass/Fail par gate
-- Comparaison baseline Elo (T22)
-- IC bootstrap pour chaque métrique
-- N matches utilisés
-
----
-
-## P3-Task 14 : ALI_DATA_LINEAGE.md end-to-end
-
-**Files:**
-- Create: `docs/iso/ALI_DATA_LINEAGE.md`
-
-**ISO:** 5259 (data lineage)
-
-Diagramme + tableau :
-- PDFs FFE → docling pocket-arbiter → JSON chess-app → vendored config/ffe_rules → RuleEngine
-- joueurs.parquet (scrape FFE hebdo) → ALIDataCache → PlayerPoolLoader → enrichi
-- echiquiers.parquet (scrape FFE) → cache → HistoryEnricher F2/F3 → CopulaJointSampler
-- Backtest run lineage_hash = SHA-256(parquet sigs + rules sig + saison + run params + run timestamp)
+### Per-task (template appliqué T1-T25)
+- [ ] Tests TDD 80%+ coverage
+- [ ] Ruff + mypy strict + xenon B
+- [ ] DoD acceptance criteria validés
+- [ ] Commit conventionnel ISO 15289
+- [ ] Documentation inline (docstring structuré)
 
 ---
 
-## P3-Task 15 : verify_plan3_dod.sh + peer review + merge
+## Références
 
-**Files:**
-- Create: `scripts/verify_plan3_dod.sh`
-- Update: `CLAUDE.md` (D8 Plan 3.5, gates Plan 3 résolus)
-
-**ISO:** 29119, 5055 + tous P3G ci-dessous
-
-### P3G — Plan 3 Quality Gates (16 gates)
-
-| Gate | Norme | Check |
-|------|-------|-------|
-| P3G01 | 5055 | Files ≤ 300 lignes (services + scripts/backtest) |
-| P3G02 | 5055 | xenon ≤ B |
-| P3G03 | 5055 | mypy --strict |
-| P3G04 | 5055 | ruff |
-| P3G05 | 27001 | gitleaks |
-| **P3G06** | 25059 (T13) | **Top-K recall ≥ 0.90** sur hold-out 2024 |
-| **P3G07** | 25059 (T14) | **Jaccard max ≥ 0.75** |
-| **P3G08** | 25059 (T15) | **Brier ≤ 0.20** |
-| **P3G09** | 25059 (T16) | **ECE ≤ 0.05** |
-| **P3G10** | 25059 (T17) | **E[score] MAE ≤ 1.0** |
-| **P3G11** | 25059 (T22) | **≥3 métriques T13-T17 améliorées vs baseline Elo, aucune régression > 10%** |
-| P3G12 | 24027 | Smoke fairness breakdown niveau competition documenté Model Card |
-| P3G13 | 24029 | Smoke robustness perturb Elo ±50 < 10% variation |
-| P3G14 | 42001 | ALI_MODEL_CARD.md committé incl. SOTA comparative audit |
-| P3G15 | 23894 | AI_RISK_REGISTER R-ALI-01..05 |
-| P3G16 | 5259 | lineage_hash backtest run présent dans rapport |
-
-Peer review skill `superpowers:requesting-code-review` sur diff complet Plan 3. Merge fast-forward sur master si APPROVED.
-
----
-
-## Definition of Done Plan 3
-
-### Quality gates
-- [ ] 16 P3G gates verts
-- [ ] verify_plan3_dod.sh exit 0
-- [ ] Backtest hold-out 2024 ≥ 100 matches (Bergmeir significance)
-- [ ] T22 ≥ 3 métriques améliorées vs baseline Elo
-- [ ] Smoke fairness + robustness documentés Model Card
-
-### Résorption dette
-- [ ] D-P3-10 résolu via Model Card SOTA comparative audit
-- [ ] D8 partiel résolu via smoke fairness/robustness (full Plan 3.5)
-- [ ] D-P2-02bis : si bias surface backtest, fix avant merge
-
-### Artefacts
-- [ ] ALI_MODEL_CARD.md (SOTA citations + alternatives évaluées + fairness breakdown)
-- [ ] AI_RISK_REGISTER.md R-ALI-01..05
-- [ ] AI_RISK_ASSESSMENT.md ALI extension
-- [ ] ALI_QUALITY_GATES_REPORT.md hold-out 2024
-- [ ] ALI_DATA_LINEAGE.md end-to-end
-- [ ] backtest results parquet + Kaggle kernel
-
-### Process
-- [ ] Peer review skill `superpowers:requesting-code-review`, 0 finding critique
-- [ ] Checkpoint user final avant merge
+- feedback_plan_8_dimensions_audit.md (mandat audit 8 dimensions)
+- spec : docs/superpowers/specs/2026-04-19-phase3-ali-monte-carlo-design.md
+- Bergmeir & Benítez 2012 (walk-forward)
+- Mitchell 2019 FAccT (Model Card)
+- Pappalardo 2019 (Brier skill score sports)
+- ISO 25059 (quality model), ISO 24027/24029 (fairness/robustness), ISO 23894 (risk), ISO 42001/42005 (AI management/impact)
