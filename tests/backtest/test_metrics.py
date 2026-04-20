@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from scripts.backtest.ground_truth import ObservedLineup, ObservedPlayer
-from scripts.backtest.metrics import accuracy_at_k, top_k_recall
+from scripts.backtest.metrics import accuracy_at_k, jaccard_max, top_k_recall
 from services.ali.scenario import BoardAssignment, Lineup, Scenario, ScenarioSet
 from services.ali.types import PlayerCandidate
 
@@ -176,3 +176,51 @@ def test_accuracy_at_k_empty_observed_default_k() -> None:
     s1 = _make_scenario(["ALPHA"], 1.0)
     ss = _make_scenario_set([s1])
     assert accuracy_at_k(observed, ss) == 0.0
+
+
+# --- T4 Jaccard max ---
+
+
+def test_jaccard_max_perfect_match() -> None:
+    """Un scenario matche exactement observed -> jaccard = 1.0."""
+    observed = _make_observed(["ALPHA", "BETA", "GAMMA"])
+    s1 = _make_scenario(["ALPHA", "BETA", "GAMMA"], 0.5)
+    s2 = _make_scenario(["XYZ", "UVW"], 0.5)
+    ss = _make_scenario_set([s1, s2])
+    assert jaccard_max(observed, ss) == 1.0
+
+
+def test_jaccard_max_no_intersection() -> None:
+    """Aucun recoupement -> jaccard = 0.0."""
+    observed = _make_observed(["ALPHA"])
+    s1 = _make_scenario(["XYZ"], 1.0)
+    ss = _make_scenario_set([s1])
+    assert jaccard_max(observed, ss) == 0.0
+
+
+def test_jaccard_max_partial() -> None:
+    """|∩|=1, |∪|=3 -> jaccard = 1/3."""
+    observed = _make_observed(["ALPHA", "BETA"])
+    s1 = _make_scenario(["ALPHA", "GAMMA"], 1.0)
+    ss = _make_scenario_set([s1])
+    assert jaccard_max(observed, ss) == pytest.approx(1 / 3)
+
+
+def test_jaccard_max_picks_best_across_scenarios() -> None:
+    """Le max prend le meilleur scenario, pas le plus lourd."""
+    observed = _make_observed(["ALPHA", "BETA"])
+    s_low_match = _make_scenario(["ALPHA", "XYZ"], 0.8)  # weight=0.8 mais jac=1/3
+    s_high_match = _make_scenario(["ALPHA", "BETA"], 0.2)  # weight=0.2 mais jac=1.0
+    ss = _make_scenario_set([s_low_match, s_high_match])
+    assert jaccard_max(observed, ss) == 1.0
+
+
+def test_jaccard_max_gate_threshold() -> None:
+    """Gate T14 >= 0.75 : observed et scenario different peu."""
+    observed = _make_observed([f"P{i}" for i in range(8)])
+    # Scenario : 7/8 match + 1 substitution -> |∩|=7, |∪|=9 -> 7/9 ≈ 0.777
+    s1 = _make_scenario([f"P{i}" for i in range(7)] + ["NEW"], 1.0)
+    ss = _make_scenario_set([s1])
+    jac = jaccard_max(observed, ss)
+    assert jac >= 0.75
+    assert jac == pytest.approx(7 / 9)

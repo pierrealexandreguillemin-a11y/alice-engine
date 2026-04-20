@@ -1,4 +1,4 @@
-"""Backtest quality metrics : T13 + T13b (Top-K recall + Accuracy@K SOTA).
+"""Backtest quality metrics : T13 + T13b + T14 (Top-K recall + Accuracy@K + Jaccard max).
 
 Plan 3 V2 Phase 3. ISO 25059 (quality gates), ISO 29119 (testability).
 
@@ -8,6 +8,8 @@ Metrics fournis
   (spec Phase 3 §6.2). Gate seuil >= 0.90.
 - T13b Accuracy@K : fraction observed captured in top-weighted scenario (sports
   lineup prediction SOTA). Gate seuil >= 0.75.
+- T14 Jaccard max : maximum Jaccard similarity across scenarios vs observed
+  (spec Phase 3 §6.2). Gate seuil >= 0.75.
 
 Cohérence identifiants
 ----------------------
@@ -94,3 +96,32 @@ def accuracy_at_k(
     if k_eff == 0:
         return 0.0
     return len(observed_names & top_names) / k_eff
+
+
+def jaccard_max(observed: ObservedLineup, scenario_set: ScenarioSet) -> float:
+    """T14 : maximum Jaccard similarity across scenarios vs observed lineup.
+
+    Formule : ``max_s |observed ∩ s_lineup| / |observed ∪ s_lineup|``.
+    Gate seuil : >= 0.75 (spec Phase 3 §6.2). Au moins 1 scenario proche de
+    la réalité observée garantit que le pipeline couvre le "vrai" lineup.
+
+    @param observed: lineup réel du club adverse à (saison, ronde).
+    @param scenario_set: ScenarioSet ALI prédit.
+
+    @returns Jaccard score ∈ [0, 1]. Retourne 0.0 si observed vide ou aucun
+             scenario ne partage de joueur (union vide retournerait division
+             par zéro sinon).
+    """
+    observed_names = observed.player_names()
+    if not observed_names:
+        return 0.0
+    best = 0.0
+    for scenario in scenario_set.scenarios:
+        s_names = {_canonical_name(a.player) for a in scenario.lineup.assignments}
+        union = observed_names | s_names
+        if not union:
+            continue
+        intersection = observed_names & s_names
+        jac = len(intersection) / len(union)
+        best = max(best, jac)
+    return best
