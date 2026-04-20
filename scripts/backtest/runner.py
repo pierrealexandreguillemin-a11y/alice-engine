@@ -168,9 +168,12 @@ class BacktestRunner:
         brier_base = brier_presence(observed, baseline_ss)
 
         # T12 : E[score] MAE (user team predicted vs observed match score)
-        e_pred = sum(b.e_score for b in result.aggregated_boards)
+        # H-1 fix : skip if observed score unavailable (avoid bias CI vers 0.0).
         e_obs = _observed_user_score(cache, user_team, opp_team, saison, ronde)
-        e_mae = abs(e_pred - e_obs) if e_obs is not None else 0.0
+        if e_obs is None:
+            return None
+        e_pred = sum(b.e_score for b in result.aggregated_boards)
+        e_mae = abs(e_pred - e_obs)
 
         return MatchStats(
             saison=saison,
@@ -186,7 +189,7 @@ class BacktestRunner:
             brier_baseline=brier_base,
             bss=brier_skill_score(observed, result.scenario_set, brier_base),
             e_score_predicted=e_pred,
-            e_score_observed=e_obs if e_obs is not None else 0.0,
+            e_score_observed=e_obs,
             e_score_mae=e_mae,
             ali_correct=recall_ali >= RECALL_GATE,
             baseline_correct=recall_base >= RECALL_GATE,
@@ -236,8 +239,12 @@ def _observed_user_score(
 ) -> float | None:
     """T12 : observed user team total score from echiquiers.
 
-    @returns score_dom si user_team = equipe_dom, score_ext sinon. None si
-             row absente (match non joue ou saison/ronde hors scope).
+    Le runner T11 assigne toujours user_team = equipe_dom par design
+    (sample_matches ligne 95). On lit donc score_dom. AWAY user-side
+    n'est PAS supporte ici (return None garantit le skip defensif).
+
+    @returns float score_dom si row trouvee, None si match absent, forfait,
+             ou score_dom non-float. AWAY config -> None.
     """
     df = cache.echiquiers_total  # type: ignore[attr-defined]
     row = df[

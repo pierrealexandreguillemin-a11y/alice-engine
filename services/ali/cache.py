@@ -119,7 +119,9 @@ class ALIDataCache:
                     continue
                 counts.setdefault(team, {})[club] = counts.setdefault(team, {}).get(club, 0) + 1
 
-        return {team: max(clubs, key=lambda c: clubs[c]) for team, clubs in counts.items()}
+        # Deterministic tiebreak : count DESC then club name ASC (ISO 5259
+        # reproducibility : independent of parquet row iteration order).
+        return {team: min(clubs, key=lambda c: (-clubs[c], c)) for team, clubs in counts.items()}
 
     def is_stale(self, max_age_days: int = 7) -> bool:
         """Return True si l'age du cache depasse max_age_days (UTC)."""

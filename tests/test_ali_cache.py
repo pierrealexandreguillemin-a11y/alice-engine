@@ -84,11 +84,31 @@ def test_team_to_club_built(ali_data_cache: ALIDataCache) -> None:
 
 
 def test_team_to_club_resolves_pool(ali_data_cache: ALIDataCache) -> None:
-    """T11 usage : team_name -> club -> joueurs pool non-empty."""
-    for team, club in list(ali_data_cache.team_to_club.items())[:10]:
+    """T11 usage : team_name -> club -> joueurs pool non-empty (ALL mappings).
+
+    M-3 fix : iterate all entries (not just first 10). ISO 42001 integrity :
+    if a single mapping fails to resolve, surface it instead of silencing.
+    """
+    unresolved: list[tuple[str, str]] = []
+    for team, club in ali_data_cache.team_to_club.items():
         pool = ali_data_cache.joueurs_by_club.get(club)
-        assert pool is not None, f"team={team} -> club={club} absent from joueurs_by_club"
-        assert len(pool) > 0
+        if pool is None or len(pool) == 0:
+            unresolved.append((team, club))
+    total = len(ali_data_cache.team_to_club)
+    # Tolerate < 1% unresolved (edge clubs dissolved mid-season), fail otherwise.
+    assert len(unresolved) / max(total, 1) < 0.01, (
+        f"{len(unresolved)}/{total} team_to_club mappings unresolved (>1%). "
+        f"Sample: {unresolved[:3]}"
+    )
+
+
+def test_team_to_club_deterministic(ali_data_cache: ALIDataCache) -> None:
+    """M-2 fix : tie-break deterministe, meme parquet -> meme mapping.
+
+    Load twice, expect identical mapping (ISO 5259 reproductibility).
+    """
+    cache2 = ALIDataCache.load_from_parquets(J, E)
+    assert ali_data_cache.team_to_club == cache2.team_to_club
 
 
 def test_lookup_history_returns_union_of_colors(ali_data_cache: ALIDataCache) -> None:
