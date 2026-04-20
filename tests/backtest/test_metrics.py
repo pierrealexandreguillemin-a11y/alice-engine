@@ -8,7 +8,13 @@ from __future__ import annotations
 import pytest
 
 from scripts.backtest.ground_truth import ObservedLineup, ObservedPlayer
-from scripts.backtest.metrics import accuracy_at_k, jaccard_max, top_k_recall
+from scripts.backtest.metrics import (
+    accuracy_at_k,
+    brier_presence,
+    brier_skill_score,
+    jaccard_max,
+    top_k_recall,
+)
 from services.ali.scenario import BoardAssignment, Lineup, Scenario, ScenarioSet
 from services.ali.types import PlayerCandidate
 
@@ -224,3 +230,102 @@ def test_jaccard_max_gate_threshold() -> None:
     jac = jaccard_max(observed, ss)
     assert jac >= 0.75
     assert jac == pytest.approx(7 / 9)
+
+
+# --- T5 Brier score P(presence) ---
+
+
+def test_brier_presence_perfect_prediction():
+    """Perfect prediction (scenario == observed) → Brier = 0."""
+    observed = _make_observed(["ALPHA", "BETA"])
+    s1 = _make_scenario(["ALPHA", "BETA"], 1.0)
+    ss = _make_scenario_set([s1])
+    assert brier_presence(observed, ss) == pytest.approx(0.0)
+
+
+def test_brier_presence_all_wrong():
+    """Predict XYZ weight=1, observed ALPHA → Brier = 1.0."""
+    observed = _make_observed(["ALPHA"])
+    s1 = _make_scenario(["XYZ"], 1.0)
+    ss = _make_scenario_set([s1])
+    # Union = {ALPHA X, XYZ X}. (0-1)² + (1-0)² = 2. /2 = 1.0
+    assert brier_presence(observed, ss) == pytest.approx(1.0)
+
+
+def test_brier_presence_weighted_half_half():
+    """Weights 0.5/0.5 different scenarios → Brier = 0.25."""
+    observed = _make_observed(["ALPHA"])
+    s1 = _make_scenario(["ALPHA"], 0.5)
+    s2 = _make_scenario(["BETA"], 0.5)
+    ss = _make_scenario_set([s1, s2])
+    # p_presence[ALPHA X]=0.5, p_presence[BETA X]=0.5
+    # (0.5-1)²=0.25 + (0.5-0)²=0.25 = 0.5 / 2 = 0.25
+    assert brier_presence(observed, ss) == pytest.approx(0.25)
+
+
+def test_brier_presence_empty_observed_with_predictions():
+    """Observed empty but predictions exist → Brier over predictions only."""
+    observed = ObservedLineup("C1", 2024, 5, ())
+    s1 = _make_scenario(["ALPHA"], 1.0)
+    ss = _make_scenario_set([s1])
+    # p_presence[ALPHA X]=1, obs_flag=0, (1-0)²=1 / 1 = 1.0
+    assert brier_presence(observed, ss) == pytest.approx(1.0)
+
+
+def test_brier_presence_gate_threshold():
+    """Gate T15 ≤ 0.20 : predictions bien calibrées."""
+    observed = _make_observed([f"P{i}" for i in range(4)])
+    # 4 scenarios uniform weights, all covering observed fully → Brier tends to 0
+    scenarios = [
+        _make_scenario([f"P{i}" for i in range(4)], 0.25),
+        _make_scenario([f"P{i}" for i in range(4)], 0.25),
+        _make_scenario([f"P{i}" for i in range(4)], 0.25),
+        _make_scenario([f"P{i}" for i in range(4)], 0.25),
+    ]
+    ss = _make_scenario_set(scenarios)
+    assert brier_presence(observed, ss) <= 0.20
+
+
+# --- T6 Brier skill score (Pappalardo 2019) ---
+
+
+def test_brier_skill_score_model_equals_baseline():
+    """Model brier == baseline → BSS = 0."""
+    observed = _make_observed(["ALPHA"])
+    s1 = _make_scenario(["XYZ"], 1.0)
+    ss = _make_scenario_set([s1])
+    model_b = brier_presence(observed, ss)
+    assert brier_skill_score(observed, ss, baseline_brier=model_b) == pytest.approx(0.0)
+
+
+def test_brier_skill_score_perfect_model():
+    """Perfect model (Brier=0) → BSS = 1.0."""
+    observed = _make_observed(["ALPHA"])
+    s1 = _make_scenario(["ALPHA"], 1.0)
+    ss = _make_scenario_set([s1])
+    assert brier_skill_score(observed, ss, baseline_brier=0.5) == pytest.approx(1.0)
+
+
+def test_brier_skill_score_model_better_than_baseline():
+    """Model Brier=0, baseline=0.26 → BSS = 1.0."""
+    observed = _make_observed(["ALPHA", "BETA"])
+    s1 = _make_scenario(["ALPHA", "BETA"], 1.0)
+    ss = _make_scenario_set([s1])
+    assert brier_skill_score(observed, ss, baseline_brier=0.26) == pytest.approx(1.0)
+
+
+def test_brier_skill_score_zero_baseline_returns_zero():
+    """Division par zéro → return 0 (fallback conservateur)."""
+    observed = _make_observed(["ALPHA"])
+    s1 = _make_scenario(["ALPHA"], 1.0)
+    ss = _make_scenario_set([s1])
+    assert brier_skill_score(observed, ss, baseline_brier=0.0) == 0.0
+
+
+def test_brier_skill_score_gate_threshold():
+    """Gate T6 ≥ 0.05 : model Brier < baseline par ≥5%."""
+    observed = _make_observed(["ALPHA", "BETA"])
+    s1 = _make_scenario(["ALPHA", "BETA"], 1.0)  # perfect
+    ss = _make_scenario_set([s1])
+    bss = brier_skill_score(observed, ss, baseline_brier=0.30)
+    assert bss >= 0.05

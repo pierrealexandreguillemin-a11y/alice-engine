@@ -10,6 +10,10 @@ Metrics fournis
   lineup prediction SOTA). Gate seuil >= 0.75.
 - T14 Jaccard max : maximum Jaccard similarity across scenarios vs observed
   (spec Phase 3 §6.2). Gate seuil >= 0.75.
+- T15 Brier score P(presence) : calibration per-player presence probability
+  (spec Phase 3 §6.2). Gate seuil <= 0.20.
+- T6 Brier skill score : BSS = 1 - (Brier_model / Brier_baseline) vs baseline
+  Elo (Pappalardo 2019 sports SOTA). Gate seuil >= 0.05.
 
 Cohérence identifiants
 ----------------------
@@ -125,3 +129,66 @@ def jaccard_max(observed: ObservedLineup, scenario_set: ScenarioSet) -> float:
         jac = len(intersection) / len(union)
         best = max(best, jac)
     return best
+
+
+def brier_presence(observed: ObservedLineup, scenario_set: ScenarioSet) -> float:
+    """T15 : Brier score on per-player presence probability.
+
+    Pour chaque player de la union (observed ∪ scenarios) :
+    ``p_presence_j = Σ_s scenario_s.weight × 1[j ∈ s_lineup]``
+    ``observed_flag_j = 1 si j ∈ observed sinon 0``
+    ``T15 = mean((p_presence - observed_flag)²)``
+
+    Gate seuil : <= 0.20 (spec Phase 3 §6.2, baseline Elo ~0.26).
+
+    @param observed: lineup réel du club adverse.
+    @param scenario_set: ScenarioSet ALI prédit (weights normalisés).
+
+    @returns Brier score ∈ [0, 1]. 0 = prédiction parfaite.
+    """
+    observed_names = observed.player_names()
+    p_presence: dict[str, float] = {}
+    for scenario in scenario_set.scenarios:
+        w = scenario.weight
+        for assignment in scenario.lineup.assignments:
+            name = _canonical_name(assignment.player)
+            p_presence[name] = p_presence.get(name, 0.0) + w
+
+    all_players = set(p_presence) | set(observed_names)
+    if not all_players:
+        return 0.0
+    total = 0.0
+    for name in all_players:
+        p = p_presence.get(name, 0.0)
+        obs_flag = 1.0 if name in observed_names else 0.0
+        total += (p - obs_flag) ** 2
+    return total / len(all_players)
+
+
+def brier_skill_score(
+    observed: ObservedLineup,
+    scenario_set: ScenarioSet,
+    baseline_brier: float,
+) -> float:
+    """T6 : Brier skill score vs baseline (Pappalardo 2019 sports SOTA).
+
+    Formule : ``BSS = 1 - (Brier_model / Brier_baseline)``.
+    Interpretation :
+    - BSS > 0 : model better than baseline
+    - BSS = 0 : model == baseline
+    - BSS < 0 : model worse
+    - BSS = 1 : perfect model (Brier_model = 0)
+
+    Gate seuil : >= 0.05 (model improves by >=5% over baseline).
+
+    @param observed: lineup réel.
+    @param scenario_set: ScenarioSet ALI prédit.
+    @param baseline_brier: Brier score du baseline (ex. Elo-only single scenario).
+
+    @returns BSS (unbounded below, max 1.0). Retourne 0.0 si baseline <= 0
+             (évite division par zéro, fallback conservateur).
+    """
+    if baseline_brier <= 0:
+        return 0.0
+    model_brier = brier_presence(observed, scenario_set)
+    return 1.0 - (model_brier / baseline_brier)
