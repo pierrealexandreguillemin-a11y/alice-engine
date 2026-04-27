@@ -18,6 +18,7 @@ tu le dis immédiatement.
 - **NE JAMAIS estimer sans données empiriques** du même setup — "~1-2h" mensonger = timeout garanti
 - **NE JAMAIS minimiser un gap** pour avancer — si une étape du pipeline a été sautée, le dire
 - **Documenter IMMÉDIATEMENT** toute décision, erreur, finding. Post-mortem dans `docs/postmortem/`
+- **Fix-on-sight (solo dev)** : pas de "ticket pour plus tard". Si l'audit révèle un bug, on fix dans la session. Une dette repérée = soit (a) résorbée immédiatement, soit (b) tracée dans `memory/project_debt_current.md` avec phase cible explicite et raison du report.
 
 ### Standards industrie ML
 - **WebSearch AVANT chaque choix technique** — vérifier doc officielle, littérature, état de l'art
