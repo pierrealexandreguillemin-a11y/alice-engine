@@ -90,8 +90,11 @@ def bootstrap_ci(
 
     point = float(np.mean(arr))
 
-    if n < 2:
-        # IC dégénéré — pas assez de points pour resample
+    # IC dégénéré : n<2 OU variance nulle (toutes valeurs identiques).
+    # Sans ce guard, scipy.stats.bootstrap BCa retourne NaN sur var=0
+    # (DegenerateDataWarning) — pollue downstream metrics.
+    # Detected by Hypothesis property test (T19, falsifying values=[0.0, 0.0]).
+    if n < 2 or float(np.var(arr)) == 0.0:
         return BootstrapCI(
             lower=point,
             point=point,
