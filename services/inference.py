@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import numpy as np
 
@@ -30,6 +30,9 @@ if TYPE_CHECKING:
     from scripts.serving.model_loader import ModelBundle
 
 logger = logging.getLogger(__name__)
+
+# ISO 5055 compactness : alias to keep signatures inline (line budget < 300)
+NDArr: TypeAlias = np.ndarray[Any, Any]
 
 ALPHA_LGB = 0.1
 ALPHA_XGB = 0.5
@@ -65,9 +68,9 @@ class StackingInferenceService:
         self,
         player_elo: int,
         opponent_elo: int,
-        features: np.ndarray,
+        features: NDArr,
         draw_rate_lookup: Any = None,
-    ) -> np.ndarray:
+    ) -> NDArr:
         """Return (1, 3) P(loss/draw/win) via the stacking pipeline."""
         lookup = draw_rate_lookup or self._bundle.draw_rate_lookup
         if lookup is None:
@@ -85,7 +88,7 @@ class StackingInferenceService:
             return self._predict_fallback(features, init_scores)
         return self._predict_stacking(features, init_scores)
 
-    def _predict_stacking(self, features: np.ndarray, init_scores: np.ndarray) -> np.ndarray:
+    def _predict_stacking(self, features: NDArr, init_scores: NDArr) -> NDArr:
         b = self._bundle
         p_lgb = predict_with_init(b.lgb_model, features, init_scores * ALPHA_LGB)
         p_xgb = predict_with_init(b.xgb_model, features, init_scores * ALPHA_XGB)
@@ -96,7 +99,7 @@ class StackingInferenceService:
         self._validate_output(p_cal)
         return p_cal
 
-    def _predict_fallback(self, features: np.ndarray, init_scores: np.ndarray) -> np.ndarray:
+    def _predict_fallback(self, features: NDArr, init_scores: NDArr) -> NDArr:
         b = self._bundle
         p_lgb = predict_with_init(b.lgb_model, features, init_scores * ALPHA_LGB)
         if b.mlp_model is None:
@@ -112,7 +115,7 @@ class StackingInferenceService:
         return p_cal
 
     @staticmethod
-    def _apply_dirichlet(p: np.ndarray, calib: dict) -> np.ndarray:
+    def _apply_dirichlet(p: NDArr, calib: dict[str, Any]) -> NDArr:
         """Apply Dirichlet multinomial logistic calibration : softmax(W @ log(p) + bias)."""
         _, weights, bias = next(iter(calib.values()))
         log_p = np.log(np.clip(p, 1e-7, 1.0))
@@ -122,15 +125,15 @@ class StackingInferenceService:
         return np.asarray(exp_l / exp_l.sum(axis=1, keepdims=True))
 
     @staticmethod
-    def _apply_temperature(p: np.ndarray, temperature: float) -> np.ndarray:
+    def _apply_temperature(p: NDArr, temperature: float) -> NDArr:
         """Apply temperature scaling to logits then renormalise."""
         logits = np.log(np.clip(p, 1e-7, 1.0)) / temperature
         logits -= logits.max(axis=1, keepdims=True)
         exp_l = np.exp(logits)
-        return exp_l / exp_l.sum(axis=1, keepdims=True)
+        return np.asarray(exp_l / exp_l.sum(axis=1, keepdims=True))
 
     @staticmethod
-    def _validate_output(p: np.ndarray) -> None:
+    def _validate_output(p: NDArr) -> None:
         if not np.all(np.isfinite(p)):
             raise ValueError("NaN/Inf in prediction output")
         sums = p.sum(axis=1)
@@ -141,7 +144,7 @@ class StackingInferenceService:
         self,
         player_elo: int,
         opponent_elo: int,
-        features: np.ndarray,
+        features: NDArr,
         draw_rate_lookup: Any = None,
     ) -> PredictionResult:
         """Return structured PredictionResult with e_score for a single board."""

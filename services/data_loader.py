@@ -54,7 +54,7 @@ class DataLoader:
         """
         self.mongodb_uri = mongodb_uri
         self.dataset_path = dataset_path
-        self.db = None
+        self.db: Any = None  # AsyncIOMotorDatabase[Any] when connected, None otherwise
         self._audit = audit_logger
 
     async def connect(self) -> bool:
@@ -69,7 +69,7 @@ class DataLoader:
         try:
             from motor.motor_asyncio import AsyncIOMotorClient  # noqa: PLC0415
 
-            client = AsyncIOMotorClient(self.mongodb_uri)
+            client: Any = AsyncIOMotorClient(self.mongodb_uri)
             self.db = client.get_default_database()
             # Test connexion
             await client.admin.command("ping")
@@ -108,7 +108,8 @@ class DataLoader:
                 .sort("date", -1)
                 .limit(limit)
             )
-            results = await cursor.to_list(length=limit)
+            raw = await cursor.to_list(length=limit)
+            results: list[dict[str, Any]] = list(raw)
             await self._audit_log("read", "compositions", query, len(results), t0)
             return results
         except Exception as e:
@@ -153,7 +154,8 @@ class DataLoader:
                 },
             ).sort("elo", -1)
 
-            results = await cursor.to_list(length=200)
+            raw = await cursor.to_list(length=200)
+            results: list[dict[str, Any]] = list(raw)
             await self._audit_log("read", "players", query, len(results), t0)
             return results
         except Exception as e:
