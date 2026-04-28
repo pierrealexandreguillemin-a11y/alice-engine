@@ -169,15 +169,31 @@ class MonteCarloSampler:
     ) -> NDArray[np.int8]:
         """Inverse-transform via copule fittee (structure correlation preservee).
 
-        Si copula a ete fittee sur le bon pool, appel transform_uniform_to_presence.
-        Sinon (copula non fittee ou mismatch), fallback threshold direct sur marginales pool.
+        Fail-fast (D-P3-12 resolved 2026-04-28) : si la copula n'est pas fittee
+        ou si n_players mismatch, raise plutot que fallback threshold marginal
+        independant. Le fallback indep produirait des samples non-correles
+        (effet substitution joueur n°1/n°9 perdu) -> biais conservateur ML
+        silencieux. Mieux vaut crash que biais cache (ISO 24029 fail-fast).
+
+        Le `ScenarioGenerator` (Plan 2 Task 7) garantit toujours une copula
+        fittee via `_fit_copula` avant l'appel. Cette branche raise est donc
+        defensive : elle protege contre un futur wiring incorrect.
         """
-        if self._copula.is_fit and self._copula.n_players == len(pool):
-            return self._copula.transform_uniform_to_presence(u)
-        # Fallback : threshold marginal (pool-based, no correlation)
-        marginales = np.array([(p.taux_presence_effectif or _DEFAULT_TAUX) for p in pool])
-        presence: NDArray[np.int8] = (u < marginales).astype(np.int8)
-        return presence
+        if not self._copula.is_fit:
+            msg = (
+                "MonteCarloSampler._u_to_presence: copula not fit. "
+                "Generator must call CopulaJointSampler.fit(...) before sample(). "
+                "ISO 24029 fail-fast (no silent fallback to independent threshold)."
+            )
+            raise RuntimeError(msg)
+        if self._copula.n_players != len(pool):
+            msg = (
+                f"MonteCarloSampler._u_to_presence: copula n_players "
+                f"{self._copula.n_players} != pool size {len(pool)}. "
+                f"Refit copula on the same pool before sampling."
+            )
+            raise RuntimeError(msg)
+        return self._copula.transform_uniform_to_presence(u)
 
     @staticmethod
     def _build_lineup(

@@ -9,16 +9,17 @@ ISO Compliance:
 - ISO/IEC 25010 - System Quality (maintenabilite)
 
 Services:
-- InferenceService: ALI (Adversarial Lineup Inference)
-- ComposerService: CE (Composition Engine)
-- DataLoader: Repository pattern
+- StackingInferenceService: ML stacking pipeline (Phase 2)
+- InferenceService: ALI legacy stub (backward compat)
+- DataLoader: Repository pattern (MongoDB + Parquet)
 
-Author: ALICE Engine Team
-Last Updated: 2026-01-09
+Note : ComposerService legacy supprime 2026-04-28 (D5 resorbe). Le vrai
+flow CE est `app/api/routes.py::/compose` qui invoque ScenarioGenerator
++ StackingInferenceService + aggregation. Voir ADR-011 (AG eliminé) +
+ADR-014 (ALI MC hybride).
 """
 
-from services.composer import ComposerService
 from services.data_loader import DataLoader
 from services.inference import InferenceService
 
-__all__ = ["InferenceService", "ComposerService", "DataLoader"]
+__all__ = ["InferenceService", "DataLoader"]

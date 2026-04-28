@@ -261,6 +261,9 @@ class ComposeRequest(BaseModel):
     current_round: int | None = Field(None, ge=1, le=20, description="Ronde courante (ALI)")
     nb_rondes_total: int | None = Field(None, ge=1, le=20, description="Total rondes (ALI)")
     player_overrides: list[dict[str, Any]] | None = Field(None, description="Overrides pool")
+    # D-P2-04 fix : seed optionnel pour reproducibilite/audit (ADR-014).
+    # None -> default generator (42, audit-stable). Custom -> variations.
+    seed: int | None = Field(None, ge=0, description="Seed RNG ALI (None = audit default)")
 
     @field_validator("joueurs_disponibles")
     @classmethod

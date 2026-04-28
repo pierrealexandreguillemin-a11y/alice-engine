@@ -147,3 +147,45 @@ def test_mc_n_pairs_zero_returns_empty():
     rng = np.random.default_rng(0)
     scenarios = mc.sample(pool, _ctx(team_size=8), n_pairs=0, rng=rng)
     assert scenarios == []
+
+
+def test_mc_unfit_copula_raises_runtime_error() -> None:
+    """D-P3-12 fix : copula non-fittee -> RuntimeError fail-fast (ISO 24029).
+
+    Avant 2026-04-28, _u_to_presence avait un fallback indep silencieux qui
+    masquait un wiring incorrect (generator devant toujours fit la copula
+    avant sample). Maintenant raise pour eviter biais conservateur cache.
+    """
+    pool = [_player(f"P{i}", 2200 - i * 30, taux=0.7) for i in range(12)]
+    engine = RuleEngine.from_json_file(REAL_A02)
+    unfit_copula = CopulaJointSampler()  # no fit() call
+    mc = MonteCarloSampler(engine=engine, copula=unfit_copula)
+    rng = np.random.default_rng(0)
+    with pytest.raises(RuntimeError, match="copula not fit"):
+        mc.sample(pool, _ctx(team_size=8), n_pairs=3, rng=rng)
+
+
+def test_mc_copula_size_mismatch_raises_runtime_error() -> None:
+    """D-P3-12 fix : copula fit on different pool size -> RuntimeError."""
+    pool_12 = [_player(f"P{i}", 2200 - i * 30, taux=0.7) for i in range(12)]
+    pool_14 = [_player(f"P{i}", 2200 - i * 30, taux=0.7) for i in range(14)]
+    engine = RuleEngine.from_json_file(REAL_A02)
+    # Fit copula on pool_14 then use with pool_12
+    rows = [
+        {"saison": 2024, "ronde": r, "joueur_nom": f"PP{i} X", "present": 1}
+        for r in range(1, 11)
+        for i in range(14)
+    ]
+    history = pd.DataFrame(rows)
+    copula = CopulaJointSampler()
+    copula.fit(
+        history=history,
+        player_names=[f"PP{i} X" for i in range(14)],
+        saison=2024,
+        nb_rondes_total=11,
+        current_round=10,
+    )
+    mc = MonteCarloSampler(engine=engine, copula=copula)
+    rng = np.random.default_rng(0)
+    with pytest.raises(RuntimeError, match="n_players"):
+        mc.sample(pool_12, _ctx(team_size=8), n_pairs=3, rng=rng)

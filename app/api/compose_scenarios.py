@@ -108,15 +108,18 @@ def try_generate_scenarios(
     nb_rondes_total = body.nb_rondes_total or 11
     ctx = make_competition_context(body, team_size)
     try:
-        result: ScenarioSet = generator.generate(
-            opponent_club_id=body.opponent_club_id,
-            round_date=round_date,
-            context=ctx,
-            saison=saison,
-            current_round=current_round,
-            nb_rondes_total=nb_rondes_total,
-            overrides=body.player_overrides,
-        )
+        gen_kwargs: dict[str, Any] = {
+            "opponent_club_id": body.opponent_club_id,
+            "round_date": round_date,
+            "context": ctx,
+            "saison": saison,
+            "current_round": current_round,
+            "nb_rondes_total": nb_rondes_total,
+            "overrides": body.player_overrides,
+        }
+        if body.seed is not None:  # D-P2-04 : explicit seed override
+            gen_kwargs["seed"] = body.seed
+        result: ScenarioSet = generator.generate(**gen_kwargs)
     except Exception:
         logger.exception("ali_generator_failed club=%s", body.opponent_club_id)
         return None
