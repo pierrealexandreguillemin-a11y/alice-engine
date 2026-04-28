@@ -52,7 +52,7 @@ from scripts.backtest.runner_types import (
     RunnerConfig,
     df_to_candidates,
 )
-from scripts.backtest.statistical import mcnemar_paired
+from scripts.backtest.statistical import mcnemar_paired, wilcoxon_paired
 
 if TYPE_CHECKING:
     from scripts.backtest.harness import BacktestHarness
@@ -208,6 +208,10 @@ class BacktestRunner:
             mcnemar=mcnemar_paired(
                 [s.ali_correct for s in stats],
                 [s.baseline_correct for s in stats],
+            ),
+            wilcoxon_recall=wilcoxon_paired(
+                [s.recall_ali for s in stats],
+                [s.recall_baseline for s in stats],
             ),
         )
 

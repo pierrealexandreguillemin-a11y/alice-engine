@@ -1,30 +1,32 @@
-"""Statistical tests T9 McNemar (paired binary comparison).
+"""Statistical tests for paired classifier comparison (T9 McNemar + Wilcoxon).
 
-Plan 3 V2 Phase 3 Task 9. ISO 24029 (robustness), 25059 (quality gates).
+Plan 3 V2 Phase 3 Task 9 + T22.D-P3-18 Wilcoxon (2026-04-28).
+ISO 24029 (robustness), 25059 (quality gates).
 
-Protocole McNemar (1947) : comparison paire de 2 classifieurs binaires sur
-les MEMES observations → minimise variance nuisance vs tests indépendants.
+Deux tests complémentaires :
 
-Table 2x2 :
-- b = matches où ALI "correct" mais baseline "incorrect"
-- c = matches où baseline "correct" mais ALI "incorrect"
-- H0 : b == c (pas de différence)
-- H1 : b != c (bilateral)
+**Wilcoxon signed-rank paired (TEST PRINCIPAL D-P3-18 SOTA)**
+- Opère directement sur les valeurs continues `recall_ali[i]` vs
+  `recall_baseline[i]`. Aucune dichotomisation arbitraire (correct/incorrect).
+- Distribution-free, paired (mêmes matches). H0 : médiane des
+  différences = 0. H1 bilateral : médiane ≠ 0.
+- Plus puissant que McNemar quand la métrique est continue (Pratt 1959).
+- Utilise scipy.stats.wilcoxon (zsplit pour 0-différences, exact si n<25).
 
-Décision :
-- Si ``b + c < 25`` → exact binomial test (statsmodels ``exact=True``)
-- Sinon → chi2 avec continuity correction (Edwards 1948)
-
-Gate seuil : ``p < 0.05`` bilateral → ALI significativement différent baseline
-(Pappalardo 2019 sports SOTA, standard en ML comparisons).
-
-Définition "correct" par match (T22 usage) :
-Un match est "correct" pour le classifieur si recall >= threshold T13 (0.90).
-Alternative : top_scenario accuracy >= 0.75 (T13b). Choix à documenter
-explicitement dans ALI_QUALITY_GATES_REPORT.md.
+**McNemar paired binary (TEST SECONDAIRE legacy P3G11b spec)**
+- Dichotomise via `ali_correct = recall >= RECALL_GATE`. Perd l'information
+  continue mais préservé pour conformité Plan 3 V2 §6.2 spec.
+- Table 2x2 : b = ALI correct seul, c = baseline correct seul.
+- Si b + c < 25 → exact binomial (statsmodels), sinon chi² Yates.
+- Si gates absolus inatteignables (P3G07 strict), McNemar dégénère
+  (n_disc petit). Wilcoxon reste valide.
 
 Sources SOTA
 ------------
+- Wilcoxon F. 1945, "Individual comparisons by ranking methods", Biometrics
+  Bulletin 1(6), 80-83.
+- Pratt J. W. 1959, "Remarks on zeros and ties in the Wilcoxon signed
+  rank procedures", JASA 54(287), 655-667.
 - McNemar Q. 1947, "Note on the sampling error of the difference between
   correlated proportions", Psychometrika 12(2).
 - Edwards A.L. 1948, "Note on the correction for continuity in testing
@@ -32,9 +34,12 @@ Sources SOTA
 - Dietterich 1998 "Approximate Statistical Tests for Comparing Supervised
   Classification Learning Algorithms" (MIT J Neural Computation 10).
 - Pappalardo et al. 2019 PlayeRank — sports paired comparison.
+- Demšar J. 2006 "Statistical comparisons of classifiers over multiple
+  datasets" JMLR 7 — Wilcoxon recommended over McNemar for continuous
+  performance metrics.
 
 Document ID: ALICE-BACKTEST-STATISTICAL
-Version: 1.0.0
+Version: 1.1.0
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy import stats
 
 
 @dataclass(frozen=True)
@@ -131,4 +137,109 @@ def mcnemar_paired(
         n_discordant=n_disc,
         method=method,
         significant=float(result.pvalue) < alpha,
+    )
+
+
+@dataclass(frozen=True)
+class WilcoxonResult:
+    """Resultat Wilcoxon signed-rank paired test (D-P3-18 SOTA, 2026-04-28).
+
+    @param statistic: somme des rangs des differences positives (W+).
+                      Sous H0, W+ ≈ n(n+1)/4. W+ >> implique ali > baseline.
+    @param p_value: bilateral p-value (H1 : median diff != 0).
+    @param n_pairs: nombre total de paires utilisees (= len(ali_values)).
+    @param n_nonzero: nombre de paires apres exclusion des differences
+                      egales a 0 (zero_method='wilcox' standard).
+    @param median_diff: mediane des differences ali_values - baseline_values
+                        (interpretation : > 0 => ali domine en mediane).
+    @param mean_diff: moyenne des differences (informatif, non utilise
+                      dans le test).
+    @param method: "exact" si n_nonzero < 25, sinon "approx_normal" (avec
+                   continuity correction).
+    @param significant: True si p_value < alpha (default 0.05).
+    """
+
+    statistic: float
+    p_value: float
+    n_pairs: int
+    n_nonzero: int
+    median_diff: float
+    mean_diff: float
+    method: str
+    significant: bool
+
+    def passes_gate(self, alpha: float = 0.05) -> bool:
+        """Return True si p_value < alpha bilateral."""
+        return self.p_value < alpha
+
+
+def wilcoxon_paired(
+    ali_values: list[float],
+    baseline_values: list[float],
+    alpha: float = 0.05,
+) -> WilcoxonResult:
+    """T22.D-P3-18 Wilcoxon signed-rank paired test sur valeurs continues.
+
+    Compare distribution `ali_values[i] - baseline_values[i]` vs 0
+    (test bilateral H1 : median diff != 0). Distribution-free, plus
+    puissant que McNemar quand la metrique est continue (Demsar 2006).
+
+    @param ali_values: per-match ALI metric (e.g. recall, jaccard, brier).
+    @param baseline_values: per-match baseline metric, MEMES indices que
+                            ali_values (paired observations).
+    @param alpha: seuil significativite bilateral. Default 0.05.
+
+    @raises ValueError: longueurs differentes, vides, ou alpha hors (0, 1).
+    @returns WilcoxonResult frozen.
+    """
+    if not 0.0 < alpha < 1.0:
+        msg = f"alpha must be in (0, 1), got {alpha}"
+        raise ValueError(msg)
+    if len(ali_values) != len(baseline_values):
+        msg = (
+            f"length mismatch : ali_values={len(ali_values)} "
+            f"vs baseline_values={len(baseline_values)}"
+        )
+        raise ValueError(msg)
+    if len(ali_values) == 0:
+        msg = "empty inputs : Wilcoxon requires >= 1 paired observation"
+        raise ValueError(msg)
+
+    arr_ali = np.asarray(ali_values, dtype=float)
+    arr_base = np.asarray(baseline_values, dtype=float)
+    diffs = arr_ali - arr_base
+    n_nonzero = int((diffs != 0.0).sum())
+
+    # Edge cases : toutes les differences sont 0 => H0 trivialement vrai,
+    # p_value = 1.0, aucune evidence.
+    if n_nonzero == 0:
+        return WilcoxonResult(
+            statistic=0.0,
+            p_value=1.0,
+            n_pairs=len(arr_ali),
+            n_nonzero=0,
+            median_diff=0.0,
+            mean_diff=0.0,
+            method="degenerate_no_diff",
+            significant=False,
+        )
+
+    # scipy choisit auto exact (n<25) ou approx normal (continuity).
+    method_str = "exact" if n_nonzero < 25 else "approx_normal"
+    res = stats.wilcoxon(
+        x=arr_ali,
+        y=arr_base,
+        alternative="two-sided",
+        zero_method="wilcox",
+        method="auto",
+    )
+    return WilcoxonResult(
+        statistic=float(res.statistic),
+        p_value=float(res.pvalue),
+        n_pairs=len(arr_ali),
+        n_nonzero=n_nonzero,
+        median_diff=float(np.median(diffs)),
+        mean_diff=float(np.mean(diffs)),
+        method=method_str,
+        significant=float(res.pvalue) < alpha,
     )

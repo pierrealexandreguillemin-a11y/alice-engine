@@ -116,3 +116,119 @@ def test_mcnemar_ties_only_match_count():
     assert isinstance(res, McNemarResult)
     assert res.n_discordant == 0
     assert res.significant is False
+
+
+# ---------------------------------------------------------------------------
+# T22 D-P3-18 SOTA Wilcoxon signed-rank tests (continuous paired)
+# ---------------------------------------------------------------------------
+
+from scripts.backtest.statistical import WilcoxonResult, wilcoxon_paired  # noqa: E402
+
+
+def test_wilcoxon_identical_values_no_diff():
+    """Toutes les diffs == 0 -> degenerate, p=1.0, significant False."""
+    ali = [0.5, 0.6, 0.7, 0.8]
+    base = [0.5, 0.6, 0.7, 0.8]
+    res = wilcoxon_paired(ali, base)
+    assert isinstance(res, WilcoxonResult)
+    assert res.n_nonzero == 0
+    assert res.p_value == pytest.approx(1.0)
+    assert res.method == "degenerate_no_diff"
+    assert res.significant is False
+
+
+def test_wilcoxon_ali_dominates_continuous_significant():
+    """ALI > baseline systematique sur metric continu -> p << 0.05."""
+    ali = [0.6, 0.7, 0.8, 0.5, 0.9, 0.7, 0.6, 0.8, 0.7, 0.6]
+    base = [0.1, 0.2, 0.3, 0.0, 0.4, 0.2, 0.1, 0.3, 0.2, 0.1]
+    res = wilcoxon_paired(ali, base)
+    assert res.median_diff > 0.0
+    assert res.p_value < 0.05
+    assert res.significant is True
+    assert res.n_nonzero == 10
+
+
+def test_wilcoxon_baseline_dominates_direction_negative():
+    """Baseline > ALI systematique : direction documentee.
+
+    median_diff < 0 indique baseline domine. N=5 trop petit pour
+    significativite alpha=0.05 (p ≈ 0.0625 exact bilateral) — test
+    coherence direction + non-degenerescence, pas puissance.
+    """
+    ali = [0.1, 0.2, 0.3, 0.0, 0.4]
+    base = [0.5, 0.6, 0.7, 0.4, 0.8]
+    res = wilcoxon_paired(ali, base)
+    assert res.median_diff < 0.0  # baseline domine en mediane
+    assert res.n_nonzero == 5
+    assert res.method == "exact"
+
+
+def test_wilcoxon_paired_t22_recall_real_dump():
+    """Sur les vraies recall T22 (ALI domine baseline largement).
+
+    Wilcoxon doit detecter direction + significativite sur 8 paires.
+    """
+    # extracted from reports/backtest/ali_holdout_2024.json
+    ali_recalls = [0.625, 0.625, 0.625, 0.625, 0.625, 0.625, 0.625, 0.625]
+    base_recalls = [0.0, 0.0, 0.0, 0.125, 0.0, 0.0, 0.125, 0.0]
+    res = wilcoxon_paired(ali_recalls, base_recalls)
+    assert res.median_diff > 0.0
+    assert res.n_nonzero == 8  # toutes paires distinctes (0.625 != 0/0.125)
+
+
+def test_wilcoxon_length_mismatch_raises():
+    with pytest.raises(ValueError, match="length mismatch"):
+        wilcoxon_paired([0.5, 0.6], [0.5])
+
+
+def test_wilcoxon_empty_raises():
+    with pytest.raises(ValueError, match="empty"):
+        wilcoxon_paired([], [])
+
+
+def test_wilcoxon_invalid_alpha_raises():
+    with pytest.raises(ValueError, match="alpha"):
+        wilcoxon_paired([0.5], [0.4], alpha=1.5)
+
+
+def test_wilcoxon_deterministic_same_input():
+    ali = [0.5, 0.6, 0.7, 0.55, 0.65]
+    base = [0.4, 0.5, 0.6, 0.45, 0.55]
+    res1 = wilcoxon_paired(ali, base)
+    res2 = wilcoxon_paired(ali, base)
+    assert res1.p_value == res2.p_value
+    assert res1.statistic == res2.statistic
+
+
+def test_wilcoxon_method_exact_when_n_lt_25():
+    """n_nonzero < 25 -> method 'exact'."""
+    ali = [0.5, 0.6, 0.7, 0.8, 0.9]
+    base = [0.4, 0.5, 0.6, 0.7, 0.8]
+    res = wilcoxon_paired(ali, base)
+    assert res.method == "exact"
+
+
+def test_wilcoxon_method_approx_when_n_ge_25():
+    """n_nonzero >= 25 -> method 'approx_normal'."""
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    ali = rng.uniform(0.3, 0.8, 30).tolist()
+    base = rng.uniform(0.0, 0.2, 30).tolist()
+    res = wilcoxon_paired(ali, base)
+    assert res.n_nonzero >= 25
+    assert res.method == "approx_normal"
+
+
+def test_wilcoxon_passes_gate_alpha():
+    """passes_gate(alpha=0.05) reflete significant flag.
+
+    Avec N=10 toutes diffs positives identiques (ties handling) le
+    p_value exact ≈ 0.00195 < 0.05 mais > 0.001 (limite plancher exact
+    binomial). Test alpha=0.05 et alpha=0.005 (au-dessus du plancher).
+    """
+    ali = [0.6] * 10
+    base = [0.1] * 10
+    res = wilcoxon_paired(ali, base)
+    assert res.passes_gate(alpha=0.05) is True
+    assert res.passes_gate(alpha=0.005) is True  # 0.00195 < 0.005

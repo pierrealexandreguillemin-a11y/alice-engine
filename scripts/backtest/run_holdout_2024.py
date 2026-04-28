@@ -87,6 +87,16 @@ def _report_to_dict(report: BacktestReport) -> dict[str, object]:
             "method": report.mcnemar.method,
             "significant": report.mcnemar.significant,
         },
+        "wilcoxon_recall": {
+            "statistic": report.wilcoxon_recall.statistic,
+            "p_value": report.wilcoxon_recall.p_value,
+            "n_pairs": report.wilcoxon_recall.n_pairs,
+            "n_nonzero": report.wilcoxon_recall.n_nonzero,
+            "median_diff": report.wilcoxon_recall.median_diff,
+            "mean_diff": report.wilcoxon_recall.mean_diff,
+            "method": report.wilcoxon_recall.method,
+            "significant": report.wilcoxon_recall.significant,
+        },
         "per_match": [asdict(m) for m in report.per_match],
     }
 
@@ -165,7 +175,10 @@ def main() -> None:
     )
     print(f"Mean BSS: {report.mean_bss:.4f}")
     print(
-        f"McNemar p={report.mcnemar.p_value:.4g}  b(ALI+only)={report.mcnemar.b} c(base+only)={report.mcnemar.c} method={report.mcnemar.method}"
+        f"Wilcoxon recall p={report.wilcoxon_recall.p_value:.4g}  median_diff={report.wilcoxon_recall.median_diff:.4f}  n_nonzero={report.wilcoxon_recall.n_nonzero}/{report.wilcoxon_recall.n_pairs}  method={report.wilcoxon_recall.method}"
+    )
+    print(
+        f"McNemar (legacy binary) p={report.mcnemar.p_value:.4g}  b(ALI+only)={report.mcnemar.b} c(base+only)={report.mcnemar.c} method={report.mcnemar.method}"
     )
 
 

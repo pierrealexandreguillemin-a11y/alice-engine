@@ -9,11 +9,8 @@ Version: 1.0.0
 
 from __future__ import annotations
 
-import hashlib  # noqa: F401  (imported per spec for future extensions)
 import json
 from pathlib import Path
-
-import pytest  # noqa: F401  (imported per spec; pytest discovery)
 
 from services.ali.types import CompetitionContext, PlayerCandidate
 from services.ffe.rule_engine import Rule, RuleEngine

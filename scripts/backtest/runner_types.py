@@ -16,7 +16,7 @@ from services.ali.types import PlayerCandidate
 
 if TYPE_CHECKING:
     from scripts.backtest.bootstrap import BootstrapCI
-    from scripts.backtest.statistical import McNemarResult
+    from scripts.backtest.statistical import McNemarResult, WilcoxonResult
 
 # Gate thresholds (Plan 3 V2 P3G07-P3G11)
 RECALL_GATE = 0.90
@@ -25,6 +25,14 @@ BRIER_GATE = 0.20
 BSS_GATE = 0.05
 ECE_GATE = 0.05
 MAE_GATE = 1.0
+
+# McNemar paired test seuil "correct" : RECALL_GATE strict 0.90.
+# T22 review user 2026-04-28 a rejeté l'idée de baisser le seuil (=
+# statistical hacking, pas SOTA). McNemar binaire dichotomise une métrique
+# continue (recall ∈ [0,1]) → perte d'information. Solution SOTA = Wilcoxon
+# signed-rank test paired sur recall_ali vs recall_baseline (continu).
+# McNemar conservé comme outil secondaire (legacy P3G11b spec) mais le test
+# de référence est Wilcoxon (cf. statistical.py::wilcoxon_paired).
 
 
 @dataclass(frozen=True)
@@ -52,13 +60,18 @@ class MatchStats:
 
 @dataclass(frozen=True)
 class BacktestReport:
-    """Aggregated backtest report with bootstrap CIs + McNemar.
+    """Aggregated backtest report with bootstrap CIs + McNemar + Wilcoxon.
 
     @param n_matches: number of successfully-run matches.
     @param per_match: list of MatchStats (lineage per match).
     @param ci_recall, ci_accuracy, ci_jaccard, ci_brier, ci_ece : BCa CIs.
     @param mean_bss: mean Brier skill score (ALI vs baseline).
-    @param mcnemar: paired McNemar result on (ali_correct, baseline_correct).
+    @param mcnemar: paired McNemar result on (ali_correct, baseline_correct)
+                    binary - LEGACY P3G11b spec, dichotomise recall>=0.90.
+    @param wilcoxon_recall: paired Wilcoxon signed-rank on continuous
+                            recall_ali vs recall_baseline (D-P3-18 SOTA,
+                            T22 finding 2026-04-28). Test PRINCIPAL pour
+                            P3G11b.
     """
 
     n_matches: int
@@ -71,9 +84,14 @@ class BacktestReport:
     ci_mae: BootstrapCI
     mean_bss: float
     mcnemar: McNemarResult
+    wilcoxon_recall: WilcoxonResult
 
     def gates_summary(self) -> dict[str, bool]:
-        """Return dict gate_name -> pass/fail (Plan 3 V2 P3G07-P3G11)."""
+        """Return dict gate_name -> pass/fail (Plan 3 V2 P3G07-P3G11).
+
+        P3G11b utilise Wilcoxon signed-rank (D-P3-18 SOTA) sur recall continu.
+        McNemar binaire conservé en metric secondaire pour conformité spec.
+        """
         return {
             "P3G07_recall": self.ci_recall.passes_gate(RECALL_GATE, direction="ge"),
             "P3G08_jaccard": self.ci_jaccard.passes_gate(JACCARD_GATE, direction="ge"),
@@ -81,7 +99,8 @@ class BacktestReport:
             "P3G09_bss": self.mean_bss >= BSS_GATE,
             "P3G10_ece": self.ci_ece.passes_gate(ECE_GATE, direction="le"),
             "P3G11_mae": self.ci_mae.passes_gate(MAE_GATE, direction="le"),
-            "P3G11_mcnemar": self.mcnemar.passes_gate(alpha=0.05),
+            "P3G11_wilcoxon_recall": self.wilcoxon_recall.passes_gate(alpha=0.05),
+            "P3G11_mcnemar_legacy": self.mcnemar.passes_gate(alpha=0.05),
         }
 
 

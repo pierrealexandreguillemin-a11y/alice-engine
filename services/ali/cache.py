@@ -66,18 +66,26 @@ class ALIDataCache:
 
     @staticmethod
     def _index_by_player(df_e: pd.DataFrame) -> dict[str, pd.DataFrame]:
-        """Index echiquiers par joueur (union blanc_nom + noir_nom)."""
-        idx: dict[str, pd.DataFrame] = {}
-        for color in ("blanc", "noir"):
-            col = f"{color}_nom"
-            if col not in df_e.columns:
-                continue
-            for name, group in df_e.groupby(col, dropna=True):
-                key = str(name)
-                idx[key] = (
-                    group if key not in idx else pd.concat([idx[key], group], ignore_index=True)
-                )
-        return idx
+        """Index echiquiers par joueur (union blanc_nom + noir_nom).
+
+        D-P3-06 résorption : O(N²) original (concat per duplicate name)
+        remplacé par stack vertical unique + groupby unique → O(N log N).
+        """
+        cols_present = [f"{c}_nom" for c in ("blanc", "noir") if f"{c}_nom" in df_e.columns]
+        if not cols_present:
+            return {}
+        # Stack vertical : pour chaque joueur (blanc_nom OU noir_nom non-NA),
+        # garder la row entière, tagger col d'origine ignorée. Single concat
+        # avant groupby — évite N concats incrementaux.
+        frames = [
+            df_e.assign(_player_name=df_e[col].astype("string")).dropna(subset=[col])
+            for col in cols_present
+        ]
+        stacked = pd.concat(frames, ignore_index=True)
+        return {
+            str(name): group.drop(columns=["_player_name"])
+            for name, group in stacked.groupby("_player_name", dropna=True)
+        }
 
     @staticmethod
     def _build_team_to_club(df_j: pd.DataFrame, df_e: pd.DataFrame) -> dict[str, str]:

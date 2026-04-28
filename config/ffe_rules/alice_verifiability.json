@@ -19,6 +19,6 @@
     "Top16-N2_3.7.i_001": {"verifiability": "public", "reason": "genre + nationalité publics", "data_source": "joueurs.parquet"},
     "N4_3.7.j_001": {"verifiability": "public", "reason": "Elo publics", "data_source": "joueurs.parquet"},
     "N1-N4_3.7.k_001": {"verifiability": "public", "reason": "matchs de barrage : article 3.7 reste applicable (meta-pointer)", "data_source": "echiquiers.parquet"},
-    "N1-N2_3.7_001": {"verifiability": "private", "reason": "règle arbitrage, pas composition", "data_source": "-"}
+    "N1-N2_3.7_001": {"verifiability": "out_of_scope", "reason": "règle arbitrage, pas composition (D-P3-09 reclassement 2026-04-28)", "data_source": "-"}
   }
 }

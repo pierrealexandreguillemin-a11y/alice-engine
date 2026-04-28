@@ -142,7 +142,8 @@ def test_generator_uses_public_rules_only(ali_data_cache: ALIDataCache) -> None:
     classifier = VerifiabilityClassifier.from_json_file(CLASSIF)
     public, private = classifier.partition_rules(engine.rules)
     assert len(public) == 10
-    assert len(private) == 4
+    # D-P3-09 (2026-04-28) : article 3.7 reclassé out_of_scope, distinct private.
+    assert len(private) == 3
 
     gen = _build_generator(ali_data_cache)
     club_id = _find_viable_club(ali_data_cache)
@@ -189,7 +190,11 @@ def test_public_engine_construction_has_exactly_10_rules(
 def test_public_engine_excludes_all_private_rule_ids(
     ali_data_cache: ALIDataCache,
 ) -> None:
-    """D-P2-02 : aucune regle PRIVATE (3.7.b, 3.2, 3.7.f, 3.7) dans public_engine."""
+    """D-P2-02 + D-P3-09 : 3 PRIVATE (3.7.b, 3.2, 3.7.f) + 1 OUT_OF_SCOPE (3.7).
+
+    Article 3.7 (arbitrage) reclassé out_of_scope 2026-04-28 (ADR-007 §schema)
+    car non-composition, distinct de private (supposé respecté par adversaire).
+    """
     engine = RuleEngine.from_json_file(REAL_A02)
     classifier = VerifiabilityClassifier.from_json_file(CLASSIF)
     public, private = classifier.partition_rules(engine.rules)
@@ -200,17 +205,20 @@ def test_public_engine_excludes_all_private_rule_ids(
     # Intersection vide : aucune regle ne peut etre a la fois PUBLIC et PRIVATE
     assert not (public_ids & private_ids)
 
-    # Verifier explicitement les 4 PRIVATE attendues
+    # Article 3.7 arbitrage : out_of_scope, ni PUBLIC ni PRIVATE
+    assert "N1-N2_3.7_001" not in public_ids
+    assert "N1-N2_3.7_001" not in private_ids
+
+    # 3 PRIVATE attendues (post-D-P3-09)
     expected_private = {
         "N1-N4_3.7.b_001",  # force equipes
         "N1-N4_3.2_001",  # designation titulaires
         "N1-N3_3.7.f_001",  # noyau
-        "N1-N2_3.7_001",  # arbitrage
     }
     assert expected_private.issubset(
         private_ids
     ), f"Attendu subset PRIVATE : {expected_private - private_ids} manquants"
-    # Ces 4 ne doivent PAS etre dans PUBLIC
+    # Ces 3 ne doivent PAS etre dans PUBLIC
     assert not (expected_private & public_ids)
 
 

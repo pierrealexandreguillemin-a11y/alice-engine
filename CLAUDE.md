@@ -90,7 +90,7 @@ Résumé session : `memory/project_session_resume.md`
 | Couche | Statut |
 |--------|--------|
 | ML Training | **DONE** — Champion MLP(32,16) stacking 0.5530, ECE_draw 0.0016. AG ÉLIMINÉ (ADR-011). |
-| API FastAPI | **DONE Plan 3 T23 (dette résorbée 2026-04-28)** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). composer.py legacy supprimé (D5). seed exposé via ComposeRequest (D-P2-04). MC fail-fast (D-P3-12). |
+| API FastAPI | **DONE Plan 3 T22+T23 (dette résorbée 2026-04-28/29)** — /compose + /recompose wired. Stacking pipeline E2E champion mode FULL (D-P3-13 résorbée). 11 FFE rules (ADR-012). composer.py legacy supprimé (D5). seed exposé (D-P2-04). MC fail-fast (D-P3-12). Wilcoxon SOTA McNemar pivot (ADR-017, D-P3-18). VerifiabilityClassifier 3-class (D-P3-09). |
 | ALI prédiction adverse | **DONE-SOTA Plan 2** — Monte Carlo hybride (10 TopK + 10 MC LHS+antithetic), copule gaussienne (Sklar 1959) ; fallback Elo si pas d'opponent_club_id |
 | CE multi-équipe | **FALLBACK** — Tri Elo + E[score] (Phase 4 = OR-Tools) |
 | Deploy SaaS multi-tenant | MANQUANT (Phase 5 — scope étendu 2026-04-19) |
@@ -112,13 +112,17 @@ Dette ouverte après Phase 2 — détail et plan de résorption : `memory/projec
 | D7 | Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel | Historique | **Phase 5** |
 | D8 | ALI fairness/robustness breakdown (genre, taille club, niveau) + stress Elo | Phase 3 (scope) | **Phase 3.5 STRICT** (bloquant Phase 4) |
 | D9 | Adaptive Importance Sampling + drift monitoring prod (ratio TopK:MC dynamique) | Phase 3 (brainstorm finding) | **Phase 5+** (après volume data prod) |
-| D-P2-02 | VerifiabilityClassifier injecté mais pas consommé (biais MC conservateur) | Plan 2 peer review | **Plan 3 STRICT** (avant backtest) |
+| ~~D-P2-02~~ | ~~VerifiabilityClassifier injecté mais pas consommé~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 2 (commit 0656fdf, 2026-04-19) — partition_rules wired** |
 | ~~D-P2-03~~ | ~~`_EXPECTED_SCENARIOS=20` hardcodé~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 3 T23** (invariant ADR-014 + error message clarifié, commit cdf6a7c) |
 | ~~D-P2-04~~ | ~~seed=42 fixe dans generator~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 3 T23** (ComposeRequest.seed exposé + ADR-014 §Determinism, commit cdf6a7c) |
 | ~~D-P3-11~~ | ~~Suppression `services/ffe_rules.py` legacy~~ | ~~Plan 2 (différée)~~ | **RESOLUE Plan 2** (migration RuleEngine complète 10 articles, ADR-015 SUPERSEDED) |
 | ~~D-P3-12~~ | ~~MonteCarloSampler `_u_to_presence` fallback résiduel~~ | ~~Plan 2 Task 6~~ | **RESOLUE Plan 3 T23** (RuntimeError fail-fast ISO 24029, commit cdf6a7c) |
 | ~~D-P3-13~~ | ~~MLP champion artifact `mlp_meta_learner.joblib` absent (FALLBACK silencieux)~~ | ~~Phase 2 stacking deploy~~ | **RESOLUE Plan 3 T22.0** (refit OOF, ECE_draw 0.001648 reproduit, lineage SHA256) |
-| D-P3-18 | Redéfinir `ali_correct` recall≥0.50 (vs strict 0.90) pour puissance McNemar | Phase 3 T22 finding | **Phase 3.5 STRICT** (D8 couplée) |
+| ~~D-P3-01~~ | ~~sync_ffe_rules.py chemin Windows-hardcoded~~ | ~~Plan 1 peer review~~ | **RESOLUE T22 (env var CHESS_APP_RULES_DIR + graceful skip CI)** |
+| ~~D-P3-02~~ | ~~ALIDataCache mutability non documentée~~ | ~~Plan 1 peer review~~ | **RESOLUE T22 (design délibéré : lifespan reload, docstring updated)** |
+| ~~D-P3-05..09~~ | ~~Nitpicks Plan 2 peer review (imports, O(N²), Pydantic schema, eligibility, classification 3.7)~~ | ~~Plan 2 peer review~~ | **RESOLUE T22 (cleanup imports + O(N log N) + Pydantic + Literal 'out_of_scope')** |
+| ~~D-P2-05~~ | ~~verify_plan2_dod.sh ne bloque pas P2G06/P2G13~~ | ~~Plan 2~~ | **RESOLUE T22 par design (--full opt-in, pre-push pytest-cov 70% global suffit)** |
+| ~~D-P3-18~~ | ~~Redéfinir `ali_correct` recall≥0.50 (quick-fix statistical hacking rejeté)~~ | ~~Phase 3 T22 finding~~ | **RESOLUE 2026-04-28 ADR-017 pivot McNemar→Wilcoxon SOTA (Demšar 2006)** |
 | **D-P3-19** | **ALI multi-équipes joint conditionné — CE-adverse miroir SOTA Approche A (R-ALI-06)** | **T22 review post-mortem (CRITICAL)** | **Phase 4a (NEW upstream Phase 4b) — prérequis structurel gates absolus** |
 | ~~D10~~ | ~~Sync chess-app JSON~~ | ~~Phase 3~~ | **RESOLUE Plan 1** (2026-04-19, commits ff94a19 + 1a2445c) |
 | D11 | Completeness audit : PDF FFE → chess-app JSON (toutes règles capturées ?) | Phase 3 finding | **Phase ultérieure** (tâche NLP, pocket-arbiter stale) |
