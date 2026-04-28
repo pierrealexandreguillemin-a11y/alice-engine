@@ -450,19 +450,34 @@ sur-représentation top Elo en N3 ⇒ recall structurellement faible.
 **Mitigation Phase 3** : NONE possible. Limitation acceptée dans gates
 report §7.5.
 
-**Mitigation Phase 4 (REQUIRED, bloquant gates absolus)** : intégration
-CE OR-Tools multi-équipe (D-P3-19 NEW, `docs/superpowers/specs/2026-03-23-
-alice-prod-roadmap-design.md`). Pipeline cible :
-1. CE OR-Tools alloue joueurs × équipes simultanées sous contraintes
-   FFE A02 §3.7.b (ordre Elo descendant), §3.7.c (joueur brûlé),
-   §3.7.d (même groupe), §3.7.f (noyau 50%).
-2. ALI Phase 4 reçoit le pool conditionné = "joueurs club non encore
-   alloués aux équipes 1..k-1" pour prédire l'équipe k spécifique.
-3. Re-backtest hold-out 2024 attendu améliorer significativement
-   recall + Jaccard absolus.
+**Mitigation Phase 4a Approche A SOTA (REQUIRED, validée user 2026-04-28
+"optimal sota ou go fuck yourself") — bloquant gates absolus** : ALI
+conditionné par CE-adverse miroir (D-P3-19, roadmap §Phase 4a NEW,
+upstream Phase 4b CE user). Pipeline cible :
 
-**Status** : 🔴 CRITICAL OPEN. Bloquant Phase 4 acceptance gate.
-**Owner** : ML Eng + Architect. **Due** : Phase 4 (D-P3-19).
+1. **CE-adverse miroir** : pour chaque club adverse multi-équipes, un
+   solveur OR-Tools simule l'allocation joueurs × équipes adverses sous
+   mêmes contraintes FFE A02 §3.7.b (ordre Elo descendant entre équipes),
+   §3.7.c (joueur brûlé), §3.7.d (même groupe), §3.7.f (noyau 50 %).
+   Réutilise primitives `services/ce/` Phase 4b.
+2. **ALI Phase 4a sample conditionné** : `ScenarioGenerator.generate(
+   opponent_club_id, target_team, simultaneous_teams)` reçoit la liste
+   des autres équipes adverses du club + leur allocation simulée. Pool
+   sampling `target_team` = pool club adverse total **moins** joueurs
+   alloués aux équipes supérieures.
+3. **20 scénarios joints** sous distribution conditionnelle vraie.
+4. **Re-backtest hold-out 2024** N=70 attendu : recall ≥ 0.65 (vs 0.57
+   actuel), Jaccard ≥ 0.50 (vs 0.39), Brier ≤ 0.22 (vs 0.29).
+   McNemar n_disc ≥ 25 attendu → puissance α=0.05 OK.
+
+**Approche B rejetée** (joint sampling sans CE-adverse miroir) : moins
+SOTA car ne réutilise pas les primitives FFE OR-Tools Phase 4b ; risque
+divergence logique CE-user vs inférence ALI.
+
+**Status** : 🔴 CRITICAL OPEN. Bloquant Phase 4a acceptance gate.
+**Owner** : ML Eng + Architect. **Due** : Phase 4a (D-P3-19, ADR-016
+NEW à rédiger). **Cross-ref** : roadmap §Phase 4a + 4b ;
+`docs/iso/ALI_QUALITY_GATES_REPORT.md` §6.2 + §7.5.
 
 ### Findings backtest hold-out 2024 (T22)
 

@@ -336,21 +336,40 @@ Justification :
   plus fondamentalement** ALI résout actuellement un problème mal posé
   (cf. §7.5 Limitation majeure ci-dessous).
 
-### 6.2 Phase 4 prérequis structurel — D-P3-19 NEW (criticité majeure)
+### 6.2 Phase 4a prérequis structurel — D-P3-19 NEW (criticité majeure, Approche A SOTA)
 
-**Reformulation post-review T22 (2026-04-28)** : Phase 4 CE OR-Tools
-multi-équipes est **un prérequis structurel à la validation absolue ALI**,
-pas seulement une optimisation. Tant que le pool ALI est non-conditionné
-sur les équipes sœurs simultanées du club, aucun modèle ALI n'atteindra
-les gates P3G07-P3G11 — voir §7.5 Limitation majeure.
+**Reformulation post-review T22 (2026-04-28, validée user "optimal sota
+ou go fuck yourself")** : Roadmap §Phase 4 split en **Phase 4a (NEW
+upstream)** + **Phase 4b (CE user existing)**. Phase 4a est un
+**prérequis structurel à la validation absolue ALI**, pas seulement
+une optimisation produit. Tant qu'ALI sample dans le pool club total
+sans conditionnement sur les équipes adverses sœurs simultanées, aucun
+modèle ALI n'atteindra les gates P3G07-P3G11 — voir §7.5.
 
-- **D-P3-19 NEW** : ALI doit être conditionné sur le **contexte multi-
-  équipes simultanées** (combien d'équipes du club adverse jouent ce
-  weekend, allocation top-Elo en équipes supérieures par §3.7.b ordre
-  Elo descendant). Phase 4 OR-Tools doit produire l'**allocation
-  joueurs × équipes simultanée** sous contraintes FFE A02 §3.7.b/c/d/f,
-  puis ALI Phase 4 sample conditionnellement sur l'allocation des
-  équipes supérieures. Bloquant gates absolus.
+**D-P3-19 / Phase 4a — Approche A SOTA (CE-adverse miroir)** :
+1. CE-adverse miroir : OR-Tools solveur miroir simule l'allocation
+   joueurs × équipes adverses sous contraintes FFE A02 §3.7.b/c/d/f
+   (réutilise primitives `services/ce/` Phase 4b).
+2. ALI Phase 4a `ScenarioGenerator.generate(opponent_club_id,
+   target_team, simultaneous_teams)` reçoit l'allocation simulée des
+   équipes adverses 1..k-1 ; pool sampling `target_team` = pool club
+   adverse **moins** joueurs alloués aux équipes supérieures.
+3. 20 scénarios joints sous distribution conditionnelle vraie.
+
+**Approche B rejetée** (joint sampling sans CE-adverse miroir) : moins
+SOTA, ne réutilise pas primitives FFE OR-Tools Phase 4b, risque
+divergence CE-user vs ALI.
+
+**Validation attendue post-Phase 4a** :
+- recall ≥ 0.65 (vs 0.57 actuel) — sortir CI lower du seuil 0.60
+- Jaccard ≥ 0.50 (vs 0.39)
+- Brier ≤ 0.22 (vs 0.29)
+- McNemar n_disc ≥ 25 (vs 3 actuel) → puissance α=0.05 OK
+- ECE-presence reste dépendante de D9 AIS Phase 5+ (gate 0.05
+  inatteignable Phase 4a seule, palliatif Phase 5)
+
+**ADR-016 NEW à rédiger Phase 4a** : trade-off Approche A vs B, décision
+SOTA Approche A retenue.
 
 ### 6.3 Phase 3.5 STRICT — leviers complémentaires (sans D-P3-19)
 
@@ -470,13 +489,17 @@ montre **gap recall = 0.28 entre small (Q1, recall 0.74) et xlarge
 joueurs ⇒ plus probablement plusieurs équipes ⇒ pire ALI prédit.
 
 **Conséquence sur la roadmap ALICE** :
-- Phase 4 OR-Tools CE multi-équipe (`docs/superpowers/specs/2026-03-23-
-  alice-prod-roadmap-design.md`) n'est pas une "optimisation product"
-  mais un **prérequis structurel** pour valider absolument ALI. Sans
-  allocation simultanée joueurs × équipes sous contraintes A02 §3.7.b/c/d/f,
-  le pipeline ALI résout un problème mal posé.
-- Tracé en dette **D-P3-19 NEW** (Phase 4 bloquant gates absolus) +
-  **R-ALI-06 NEW** (`docs/iso/AI_RISK_REGISTER.md` §2.7).
+- Roadmap §Phase 4 split en **Phase 4a NEW (ALI conditionné CE-adverse
+  miroir, Approche A SOTA)** + **Phase 4b (CE user multi-équipes
+  existing)**. Phase 4a n'est pas une "optimisation produit" mais un
+  **prérequis structurel** pour valider absolument ALI. Sans allocation
+  simultanée joueurs × équipes adverses sous contraintes A02 §3.7.b/c/d/f
+  côté adversaire, le pipeline ALI résout un problème mal posé.
+- Tracé en dette **D-P3-19** (Phase 4a CRITICAL) +
+  **R-ALI-06** (`docs/iso/AI_RISK_ASSESSMENT.md` §Phase 3 ALI Impact).
+- **Approche A** (CE-adverse miroir réutilisant primitives Phase 4b)
+  retenue **SOTA** vs Approche B (joint sampling sans miroir) — décision
+  user 2026-04-28. ADR-016 NEW à rédiger Phase 4a.
 
 **Implication méthodologique du présent rapport** : les chiffres §3
 NumericalResults (recall 0.57, Jaccard 0.39, etc.) sous-estiment le

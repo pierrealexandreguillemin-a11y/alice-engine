@@ -261,16 +261,66 @@ Single predict_proba batch → ~10ms
 >   Simplification actuelle: boards independants (documente).
 > Detail: `config/MODEL_SPECS.md` §Paradigme PtO vs DFL.
 
-### Problem
+> **T22 review post-mortem (2026-04-28) — restructuration Phase 4 :**
+> Phase 4 split en **4a (NEW upstream)** + **4b (existing)**. Finding
+> structurel D-P3-19 / R-ALI-06 a expose qu'ALI Phase 3 ignore le
+> conditionnement multi-equipes adverse (pool club total au lieu de pool
+> conditionne sur les autres equipes adverses du club qui jouent
+> simultanement). Approche A (SOTA, validee user 2026-04-28) :
+> ALI Phase 4a est conditionne par un CE-adverse miroir simulant
+> l'allocation côté adversaire sous mêmes contraintes FFE A02
+> §3.7.b/c/d/f. Phase 4b (CE user) consomme ALI joint produit par 4a.
 
-A club has N teams playing the SAME weekend. The captain distributes
-30-50 players across all teams under FFE constraints.
+### Phase 4a — ALI conditionné par CE adverse (SOTA, NEW T22 finding)
+
+**Status** : prerequis structurel à 4b. Bloquant gates absolus
+P3G07-P3G11 (cf. ALI_QUALITY_GATES_REPORT §6.2 + §7.5).
+
+**Probleme structurel adresse** : 117 clubs alignent 2-4 equipes
+simultanement en N3 ronde 5 saison 2024 (Mundolsheim 4, Saint-Maur 4,
+Mulhouse Philidor 3). FFE A02 §3.7.b force les top Elo en equipe
+superieure : observed equipe 1 = Elo rang 1-8, equipe 2 = rang 9-16,
+equipe 3 = rang 17-24. ALI Phase 3 ignore cette contrainte → sample
+top Elo dans equipe N3 alors qu'en realite ils sont en N1.
+
+**Approche A SOTA** :
+1. **CE-adverse miroir** : pour chaque club adverse avec multi-equipes,
+   un solveur OR-Tools simule l'allocation joueurs × equipes adverses
+   sous contraintes FFE A02 §3.7.b (ordre Elo descendant entre equipes),
+   §3.7.c (joueur brule), §3.7.d (meme groupe), §3.7.f (noyau 50 %).
+2. **ALI Phase 4a sample conditionne** : `ScenarioGenerator.generate(
+   opponent_club_id, target_team, simultaneous_teams)` recoit la liste
+   des autres equipes adverses du club et leur allocation simulee. Le
+   pool de sampling pour `target_team` est filtre = pool club adverse
+   total **moins** joueurs deja alloues aux equipes superieures.
+3. **20 scenarios joints** par equipe adverse cible, sous distribution
+   conditionnelle.
+
+**Implementation** :
+- Refactor `services/ali/pool_loader.py` : signature `load_pool(club_id,
+  round_date, exclude_players: list[str] = []) -> list[PlayerCandidate]`
+- NEW `services/ali/adverse_ce.py` : OR-Tools solver miroir CE-adverse
+  (reutilise primitives Phase 4b)
+- Refactor `services/ali/generator.py::generate(...)` : ajout
+  `simultaneous_teams: list[str]` ; orchestration : appel CE-adverse
+  pour equipes superieures → pool exclude → MC sample equipe cible
+- Update `app/api/routes.py::/compose` : assembler `simultaneous_teams`
+  depuis `data/echiquiers.parquet` (groupe + saison + ronde)
+
+**Validation** : re-backtest hold-out 2024 N=70 attendu atteindre
+recall ≥ 0.65 (vs 0.57 actuel), Jaccard ≥ 0.50 (vs 0.39), Brier ≤ 0.22
+(vs 0.29). McNemar n_disc ≥ 25 attendu (vs 3) → puissance α=0.05 OK.
+
+### Phase 4b — CE user multi-team (existing scope, inchange)
+
+**Probleme** : A club has N teams playing the SAME weekend. The captain
+distributes 30-50 players across all teams under FFE constraints.
 
 ```
 Input:
   - 40 available players
   - 3 teams (N1, N3, Régionale)
-  - 20 opponent scenarios per team (from ALI)
+  - 20 opponent scenarios per team (from ALI Phase 4a, joint conditione)
   - Strategy mode chosen by captain
   - FFE constraints
 
@@ -310,12 +360,12 @@ with same E[score] but different variance thanks to P(draw).
 
 | Norm | Artifact |
 |------|----------|
-| ISO 42001 | CE V9 model card (solver, modes, constraints) |
-| ISO 42005 | Impact assessment CE (relegation risk on bad allocation) |
-| ISO 25010 | Solver performance (<2s for 50 players × 3 teams) |
-| ISO 29119 | Tests: all FFE constraints respected, solutions valid |
+| ISO 42001 | CE V9 model card (solver, modes, constraints) + ALI Phase 4a Model Card update (joint conditional sampling, CE-adverse mirror) |
+| ISO 42005 | Impact assessment CE + ALI 4a (R-ALI-06 resolved post-fix) |
+| ISO 25010 | Solver performance (<2s for 50 players × 3 teams ; CE-adverse mirror amorti via cache hebdo per opponent_club_id × ronde) |
+| ISO 29119 | Tests: all FFE constraints respected, solutions valid (incl. inter-equipes A02 §3.7.b/c/d/f côté user ET adversaire) |
 | ISO 5259 | Noyau/mutés data validation (official FFE source) |
-| ISO 42010 | CE V9 architecture in docs/architecture/ |
+| ISO 42010 | CE V9 architecture in docs/architecture/ + ADR-016 NEW pour Phase 4a (Approche A vs B trade-off, Approche A retenue SOTA) |
 
 ---
 
@@ -443,10 +493,13 @@ Phase 1 (Training) ─── COMPLETE ──────────┐
 Phase 2 (API Wiring) ──── COMPLETE ──────► Phase 3 (ALI Monte Carlo SOTA)
   11 FFE rules, stacking E2E              │  *** ACTIVE *** (spec 2026-04-19)
   ADR-012 autonomous                      ▼
-                                    Phase 3.5 (J02/Coupes + Fairness/Robust full)
+                                    Phase 3.5 (J02/Coupes + Fairness/Robust full + D-P3-18 McNemar threshold)
                                           │
                                           ▼
-                                    Phase 4 (CE V9 OR-Tools multi-équipe)
+                                    Phase 4a (ALI conditionne CE-adverse, NEW T22 finding D-P3-19/R-ALI-06, SOTA Approche A)
+                                          │
+                                          ▼
+                                    Phase 4b (CE V9 OR-Tools multi-equipe USER)
                                           │
                                           ▼
                                     Phase 5 (SaaS multi-tenant deploy)
