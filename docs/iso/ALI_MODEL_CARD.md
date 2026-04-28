@@ -4,7 +4,8 @@
 **ISO Standards** : ISO/IEC 42001:2023 (AI Management System) + ISO/IEC 25059:2023
 (AI Quality Model) + ISO/IEC 24027:2021 (AI Bias) + ISO/IEC 24029:2021 (AI Robustness)
 **Format** : Mitchell et al. 2019 "Model Cards for Model Reporting" (FAccT 220–229)
-**Status** : DRAFT (T20 Plan 3 V2). Quantitative values populated by T22 Gates Report.
+**Status** : DRAFT post-conformity-audit 2026-04-28 (T20 Plan 3 V2 + G1-G5 fix-on-sight).
+Quantitative values populated by T22 Gates Report. Pending JALON #3 review.
 **Generated** : 2026-04-28
 **Authors** : Pierre-Alexandre Guillemin + Claude (LLM co-authorship, see ISO 42001
 disclosure `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md`).
@@ -149,7 +150,62 @@ ALI **is not** :
 
 ---
 
-## 4. Training Data
+## 4. Factors (Mitchell 2019 §3)
+
+Prediction-relevant factors that may shape ALI behavior. Documented per
+Mitchell 2019 to flag dimensions on which performance should be analyzed
+disaggregated.
+
+### 3.1 Groups (relevant subpopulations)
+
+| Group axis | Categories | Why relevant |
+|------------|-----------|--------------|
+| **Competition level** | N1, N2, N3, N4, Régionale | Top divisions have stable rosters and strict A02 rules ; lower divisions have higher player turnover and laxer noyau enforcement. Predictive accuracy expected to differ. |
+| **Club size** | Quartiles of player pool size | Small clubs (≤ 25 players) have less historical co-presence data → copula fit on sparse samples → lower confidence. |
+| **Player gender** | M, F, mixed teams | FFE A02 §3.7.i mandates ≥ 1 female on N1/N2 teams. Female-mandated lineups have less rotation latitude → distinct presence dynamics. |
+| **Player category** | Senior (SE), Vétéran (VE), Junior (JU)... | Younger players rotate more. ALI does not currently model `categorie` directly (D3 deferred Phase 3.5). |
+| **Player muté status** | Native (`mute=False`) vs muté | A02 §3.7.g caps mutés ≤ 3 per lineup → constraints differ. |
+| **Foreign quota** | FR/UE ≥ 5 per A02 §3.7.h | Constrains pool selection differently in international clubs. |
+
+### 3.2 Instrumentation (data acquisition)
+
+ALI consumes two parquet datasets from the FFE public website, syncronised
+via HuggingFace Hub mirror (`Pierrax/ffe-history`) :
+
+- **Acquisition cadence** : weekly batch sync (`make refresh-data`)
+- **Provenance** : FFE official rankings + interclub results (no scraping
+  intermediaries, public federation export)
+- **Known instrumentation biases** :
+  - Historical seasons 2002-2010 have sparser coverage (early FFE
+    digitization)
+  - Forfeits (`type_resultat="forfait_blanc/noir"`) appear as empty
+    `blanc_nom`/`noir_nom` strings — filtered by ground_truth extraction
+  - Player names use FFE convention "NOM Prenom" — no normalization for
+    homonyms (D-P3-06 deferred Phase 5)
+
+### 3.3 Environments (deployment context)
+
+Performance characterized in the following environments :
+
+| Environment | Status | Latency target | Notes |
+|-------------|--------|---------------|-------|
+| **Laptop dev** (Windows + Python 3.13) | Validated | p50 ≈ 1.0 s (warm cache) | Phase 3 backtest baseline |
+| **CI (GitHub Actions)** | Validated | tests in ~5 min | pytest + ruff + mypy + xenon |
+| **Oracle VM ARM 24 GB** (Phase 5) | TBD | p50 ≤ 800 ms target | Capacity benchmark deferred |
+| **High-load multi-tenant** (Phase 5+) | TBD | RPS ≥ 3 sustainable | Multi-club concurrent requests |
+
+Distributional shift between environments is **expected to be minimal**
+because data fetched from same FFE source ; latency may differ.
+
+### 3.4 Factor Cross-Tabulation Plan
+
+Phase 3.5 STRICT (D8) will produce per-group breakdown of metrics
+T13-T17 stratified by competition level × club size quartile × gender —
+3D table in `docs/iso/ALI_FAIRNESS_VALIDATION.md`.
+
+---
+
+## 5. Training Data
 
 ### 4.1 Sources
 
@@ -191,9 +247,32 @@ ALI **is not** :
   for Bergmeir & Benítez 2012 walk-forward statistical significance (T22
   Gates Report)
 
+### 4.5 Data Quality Dimensions (ISO/IEC 5259:2024)
+
+ISO 5259 mandates explicit characterization of data quality across five
+dimensions. Documented here for `joueurs.parquet` + `echiquiers.parquet` :
+
+| Dimension | Rating | Evidence | Mitigation if degraded |
+|-----------|--------|----------|------------------------|
+| **Completeness** | High | 95,851 active FFE players covered, ~2M boards 2002-2026, no missing seasons within range | None needed |
+| **Accuracy** | High | Source = FFE official federation export, no third-party intermediaries. Elo values cross-checked against monthly FFE bulletin | Pandera schema rejects malformed rows pre-commit hook (D-P3-07 schema FFE A02 deferred Phase 5) |
+| **Consistency** | High | `team_to_club` majority vote with deterministic tiebreak (count DESC then alpha ASC, ISO 5259 reproducibility). FFE A02 §3.6 color alternance invariant validated by `_validate_ffe_color_invariant` ground_truth.py (D-P3-14) | `FFEDataQualityError` raised on violation, fail-fast |
+| **Timeliness** | Medium | Weekly batch sync acceptable for pre-match preparation use case. Real-time updates not target. Stale > 7 days flagged by `ALIDataCache.is_stale()` | Health endpoint exposes cache age (Phase 5 §4.15.5) |
+| **Validity** | High | Schema validation : Pydantic for API inputs (FFE ID format `A12345`), Pandera for parquet inputs (`scripts/backtest/schemas.py`), JSON Schema for FFE rules (`config/ffe_rules/a02.json`) | Reject invalid inputs at boundary (ISO 27034) |
+
+**Documented data quality issues** :
+
+- Forfeits (`type_resultat="forfait_*"`) produce empty `blanc_nom`/`noir_nom`
+  → handled by `_extract_players` filter (`name.strip() == ""`), tested
+  T17.5 with real Aix-Les Bains/Meximieux 2024 R1 fixture
+- "Got 19" issue : when adversary pool is too small (< ~12 distinct
+  lineups feasible), `_merge_and_pad` exhausts retries → `validate()` raise
+  → backtest `BacktestRunner` skips with `skip_failed_matches=True`
+  (D-P2-03 documented ADR-014)
+
 ---
 
-## 5. Quantitative Analyses
+## 6. Quantitative Analyses
 
 ### 5.1 Backtest Protocol (Walk-Forward)
 
@@ -245,7 +324,67 @@ ALI vs baseline Elo (1-scenario top-K Elo descending) :
 
 ---
 
-## 6. Fairness Analysis (ISO 24027)
+## 7. Fairness Analysis (ISO 24027)
+
+### 6.0 Sources of Bias (ISO/IEC TR 24027:2021 §6)
+
+ISO 24027 §6 mandates explicit enumeration of bias sources. Documented for
+ALI :
+
+#### 6.0.1 Data bias
+
+- **Survivor bias on PRIVATE rules** : 4 of 14 A02 articles (3.7.b force
+  équipes, 3.2 désignation titulaires, 3.7.f noyau, 3.7.k inscriptions)
+  are unverifiable from public data. Historical compositions implicitly
+  respected their own private rules → empirical samples are favorably
+  biased toward valid lineups. **Impact** : low (favorable bias). **Mitigation** :
+  classification PUBLIC/PRIVATE explicit (`VerifiabilityClassifier`),
+  ConfidenceLevel exposed to consumer.
+- **Sparsity bias on small clubs** : clubs with < 25 active players have
+  fewer historical co-presence observations → copula fit on sparse data
+  → wider posterior. **Impact** : medium (low confidence flagged). **Mitigation** :
+  `ConfidenceLevel = "low"` for clubs with `coverage_ratio < 0.5` or
+  `n_historical_rounds < 10`.
+- **Temporal coverage bias** : 2002-2010 seasons have sparser FFE
+  digitization than 2011+. Recent seasons over-represented in copula
+  fit. **Impact** : low (recency decay λ=0.9 already prioritizes recent).
+- **Forfeit / non-joué bias** : matches with high forfait rate (small
+  competing clubs) have noisy ground truth. **Impact** : low (filtered
+  by `_extract_players`).
+
+#### 6.0.2 Algorithmic bias
+
+- **Mode-dominated TopK** : 10 deterministic scenarios capture the mode
+  ; if the mode is wrong (rare lineup), Top-K recall fails. **Mitigation** :
+  10 MC scenarios cover the queue (LHS + antithetic).
+- **Linear copula on rank correlation** : Spearman captures monotone
+  dependence ; misses non-monotone interactions (rare in lineup
+  selection — typically additive substitution effect). **Mitigation** :
+  acceptable per Genest & Favre 2007.
+- **Static `λ=0.9, n_topk=10, n_mc=5`** : tuned on 2021-2024 backtest, not
+  adaptive to drift. **Impact** : medium long-term. **Mitigation** :
+  Adaptive Importance Sampling Phase 5+ (D9).
+
+#### 6.0.3 Deployment bias
+
+- **Single-instance Phase 3** : tested only on developer laptop.
+  Production deploy on Oracle VM ARM 24 GB (Phase 5) untested → potential
+  performance shift. **Mitigation** : capacity benchmark Phase 5
+  (`docs/operations/ALI_SLO.md`).
+- **Latency-driven degraded path** : if MC rejection rate > 50 % or
+  timeout > 1.5 s, `ALIModeManager` may auto-switch to Phase 2 fallback
+  (Elo-only) — degraded predictions silently. **Mitigation** : warning in
+  response metadata + `ali_mode_gauge` Prometheus metric (Phase 5 §4.15).
+
+#### 6.0.4 Human bias (in design)
+
+- **Single-author project** : design decisions reflect one developer's
+  judgment. **Mitigation** : SOTA literature review documented §8 (13
+  alternatives evaluated and rejected with sources).
+- **LLM co-authorship** : Claude (Opus 4.7) participated in design and
+  code generation. Documented `docs/iso/AI_DEVELOPMENT_DISCLOSURE.md`.
+  **Mitigation** : ISO 42001 traceability + JALON peer reviews at 3
+  intermediate gates.
 
 ### 6.1 Smoke Tests Executed (T13)
 
@@ -277,7 +416,7 @@ reliability — fairness via **transparency**, not via hard correction.
 
 ---
 
-## 7. Robustness Analysis (ISO 24029)
+## 8. Robustness Analysis (ISO 24029)
 
 ### 7.1 Smoke Tests Executed (T14)
 
@@ -323,7 +462,7 @@ Reference : Hughes & Claessen 2000 QuickCheck (ICFP), MacIver 2019 Hypothesis.
 
 ---
 
-## 8. SOTA Comparative Audit (ISO 42001 §8.2 — D-P3-10 résorbée)
+## 9. SOTA Comparative Audit (ISO 42001 §8.2 — D-P3-10 résorbée)
 
 ISO 42001 requires "state-of-the-art documented" + "alternatives considered".
 This section explicitly lists alternatives evaluated and rejected, with
@@ -365,7 +504,7 @@ justification.
 
 ---
 
-## 9. Limitations
+## 10. Limitations
 
 ### 9.1 Architectural Limitations
 
@@ -427,7 +566,7 @@ justification.
 
 ---
 
-## 10. Ethical Considerations
+## 11. Ethical Considerations
 
 ### 10.1 Personal Data (RGPD)
 
@@ -468,7 +607,78 @@ justification.
 
 ---
 
-## 11. Determinism, Reproducibility, Versioning
+## 12. Recommendations for Users (Mitchell 2019 §9)
+
+Practical guidance for chess club captains and downstream API consumers
+to make best use of ALI given its limitations.
+
+### 11.1 When ALI is reliable to follow
+
+- **Stable rosters** : opponent club has ≥ 20 historical rounds and ≥ 80 %
+  of active pool with ≥ 3 prior rounds (`ConfidenceLevel = "high"`)
+- **Top divisions (N1-N3)** : strict A02 rule enforcement → predictions
+  more constrained → higher recall expected
+- **Mid-season (rounds 4-9)** : enough history to fit copula, no
+  end-of-season collapse effects
+
+### 11.2 When to apply human override
+
+- **Small clubs** (`ConfidenceLevel = "low"`) : trust your local knowledge
+  over MC scenarios — adversary captain may field unexpected youth or
+  guests
+- **Cup matches** (D4 not implemented) : ALI predictions invalid, do
+  **not** use `/compose` for federation cups
+- **Last round of season with relegation/promotion at stake** :
+  `zone_enjeu` not yet modeled (D13 Phase 4+) → predictions miss
+  motivational shifts
+- **Pool change > 30 % vs prior rounds** : drift not detected by Phase 3
+  static system → seasonal injuries, transfers, retirements
+
+### 11.3 How to interpret 20 scenarios
+
+- **Top scenario (max weight)** = highest-likelihood lineup. Use as
+  starting hypothesis.
+- **Top-K recall ≥ 0.90** (gate P3G07) means the union of 20 scenarios
+  contains 90 %+ of who actually plays — pool of 8 boards × 20 scenarios
+  = 160 lineup slots, expect ~10-12 distinct opponents covered out of
+  team_size=8
+- **Brier skill score > 0.05** means ALI strictly improves over Elo-only
+  baseline. If BSS < 0, **stop using ALI for that club** and report to
+  developer.
+
+### 11.4 Audit & dispute
+
+- Every prediction has `lineage_hash`. If a captain disputes a prediction
+  retrospectively, federate audit log against `lineage_hash` to recover
+  exact input parquets + rules + seed used.
+- Disputes should be filed as GitHub issues citing `lineage_hash` prefix
+  + match identifiers (saison, ronde, opponent_club_id).
+
+### 11.5 Operational guardrails for API consumers
+
+- **Catch `400 ValueError` from `pool too small`** : opponent club has
+  < team_size active players → display "ALI unavailable for this club"
+  rather than retrying
+- **Check `ali_mode` in response metadata** : if `"fallback"`, ALI
+  predictions are not available, predictions came from Phase 2 Elo-only
+- **Honor rate limit** : current Phase 3 limit per IP, Phase 5 per
+  `user_club_id` (slowapi configuration)
+- **Display `ConfidenceLevel`** to end-users (capitaine UI) — fairness
+  via transparency, not via hard correction
+
+### 11.6 Recommendations against misuse
+
+- **Do not chain `seed` variations to find a desired lineup** : the
+  determinism is for audit, not for cherry-picking. If 20 scenarios with
+  default seed don't include your favored lineup, that's a signal it's
+  unlikely — not a prompt to retry until it appears.
+- **Do not aggregate predictions across multiple clubs you are not
+  managing** — that may infringe federation expectations of strategic
+  privacy (even if data is public).
+
+---
+
+## 13. Determinism, Reproducibility, Versioning
 
 - **Lineage hash** : SHA-256 covering `(parquets sigs + rules sigs +
   λ + n_topk + n_mc + seed + opponent_club_id + round_date + saison +
@@ -480,7 +690,7 @@ justification.
 
 ---
 
-## 12. Maintenance & Update Plan
+## 14. Maintenance & Update Plan
 
 - **Weekly** : `make refresh-data` re-syncs FFE parquets (HuggingFace
   `Pierrax/ffe-history`)
@@ -493,34 +703,35 @@ justification.
 
 ---
 
-## 13. Compliance Cross-References
+## 15. Compliance Cross-References
 
 | ISO Standard | Section in this Card | External Doc |
 |--------------|---------------------|--------------|
 | 42001 §8.2 (model docs) | All sections | `docs/iso/ALI_MODEL_CARD.md` (this) |
-| 42005 (impact) | §10 Ethical | `docs/iso/AI_RISK_ASSESSMENT.md` |
-| 23894 (risk register) | §9 Limitations | `docs/iso/AI_RISK_REGISTER.md` (T21) |
-| 25059 (quality gates) | §5 Quantitative | `docs/iso/ALI_QUALITY_GATES_REPORT.md` (T22) |
-| 24027 (fairness) | §6 Fairness | T13 smoke + Phase 3.5 STRICT (D8) |
-| 24029 (robustness) | §7 Robustness | T14 smoke + Phase 3.5 STRICT (D8) |
-| 5259 (data lineage) | §4.2 Lineage | `lineage_hash` SHA-256 |
-| 27001 (audit) | §10.2 Audit | MongoDB audit log |
-| 27034 (input validation) | §10.3 Failure modes | Pydantic schemas + RuleEngine |
+| 42005 (impact) | §11 Ethical | `docs/iso/AI_RISK_ASSESSMENT.md` |
+| 23894 (risk register) | §10 Limitations | `docs/iso/AI_RISK_REGISTER.md` (T21) |
+| 25059 (quality gates) | §6 Quantitative | `docs/iso/ALI_QUALITY_GATES_REPORT.md` (T22) |
+| 24027 (fairness, sources of bias) | §7 Fairness | T13 smoke + Phase 3.5 STRICT (D8) |
+| 24029 (robustness) | §8 Robustness | T14 smoke + Phase 3.5 STRICT (D8) |
+| 5259 (data lineage + 5 quality dimensions) | §5.2 + §5.5 | `lineage_hash` SHA-256 + Pandera |
+| 27001 (audit) | §11.2 Audit | MongoDB audit log |
+| 27034 (input validation) | §11.3 Failure modes | Pydantic schemas + RuleEngine |
+| 25059 §Security | §11.4 Misuse + Threat Model | `docs/security/ALI_THREAT_MODEL.md` (STRIDE + OWASP API Top 10) |
 | 5055 (code quality) | §1.3 Components | All modules ≤ 300 lines, xenon B |
-| 29119 (testing) | §7.4 Property tests | ~245 unit tests + Hypothesis |
+| 29119 (testing) | §8.4 Property tests | ~245 unit tests + Hypothesis |
 | 42010 (ADRs) | All architectural decisions | `docs/architecture/adr/ADR-013` + `ADR-014` |
-| 23053 (AI lifecycle) | §12 Maintenance | `docs/iso/AI_LIFECYCLE.md` (Phase 5) |
+| 23053 (AI lifecycle) | §14 Maintenance | `docs/iso/AI_LIFECYCLE.md` (Phase 5) |
 | 22989 (terminology) | Glossary cross-refs | `docs/iso/AI_GLOSSARY.md` (Phase 5) |
-| 38507 (governance) | §10 Ethical + §12 | `docs/iso/AI_GOVERNANCE.md` (Phase 5) |
-| 25012 (data quality) | §4 Training data | Pandera schemas pre-commit hook |
-| 25024 (data measurement) | §4.4 Sample sizes | `compute_data_lineage()` |
-| 25010 (system quality) | §9.4 Operational | Latency targets + degraded paths |
+| 38507 (governance) | §11 Ethical + §14 | `docs/iso/AI_GOVERNANCE.md` (Phase 5) |
+| 25012 (data quality) | §5 Training data | Pandera schemas pre-commit hook |
+| 25024 (data measurement) | §5.4 Sample sizes | `compute_data_lineage()` |
+| 25010 (system quality) | §10.4 Operational | Latency targets + degraded paths |
 
 ---
 
-## 14. References
+## 16. References
 
-### 14.1 Statistical & ML Methods
+### 16.1 Statistical & ML Methods
 
 - Sklar A. 1959. "Fonctions de répartition à n dimensions et leurs marges."
   *Publications de l'Institut Statistique de l'Université de Paris* 8 : 229-231.
@@ -559,7 +770,7 @@ justification.
   cross-validation for evaluating autoregressive time series prediction."
   *Computational Statistics & Data Analysis* 120 : 70-83.
 
-### 14.2 Domain (Sports Prediction)
+### 16.2 Domain (Sports Prediction)
 
 - Pappalardo L., Cintia P., Rossi A., Massucco E., Ferragina P., Pedreschi D.,
   Giannotti F. 2019. "PlayeRank : Data-driven Performance Evaluation and
@@ -568,7 +779,7 @@ justification.
 - Silver N. 2012. "The Signal and the Noise." Penguin (FiveThirtyEight
   methodology).
 
-### 14.3 ML Engineering
+### 16.3 ML Engineering
 
 - Mitchell M., Wu S., Zaldivar A., Barnes P., Vasserman L., Hutchinson B.,
   Spitzer E., Raji I. D., Gebru T. 2019. "Model Cards for Model Reporting."
@@ -580,7 +791,7 @@ justification.
 - MacIver D. R. 2019. "Hypothesis : A new approach to property-based testing
   in Python." PyCon talks + Hypothesis library docs.
 
-### 14.4 Decision-Theoretic
+### 16.4 Decision-Theoretic
 
 - Elmachtoub A. N., Grigas P. 2022. "Smart Predict, then Optimize."
   *Management Science* 68(1) : 9-26.
@@ -588,7 +799,7 @@ justification.
   Decision-Focused Learning for Combinatorial Optimization." *AAAI* :
   1658-1665.
 
-### 14.5 Survivor Bias / Statistical Pitfalls
+### 16.5 Survivor Bias / Statistical Pitfalls
 
 - Veach E., Guibas L. 1995. "Optimally combining sampling techniques for
   Monte Carlo rendering." *SIGGRAPH* : 419-428.
@@ -601,7 +812,7 @@ justification.
 
 ---
 
-## 15. Document Control
+## 17. Document Control
 
 | Field | Value |
 |-------|-------|
