@@ -141,6 +141,129 @@ Legend:
 
 ---
 
+### 2.7 Phase 3 ALI Risks (R-ALI-01..05)
+
+Risques spécifiques au système ALI (Adversarial Lineup Inference) Plan 3
+SOTA, identifiés via audit Model Card 2026-04-28 (Mitchell 2019 §9
+Limitations). Cross-référencés `docs/iso/ALI_MODEL_CARD.md` §10 et §7.0
+"Sources of Bias".
+
+| ID | Risk | P | I | Score | Status | Owner | Due |
+|----|------|---|---|-------|--------|-------|-----|
+| **R-ALI-01** | PRIVATE rules unverifiable (4/14 A02 articles supposed respected by adversary) | 3 | 2 | **6** 🟡 | 🟡 Monitor | ML Eng | Phase 3.5 STRICT (D8) |
+| **R-ALI-02** | Pool too small → ScenarioSet validate() raise → backtest match skip | 2 | 2 | **4** 🟢 | ✅ Mitigated | ML Eng | Ongoing |
+| **R-ALI-03** | Bootstrap BCa CI degenerate on var=0 input → NaN propagation in gates | 1 | 2 | **2** 🟢 | ✅ Mitigated | ML Eng | Ongoing |
+| **R-ALI-04** | Season-over-season drift undetected (no AIS / drift dashboard) | 4 | 3 | **12** ⚠️ | 🟡 Monitor | MLOps | Phase 5+ (D9) |
+| **R-ALI-05** | Single-instance deployment, no horizontal scaling Phase 3 | 3 | 2 | **6** 🟡 | 🟡 Monitor | DevOps | Phase 5 |
+
+**R-ALI-01 — PRIVATE rules unverifiable**
+- **Description** : 4 of 14 FFE A02 articles (3.7.b force équipes, 3.2
+  désignation titulaires, 3.7.f noyau, 3.7.k inscriptions) cannot be
+  verified from public data. ALI MC sampler validates only against PUBLIC
+  rules → may generate scenarios that violate adversary's private noyau.
+- **Impact rationale** : Medium (2). Survivor bias is **favorable** —
+  historical compositions implicitly respected their own private rules,
+  so empirical samples are biased toward valid lineups. Risk = ALI
+  predictions over-represent rare/unrealistic lineups missed by survivor
+  filter.
+- **Mitigation Phase 3** : `VerifiabilityClassifier` partitions PUBLIC vs
+  PRIVATE explicitly (`services/ali/verifiability.py`). `ConfidenceLevel`
+  metadata exposed to consumer warns if pool history < 10 rounds.
+- **Mitigation Phase 3.5 STRICT (D8)** : quantitative bias breakdown by
+  level + club size + gender to verify <10% Top-K recall variance per
+  stratum. Document `docs/iso/ALI_FAIRNESS_VALIDATION.md`.
+- **Status** : Monitor. Bias suspected favorable but not yet quantified.
+  D8 BLOQUANT Phase 4.
+
+**R-ALI-02 — Pool too small**
+- **Description** : Adversary club with < 12 distinct lineups feasible
+  (small pool + tight rules) causes `_merge_and_pad` to exhaust 5 retry
+  rounds → `ScenarioSet.validate()` raises → request fails or backtest
+  match skipped.
+- **Impact rationale** : Low (2). Per-match degradation, not systemic.
+  Rare clubs affected (small clubs in N4/Régionale).
+- **Mitigation Phase 3** : `BacktestRunner.skip_failed_matches=True`
+  default. Production `/compose` returns `400 ValueError` with explicit
+  error message documented ADR-014 §Invariants. Caller-side fallback to
+  Elo-only baseline expected.
+- **Status** : Mitigated. Error message clarifies cause to consumer
+  (commit cdf6a7c).
+
+**R-ALI-03 — Bootstrap CI degenerate**
+- **Description** : When all per-match metric values are identical
+  (saturated sample, e.g. `recall=1.0` everywhere), BCa method
+  mathematically undefined → SciPy returns NaN → P3G gates broken
+  silently.
+- **Impact rationale** : Medium (2) if undetected. Pollutes
+  `BacktestReport.gates_summary()` and downstream T22 report.
+- **Mitigation Phase 3** : Guard `np.var(arr) == 0.0` returns degenerate
+  CI `lower=upper=point` with `n_resamples=0` flag (commit 2629cfd).
+  Detected by Hypothesis property test T19 (`bootstrap_ci([0, 0])`
+  falsifying example). Property tests T19.5 cover degenerate inputs
+  for all 5 ALI metrics.
+- **Status** : Mitigated. Audit consumers should check `n_resamples=0`
+  flag in `BootstrapCI`.
+
+**R-ALI-04 — Drift undetected (Phase 5+ blocker for prod scale)**
+- **Description** : Static λ=0.9 + static `n_topk=10, n_mc_pairs=5` are
+  calibrated on backtest seasons 2021-2024. In production, FFE rules
+  evolve, player roster turns over (retirements, mutations), team
+  strategies shift. ALI predictions degrade silently without alert.
+- **Impact rationale** : High (3) at scale. Bad predictions undermine
+  product trust ; without drift alert, captains may follow stale ALI
+  recommendations for weeks before noticing.
+- **Probability rationale** : High (4). Drift is **expected** in any
+  production ML system over months. FFE-specific drivers : annual rule
+  reviews, end-of-season retirement waves, club restructuring.
+- **Mitigation Phase 3** : NONE. Static calibration accepted as Phase 3
+  deliverable.
+- **Mitigation Phase 5+ (D9 — required before commercialisation)** :
+  Adaptive Importance Sampling (Veach & Guibas 1995, Cornuet et al. 2012,
+  Bugallo et al. 2017) + drift dashboard (PSI on `taux_presence`, KL
+  divergence on copula correlations, weekly Brier baseline). Alert if
+  KL > 0.1 (warning), KL > 0.3 (critical).
+- **Status** : Monitor. Risk score 12 reflects expected severity at
+  prod scale ; tolerable Phase 3 (controlled hold-out 2024 only).
+- **HIGHEST RISK ALI** in current register. Must be addressed Phase 5
+  before any user-facing deployment.
+
+**R-ALI-05 — Single-instance deployment**
+- **Description** : Phase 3 architecture = single uvicorn process on
+  developer laptop. No horizontal scaling design, no container
+  orchestration, no failover. Phase 5 multi-tenant SaaS will require
+  scaling that's not yet engineered.
+- **Impact rationale** : Medium (2). Latency degradation under load,
+  not data corruption. Failure isolated (no shared state across
+  hypothetical instances).
+- **Mitigation Phase 3** : N/A. Single-instance acceptable for Phase 3
+  validation.
+- **Mitigation Phase 5** : Oracle VM ARM 24 GB benchmark
+  (`docs/operations/ALI_SLO.md` TBD). Capacity test : p95 ≤ 1500ms,
+  RPS ≥ 3 sustainable, memory ≤ 1.5 GB. Multi-tenant rate limit per
+  `user_club_id` (slowapi already wired Phase 3 hooks).
+- **Status** : Monitor. Tracé en dette via `CLAUDE.md` Deploy SaaS
+  manquant (Phase 5 scope étendu 2026-04-19).
+
+**Controls (R-ALI-01..05):**
+- R-ALI-01 : `services/ali/verifiability.py` PUBLIC/PRIVATE partition +
+  `services/ali/confidence.py` ConfidenceLevel metadata (Phase 3 §4.13)
+- R-ALI-02 : `BacktestRunner.skip_failed_matches=True` default +
+  `ADR-014 §Invariants ScenarioSet`
+- R-ALI-03 : `scripts/backtest/bootstrap.py` L91 guard + `tests/backtest/
+  test_properties_hypothesis.py` (15) + `test_properties_degenerate.py` (7)
+- R-ALI-04 : NONE Phase 3. Phase 5+ Required : `services/observability/
+  drift_tracker.py` (designed Phase 3 §4.15.3 spec, not implemented)
+- R-ALI-05 : Phase 5 deploy plan : Oracle VM + capacity benchmark +
+  load test (`scripts/benchmark/ali_benchmark.py` designed Phase 3 §6ter)
+
+**Cross-references** :
+- Sources de biais détaillées : `docs/iso/ALI_MODEL_CARD.md` §7.0
+- Limitations narratives : `docs/iso/ALI_MODEL_CARD.md` §10
+- Threat model security : `docs/security/ALI_THREAT_MODEL.md`
+- Resorption phases : `memory/project_debt_current.md` (D8, D9)
+
+---
+
 ## 3. Risk Treatment Actions
 
 ### 3.1 Immediate Actions (Score ≥ 9)
@@ -150,6 +273,7 @@ Legend:
 | MPR-01 | Implement KS-test drift detection | 2026-01-14 | ✅ Done |
 | DQR-03 | Add OOD input rejection | 2026-01-14 | ✅ Done |
 | FBR-01 | Deploy continuous bias monitoring | 2026-01-14 | ✅ Done |
+| R-ALI-04 | AIS + drift dashboard (D9) — REQUIRED before any prod deploy | Phase 5 | 📋 Planned |
 
 ### 3.2 Planned Actions (Score 6-8)
 
@@ -158,6 +282,8 @@ Legend:
 | SEC-04 | Weekly pip-audit automation | 2026-01-20 | 🔄 In Progress |
 | MPR-02 | FFE 2025-2026 rule review | 2026-02-01 | 📋 Planned |
 | FBR-03 | Season start data handling | 2026-09-01 | 📋 Planned |
+| R-ALI-01 | Quantitative bias breakdown (D8 STRICT) | Phase 3.5 | 📋 Planned |
+| R-ALI-05 | Oracle VM capacity benchmark + multi-tenant rate limit | Phase 5 | 📋 Planned |
 
 ### 3.3 Monitoring Actions (Score 1-5)
 
@@ -219,6 +345,7 @@ Legend:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-14 | ALICE Team | Initial register with P1 mitigations |
+| 2.0.0 | 2026-04-28 | Pierre + Claude (LLM co-auth) | T21 Plan 3 V2 : add §2.7 Phase 3 ALI Risks (R-ALI-01..05) — PRIVATE rules survivor, pool too small, bootstrap degenerate, drift undetected (highest score 12), single-instance deploy. Cross-refs Model Card §7.0 + §10. |
 
 ---
 
@@ -230,5 +357,7 @@ Legend:
 
 ---
 
-**Next Review:** 2026-02-14
-**Risk Status:** 🟢 GREEN (All high risks mitigated)
+**Next Review:** 2026-05-28 (post-T22 Gates Report) + Phase 3.5 STRICT (D8 bloquant Phase 4)
+**Risk Status:** 🟡 AMBER — Phase 3 shipped with R-ALI-04 (drift detection) score 12 ⚠️ at Monitor.
+Tolerable Phase 3 (controlled hold-out 2024 backtest only). MUST be addressed Phase 5
+before any user-facing deployment. Other R-ALI risks Mitigated or planned Phase 3.5/5.
