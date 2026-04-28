@@ -109,6 +109,9 @@ Dette ouverte après Phase 2 — détail et plan de résorption : `memory/projec
 | ~~D-P2-04~~ | ~~seed=42 fixe dans generator~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 3 T23** (ComposeRequest.seed exposé + ADR-014 §Determinism, commit cdf6a7c) |
 | ~~D-P3-11~~ | ~~Suppression `services/ffe_rules.py` legacy~~ | ~~Plan 2 (différée)~~ | **RESOLUE Plan 2** (migration RuleEngine complète 10 articles, ADR-015 SUPERSEDED) |
 | ~~D-P3-12~~ | ~~MonteCarloSampler `_u_to_presence` fallback résiduel~~ | ~~Plan 2 Task 6~~ | **RESOLUE Plan 3 T23** (RuntimeError fail-fast ISO 24029, commit cdf6a7c) |
+| ~~D-P3-13~~ | ~~MLP champion artifact `mlp_meta_learner.joblib` absent (FALLBACK silencieux)~~ | ~~Phase 2 stacking deploy~~ | **RESOLUE Plan 3 T22.0** (refit OOF, ECE_draw 0.001648 reproduit, lineage SHA256) |
+| D-P3-18 | Redéfinir `ali_correct` recall≥0.50 (vs strict 0.90) pour puissance McNemar | Phase 3 T22 finding | **Phase 3.5 STRICT** (D8 couplée) |
+| **D-P3-19** | **ALI input non-conditionné multi-équipes (pool total club, ignore équipes sœurs simultanées) — bloquant gates absolus** | **T22 review post-mortem (CRITICAL)** | **Phase 4 OR-Tools (prérequis structurel, pas optimisation)** |
 | ~~D10~~ | ~~Sync chess-app JSON~~ | ~~Phase 3~~ | **RESOLUE Plan 1** (2026-04-19, commits ff94a19 + 1a2445c) |
 | D11 | Completeness audit : PDF FFE → chess-app JSON (toutes règles capturées ?) | Phase 3 finding | **Phase ultérieure** (tâche NLP, pocket-arbiter stale) |
 | ~~D12~~ | ~~Autoregressive streak~~ | ~~Audit F3~~ | **REMONTÉ PHASE 3** (F3 intégré, option B) |

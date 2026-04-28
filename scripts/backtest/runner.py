@@ -43,9 +43,11 @@ from scripts.backtest.metrics import (
     jaccard_max,
     top_k_recall,
 )
+from scripts.backtest.runner_sampling import enumerate_candidates, stratify_per_ronde
 from scripts.backtest.runner_types import (
     RECALL_GATE,
     BacktestReport,
+    MatchCandidate,
     MatchStats,
     RunnerConfig,
     df_to_candidates,
@@ -73,45 +75,19 @@ class BacktestRunner:
     harness: BacktestHarness
     config: RunnerConfig = field(default_factory=RunnerConfig)
 
-    def sample_matches(self) -> list[tuple[int, int, str, str, str]]:
-        """Sample hold-out matches (saison, ronde, user_team, opp_team, opp_club).
+    def sample_matches(self) -> list[MatchCandidate]:
+        """Sample hold-out matches stratified per-ronde (T15 wired, ISO 24027 §6).
 
-        @returns list up to ``max_matches`` quintuples. Dedupe par
-                 (user_team, opp_team) pour eviter redondance.
+        Délègue à `runner_sampling.enumerate_candidates` puis
+        `runner_sampling.stratify_per_ronde` (split SRP, ISO 5055).
+
+        @returns list de MatchCandidate balanced. Length <= max_matches.
         """
         if self.harness.cache is None:
             msg = "Harness not setup()"
             raise RuntimeError(msg)
-        df = self.harness.cache.echiquiers_total
-        team_to_club = self.harness.cache.team_to_club
-        joueurs_by_club = self.harness.cache.joueurs_by_club
-
-        matches: list[tuple[int, int, str, str, str]] = []
-        seen: set[tuple[str, str]] = set()
-        for ronde in self.config.rondes:
-            sub = df[(df["saison"] == self.config.saison) & (df["ronde"] == ronde)]
-            sub = sub.drop_duplicates(subset=["equipe_dom", "equipe_ext"])
-            for _, row in sub.iterrows():
-                user_team = str(row["equipe_dom"])
-                opp_team = str(row["equipe_ext"])
-                key = (user_team, opp_team)
-                if key in seen:
-                    continue
-                opp_club = team_to_club.get(opp_team)
-                user_club = team_to_club.get(user_team)
-                if opp_club is None or user_club is None:
-                    continue
-                user_pool = joueurs_by_club.get(user_club)
-                opp_pool = joueurs_by_club.get(opp_club)
-                if user_pool is None or opp_pool is None:
-                    continue
-                if len(user_pool) < self.config.team_size or len(opp_pool) < self.config.team_size:
-                    continue
-                matches.append((self.config.saison, ronde, user_team, opp_team, opp_club))
-                seen.add(key)
-                if len(matches) >= self.config.max_matches:
-                    return matches
-        return matches
+        candidates = enumerate_candidates(self.harness.cache, self.config)
+        return stratify_per_ronde(candidates, self.config)
 
     def run_single(  # noqa: PLR0913, PLR0914
         self,
@@ -201,8 +177,10 @@ class BacktestRunner:
         @raises ValueError: fewer than 2 matches completed (bootstrap needs N>=2).
         """
         stats: list[MatchStats] = []
-        for saison, ronde, user_team, opp_team, opp_club in self.sample_matches():
-            s = self.run_single(saison, ronde, user_team, opp_team, opp_club)
+        for cand in self.sample_matches():
+            s = self.run_single(
+                cand.saison, cand.ronde, cand.user_team, cand.opp_team, cand.opp_club
+            )
             if s is not None:
                 stats.append(s)
         if len(stats) < 2:

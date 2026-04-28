@@ -86,8 +86,32 @@ class BacktestReport:
 
 
 @dataclass(frozen=True)
+class MatchCandidate:
+    """One sampled hold-out match candidate (pre-attempt).
+
+    Frozen for ISO 29119 deterministic sampling lineage.
+    """
+
+    saison: int
+    ronde: int
+    user_team: str
+    opp_team: str
+    opp_club: str
+
+
+@dataclass(frozen=True)
 class RunnerConfig:
-    """Backtest runner configuration (immutable)."""
+    """Backtest runner configuration (immutable).
+
+    Stratified sampling (Plan 3 V2 T22 fix-on-sight) :
+    - ``type_competition`` : strict filter ('national' = SE adulte interclub).
+      Exclut 'scolaire', 'national_jeunes' (D3), 'coupe_*' (D4), 'regional'.
+    - ``division_filter`` : strict exact-match filter pandas
+      (ex 'Nationale 3'). Distinct de ``division`` (label `N3` Phase 3
+      passé au scenario_generator).
+    - ``stratify_min_per_ronde`` : seuil ISO 24027 §6 minimum sample size
+      per stratum pour fairness audit (default 5 = T15 default).
+    """
 
     saison: int = 2024
     rondes: tuple[int, ...] = (5, 7, 9, 11)
@@ -99,6 +123,9 @@ class RunnerConfig:
     n_bootstrap: int = 1000
     bootstrap_confidence: float = 0.95
     skip_failed_matches: bool = True
+    type_competition: str = "national"
+    division_filter: str = "Nationale 3"
+    stratify_min_per_ronde: int = 5
 
 
 def df_to_candidates(df: object, club: str) -> list[PlayerCandidate]:

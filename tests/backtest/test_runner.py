@@ -37,14 +37,13 @@ def harness() -> BacktestHarness:
 
 
 def test_runner_sample_matches_returns_viable_pairs(harness: BacktestHarness) -> None:
-    """sample_matches dedupe + team_to_club resolves."""
+    """sample_matches dedupe + team_to_club resolves (returns MatchCandidate)."""
     runner = BacktestRunner(harness=harness, config=RunnerConfig(max_matches=10))
     matches = runner.sample_matches()
     assert len(matches) > 0
-    # Each match has opp_club resolved non-empty string
-    for _, _, _, _, opp_club in matches:
-        assert isinstance(opp_club, str)
-        assert opp_club
+    for cand in matches:
+        assert isinstance(cand.opp_club, str)
+        assert cand.opp_club
 
 
 def test_runner_run_produces_report_smoke(harness: BacktestHarness) -> None:
