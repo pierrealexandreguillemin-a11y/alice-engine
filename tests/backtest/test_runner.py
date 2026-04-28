@@ -66,10 +66,12 @@ def test_runner_run_produces_report_smoke(harness: BacktestHarness) -> None:
         report.ci_ece,
     ):
         assert ci.lower <= ci.point <= ci.upper
-    # Gates summary returns dict with 7 gates (P3G07..P3G11 + MAE)
+    # Gates summary returns 8 gates post-ADR-017 (Wilcoxon SOTA + McNemar legacy).
     gates = report.gates_summary()
-    assert len(gates) == 7
+    assert len(gates) == 8
     assert "P3G11_mae" in gates
+    assert "P3G11_wilcoxon_recall" in gates  # PRIMARY ADR-017
+    assert "P3G11_mcnemar_legacy" in gates  # SECONDARY conformite spec
     assert all(isinstance(v, bool) for v in gates.values())
     # T12 MAE finite value
     assert report.ci_mae.lower >= 0.0
