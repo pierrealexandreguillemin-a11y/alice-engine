@@ -82,7 +82,7 @@ Résumé session : `memory/project_session_resume.md`
 | Couche | Statut |
 |--------|--------|
 | ML Training | **DONE** — Champion MLP(32,16) stacking 0.5530, ECE_draw 0.0016. AG ÉLIMINÉ (ADR-011). |
-| API FastAPI | **DONE (avec dette)** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). Dette : voir ci-dessous. |
+| API FastAPI | **DONE Plan 3 T23 (dette résorbée 2026-04-28)** — /compose + /recompose wired. Stacking pipeline E2E. 11 FFE rules (ADR-012). composer.py legacy supprimé (D5). seed exposé via ComposeRequest (D-P2-04). MC fail-fast (D-P3-12). |
 | ALI prédiction adverse | **DONE-SOTA Plan 2** — Monte Carlo hybride (10 TopK + 10 MC LHS+antithetic), copule gaussienne (Sklar 1959) ; fallback Elo si pas d'opponent_club_id |
 | CE multi-équipe | **FALLBACK** — Tri Elo + E[score] (Phase 4 = OR-Tools) |
 | Deploy SaaS multi-tenant | MANQUANT (Phase 5 — scope étendu 2026-04-19) |
@@ -99,16 +99,16 @@ Dette ouverte après Phase 2 — détail et plan de résorption : `memory/projec
 | ~~D2~~ | ~~ALI tri Elo 1 scénario~~ | ~~Phase 2~~ | **RESOLUE Plan 2** (ScenarioGenerator 10 TopK + 10 MC SOTA, commit c4a8154) |
 | D3 | Jeunes (J02) non supportés (age_min/age_max ignorés) | Phase 2 | **Phase 3.5** (post-ALI de base) |
 | D4 | Coupes configs dispo mais non implémentées | Phase 2 | **Phase 3.5** |
-| D5 | `services/composer.py` legacy non modifié (mort-vivant) | Phase 2 | **Phase 3** (supprimer OU documenter raison) |
+| ~~D5~~ | ~~`services/composer.py` legacy mort-vivant~~ | ~~Phase 2~~ | **RESOLUE Plan 3 T23** (suppression 293L, commit cdf6a7c, 2026-04-28) |
 | D6 | Pas de DVC / versioning artefacts ML | Historique | **Phase 5** |
 | D7 | Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel | Historique | **Phase 5** |
 | D8 | ALI fairness/robustness breakdown (genre, taille club, niveau) + stress Elo | Phase 3 (scope) | **Phase 3.5 STRICT** (bloquant Phase 4) |
 | D9 | Adaptive Importance Sampling + drift monitoring prod (ratio TopK:MC dynamique) | Phase 3 (brainstorm finding) | **Phase 5+** (après volume data prod) |
 | D-P2-02 | VerifiabilityClassifier injecté mais pas consommé (biais MC conservateur) | Plan 2 peer review | **Plan 3 STRICT** (avant backtest) |
-| D-P2-03 | `_EXPECTED_SCENARIOS=20` hardcodé fragile | Plan 2 peer review | Plan 3 |
-| D-P2-04 | seed=42 fixe dans generator | Plan 2 peer review | Plan 3 |
+| ~~D-P2-03~~ | ~~`_EXPECTED_SCENARIOS=20` hardcodé~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 3 T23** (invariant ADR-014 + error message clarifié, commit cdf6a7c) |
+| ~~D-P2-04~~ | ~~seed=42 fixe dans generator~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 3 T23** (ComposeRequest.seed exposé + ADR-014 §Determinism, commit cdf6a7c) |
 | ~~D-P3-11~~ | ~~Suppression `services/ffe_rules.py` legacy~~ | ~~Plan 2 (différée)~~ | **RESOLUE Plan 2** (migration RuleEngine complète 10 articles, ADR-015 SUPERSEDED) |
-| D-P3-12 | MonteCarloSampler `_u_to_presence` fallback résiduel | Plan 2 Task 6 | Plan 3 cleanup |
+| ~~D-P3-12~~ | ~~MonteCarloSampler `_u_to_presence` fallback résiduel~~ | ~~Plan 2 Task 6~~ | **RESOLUE Plan 3 T23** (RuntimeError fail-fast ISO 24029, commit cdf6a7c) |
 | ~~D10~~ | ~~Sync chess-app JSON~~ | ~~Phase 3~~ | **RESOLUE Plan 1** (2026-04-19, commits ff94a19 + 1a2445c) |
 | D11 | Completeness audit : PDF FFE → chess-app JSON (toutes règles capturées ?) | Phase 3 finding | **Phase ultérieure** (tâche NLP, pocket-arbiter stale) |
 | ~~D12~~ | ~~Autoregressive streak~~ | ~~Audit F3~~ | **REMONTÉ PHASE 3** (F3 intégré, option B) |
