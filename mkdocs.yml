@@ -36,6 +36,7 @@ nav:
       - Status: iso/IMPLEMENTATION_STATUS.md
       - AI Policy: iso/AI_POLICY.md
       - Risk Assessment: iso/AI_RISK_ASSESSMENT.md
+      - ALI Model Card: iso/ALI_MODEL_CARD.md
   - Operations:
       - Deployment: operations/DEPLOIEMENT_RENDER.md
 
