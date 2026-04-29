@@ -235,9 +235,9 @@ Peer Review Final ─── Merge master
 - D-P2-04 seed=42 : expose via ComposeRequest
 - D-P3-13 NOUVEAU : tracer MLP redeploy
 
-### T24. DVC versioning backtest artifacts (NEW)
-**Files:** `dvc.yaml` stage backtest + `.dvc/config`
-**DoD:** reports/backtest/ tracked DVC, lineage commit ↔ parquet results.
+### T24. DVC versioning backtest artifacts (NEW) — DONE 2026-04-29
+**Files:** `dvc.yaml` (2 stages : refit_mlp_champion + backtest_holdout_2024), `dvc.lock`, `.dvc/config`, `.dvcignore`, doc append `docs/devops/ML_MODEL_VERSIONING_STANDARDS.md`
+**DoD:** reports/backtest/ali_holdout_2024.json tracked (cache: false, persist), models/cache/mlp_*.joblib + temperature_T DVC-cached avec md5 deps, DAG `refit → backtest`, `dvc status` reproducible, lineage commit ↔ artefacts via dvc.lock. **Limites assumées Phase 5** : pas de remote DVC distant + pas de couverture training Kaggle (CatBoost/XGB/LGB).
 
 ### T25. verify_plan3_dod.sh + peer review FINAL + merge
 **Files:** `scripts/verify_plan3_dod.sh`

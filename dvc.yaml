@@ -1,0 +1,57 @@
+stages:
+  refit_mlp_champion:
+    desc: >
+      D-P3-13 résorption : refit MLP(32,16) meta-learner depuis OOF Phase 2.
+      Reproduit best sweep config (log_loss 0.5530, ECE_draw 0.001648).
+      Sources : Guo 2017 (temperature scaling), Mitchell 2019 (Model Cards),
+      ISO/IEC 42001:2023 Annex A.6 (lifecycle traceability).
+    cmd: python -m scripts.cloud.refit_mlp_champion
+    deps:
+      - scripts/cloud/refit_mlp_champion.py
+      - scripts/serving/meta_features.py
+      - results/oof_merged/cb_oof_predictions.parquet
+      - results/oof_merged/cb_test_predictions.parquet
+      - results/oof_merged/xgb_lgb_oof_predictions.parquet
+      - results/oof_merged/xgb_lgb_test_predictions.parquet
+    outs:
+      - models/cache/mlp_meta_learner.joblib
+      - models/cache/temperature_T.joblib
+    metrics:
+      - models/cache/mlp_champion_metadata.json:
+          cache: false
+
+  backtest_holdout_2024:
+    desc: >
+      T22 ALI hold-out 2024 backtest stratifié champion mode (N≥70 N3 saison
+      2024, rondes 1/3/5/7/9/11). Produit gates_summary P3G07-P3G11 +
+      bootstrap CI BCa + Wilcoxon paired (ADR-017) + McNemar legacy +
+      fairness breakdown by_ronde / by_opponent_club_size.
+      Sources : Bergmeir 2012/2018 (walk-forward), Wilcoxon 1945, Pratt 1959,
+      Demšar 2006 JMLR §3.1.3, Pappalardo 2019, ISO/IEC 25059:2023 §6.
+    cmd: python -m scripts.backtest.run_holdout_2024
+    deps:
+      - scripts/backtest/run_holdout_2024.py
+      - scripts/backtest/runner.py
+      - scripts/backtest/runner_sampling.py
+      - scripts/backtest/runner_types.py
+      - scripts/backtest/harness.py
+      - scripts/backtest/run_match.py
+      - scripts/backtest/ground_truth.py
+      - scripts/backtest/metrics.py
+      - scripts/backtest/bootstrap.py
+      - scripts/backtest/statistical.py
+      - scripts/backtest/baseline_elo.py
+      - scripts/backtest/fairness.py
+      - scripts/backtest/stratified_sampler.py
+      - services/ali/generator.py
+      - services/ali/scenario.py
+      - services/ali/joint_sampler.py
+      - services/ali/topk.py
+      - services/ali/monte_carlo.py
+      - services/inference.py
+      - models/cache/mlp_meta_learner.joblib
+      - models/cache/temperature_T.joblib
+    outs:
+      - reports/backtest/ali_holdout_2024.json:
+          cache: false
+          persist: true

@@ -1,0 +1,134 @@
+schema: '2.0'
+stages:
+  refit_mlp_champion:
+    cmd: python -m scripts.cloud.refit_mlp_champion
+    deps:
+    - path: results/oof_merged/cb_oof_predictions.parquet
+      hash: md5
+      md5: 15eba0491e301125358fb5e41ad05573
+      size: 31003478
+    - path: results/oof_merged/cb_test_predictions.parquet
+      hash: md5
+      md5: d8ba5e776c9e141462f76d7864fb5b5e
+      size: 6434079
+    - path: results/oof_merged/xgb_lgb_oof_predictions.parquet
+      hash: md5
+      md5: 25363be453b88f64afd0b3c915e91aef
+      size: 54612428
+    - path: results/oof_merged/xgb_lgb_test_predictions.parquet
+      hash: md5
+      md5: 894b3181e5fa0b003a59d75f96ea56dd
+      size: 11760292
+    - path: scripts/cloud/refit_mlp_champion.py
+      hash: md5
+      md5: 48c8302fa8e33ac7b8ededfafcd166d7
+      size: 8112
+    - path: scripts/serving/meta_features.py
+      hash: md5
+      md5: b9b7bd738c9a3d76f77eb256d049ae00
+      size: 1476
+    outs:
+    - path: models/cache/mlp_champion_metadata.json
+      hash: md5
+      md5: b32af6bba169f6d4d13bccdf1ba398fb
+      size: 1286
+    - path: models/cache/mlp_meta_learner.joblib
+      hash: md5
+      md5: 5f3b80d180b08e8505927ff834ee1594
+      size: 28880
+    - path: models/cache/temperature_T.joblib
+      hash: md5
+      md5: 079c4d219cc84e857a13dbeeb09ca93d
+      size: 21
+  backtest_holdout_2024:
+    cmd: python -m scripts.backtest.run_holdout_2024
+    deps:
+    - path: models/cache/mlp_meta_learner.joblib
+      hash: md5
+      md5: 5f3b80d180b08e8505927ff834ee1594
+      size: 28880
+    - path: models/cache/temperature_T.joblib
+      hash: md5
+      md5: 079c4d219cc84e857a13dbeeb09ca93d
+      size: 21
+    - path: scripts/backtest/baseline_elo.py
+      hash: md5
+      md5: 8e0d3d52394f316dad786c98bc863ccb
+      size: 3120
+    - path: scripts/backtest/bootstrap.py
+      hash: md5
+      md5: 7fe8a0803837bcb0fa529cf931c17336
+      size: 4022
+    - path: scripts/backtest/fairness.py
+      hash: md5
+      md5: 96d5fe447e2ce0e5ccd6373d398aaf02
+      size: 3682
+    - path: scripts/backtest/ground_truth.py
+      hash: md5
+      md5: d15a8777f55e9237c08881a5d4bed26f
+      size: 7996
+    - path: scripts/backtest/harness.py
+      hash: md5
+      md5: af2a68fe59cefe1778cdd9670a48fabe
+      size: 4294
+    - path: scripts/backtest/metrics.py
+      hash: md5
+      md5: 1db87f17107e72c8342824dd1d8e75d8
+      size: 7968
+    - path: scripts/backtest/run_holdout_2024.py
+      hash: md5
+      md5: 79732cdeb5f0e8e430b2bdbd2f536867
+      size: 6768
+    - path: scripts/backtest/run_match.py
+      hash: md5
+      md5: 483cd98f799fbe3c13afb85236ece365
+      size: 2848
+    - path: scripts/backtest/runner.py
+      hash: md5
+      md5: 3c1bc868824dc221f04cc12e4a89315f
+      size: 9169
+    - path: scripts/backtest/runner_sampling.py
+      hash: md5
+      md5: f3ab873ddf32265a0b8b831cec18321d
+      size: 4241
+    - path: scripts/backtest/runner_types.py
+      hash: md5
+      md5: 0206b73b678a6b0968a2da4de2b6de0c
+      size: 6058
+    - path: scripts/backtest/statistical.py
+      hash: md5
+      md5: f9a15478fdd83f287f341715e5f234be
+      size: 9306
+    - path: scripts/backtest/stratified_sampler.py
+      hash: md5
+      md5: ea21c945aa19aa5d929738949aefac0a
+      size: 2739
+    - path: services/ali/generator.py
+      hash: md5
+      md5: 64fa980b353867bcf154ecdd7d56a5a6
+      size: 10493
+    - path: services/ali/joint_sampler.py
+      hash: md5
+      md5: c92e00fa0bc6f29212d1c8ff6943a2da
+      size: 8755
+    - path: services/ali/monte_carlo.py
+      hash: md5
+      md5: de5518cfb05f41b9f6f7aee5818adf50
+      size: 9427
+    - path: services/ali/scenario.py
+      hash: md5
+      md5: 022b718fd25cecf9140a4f2bcf2d8b89
+      size: 2907
+    - path: services/ali/topk.py
+      hash: md5
+      md5: aaaa9e42dc2afe6ee57e47989f63da85
+      size: 9924
+    - path: services/inference.py
+      hash: md5
+      md5: c2908db9a90ced61cddc47f44b6839f4
+      size: 10367
+    outs:
+    - path: reports/backtest/ali_holdout_2024.json
+      hash: md5
+      md5: 7b10b137f1a10c5e7065c16e39dfe2c1
+      size: 48932

@@ -215,6 +215,36 @@ rag-project/
 
 **Embeddings**: Stocker dans Vector DB (Pinecone, Weaviate, ChromaDB) ou DVC.
 
+## ALICE Engine — Implémentation T24 Phase 3 (2026-04-29)
+
+`dvc.yaml` racine définit 2 stages reproducibles :
+
+| Stage | Cmd | Outs (cached) | Outs (git-tracked) |
+|-------|-----|---------------|--------------------|
+| `refit_mlp_champion` | `python -m scripts.cloud.refit_mlp_champion` | `models/cache/mlp_meta_learner.joblib`, `temperature_T.joblib` | `models/cache/mlp_champion_metadata.json` (metric) |
+| `backtest_holdout_2024` | `python -m scripts.backtest.run_holdout_2024` | — | `reports/backtest/ali_holdout_2024.json` (cache: false, persist: true) |
+
+DAG : `refit_mlp_champion → backtest_holdout_2024` (mlp deps déclarées).
+
+`dvc.lock` versionne les hashes md5 des deps (sources + parquets OOF) et outs.
+Cela garantit la traçabilité commit git ↔ artefacts (D6/D7 partial — versioning
+local DVC sans remote distant). Phase 5+ : `dvc remote add -d s3://...` pour
+push artefacts vers stockage cloud (cf. architecture above).
+
+Commandes :
+
+```bash
+dvc status                # vérifier reproducibilité
+dvc repro <stage>         # rerun si deps changent
+dvc commit -f <stage>     # snapshot artefacts existants sans rerun
+```
+
+**Limites résolues** : lineage commit ↔ MLP champion + backtest report.
+**Limites restantes (Phase 5)** :
+- Pas de remote DVC (cache local seulement)
+- Pas de lien commit git ↔ version Kaggle dataset ↔ kernel (D7)
+- Artefacts training Kaggle (CatBoost, XGB, LGB) non DVC-tracked
+
 ## Références
 
 - [DVC vs Git vs Git LFS](https://censius.ai/blogs/dvc-vs-git-and-git-lfs-in-machine-learning-reproducibility)

@@ -108,8 +108,8 @@ Dette ouverte après Phase 2 — détail et plan de résorption : `memory/projec
 | D3 | Jeunes (J02) non supportés (age_min/age_max ignorés) | Phase 2 | **Phase 3.5** (post-ALI de base) |
 | D4 | Coupes configs dispo mais non implémentées | Phase 2 | **Phase 3.5** |
 | ~~D5~~ | ~~`services/composer.py` legacy mort-vivant~~ | ~~Phase 2~~ | **RESOLUE Plan 3 T23** (suppression 293L, commit cdf6a7c, 2026-04-28) |
-| D6 | Pas de DVC / versioning artefacts ML | Historique | **Phase 5** |
-| D7 | Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel | Historique | **Phase 5** |
+| D6 | DVC / versioning artefacts ML | Historique | **PARTIAL T24** (dvc.yaml 2 stages refit MLP + backtest, DAG opérationnel) — remote DVC + training Kaggle = Phase 5 |
+| D7 | Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel | Historique | **Phase 5** (non couvert par T24) |
 | D8 | ALI fairness/robustness breakdown (genre, taille club, niveau) + stress Elo | Phase 3 (scope) | **Phase 3.5 STRICT** (bloquant Phase 4) |
 | D9 | Adaptive Importance Sampling + drift monitoring prod (ratio TopK:MC dynamique) | Phase 3 (brainstorm finding) | **Phase 5+** (après volume data prod) |
 | ~~D-P2-02~~ | ~~VerifiabilityClassifier injecté mais pas consommé~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 2 (commit 0656fdf, 2026-04-19) — partition_rules wired** |
