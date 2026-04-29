@@ -298,8 +298,11 @@ et `docs/iso/AI_RISK_ASSESSMENT.md` §R-ALI-06.
 - R-ALI-05 : Phase 5 deploy plan : Oracle VM + capacity benchmark +
   load test (`scripts/benchmark/ali_benchmark.py` designed Phase 3 §6ter)
 - R-ALI-06 : NONE Phase 3 (limitation acceptée). Phase 4a REQUIRED :
-  primitives `services/ce/` OR-Tools (à concevoir, ADR-016) +
-  `ScenarioGenerator.generate(simultaneous_teams=...)` extension
+  primitives `services/ce/` OR-Tools + `ScenarioGenerator.generate(
+  simultaneous_teams=...)` extension. Design retenu :
+  `docs/architecture/adr/ADR-016-ali-conditioned-multi-team-adverse-ce-mirror.md`
+  (status: Proposed). Versioned debt mirror :
+  `docs/project/DEBT_LEDGER.md` D-P3-19.
 
 **Cross-references** :
 - Sources de biais détaillées : `docs/iso/ALI_MODEL_CARD.md` §7.0

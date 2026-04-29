@@ -161,6 +161,6 @@ sur cohorte difficile.
 
 ---
 
-**Validation** : ADR-016 a force normative à partir 2026-04-28. Toute
+**Validation** : ADR-017 a force normative à partir 2026-04-28. Toute
 référence future à "P3G11b McNemar" dans la doc doit être lue comme
 "P3G11b Wilcoxon (primary) + McNemar legacy (secondary)".

@@ -400,8 +400,11 @@ divergence CE-user vs ALI.
 - ECE-presence reste dépendante de D9 AIS Phase 5+ (gate 0.05
   inatteignable Phase 4a seule, palliatif Phase 5)
 
-**ADR-016 NEW à rédiger Phase 4a** : trade-off Approche A vs B, décision
-SOTA Approche A retenue.
+**ADR-016 (status: Proposed, stub Phase 4a)** : trade-off Approche A vs B,
+décision SOTA Approche A retenue. Voir
+`docs/architecture/adr/ADR-016-ali-conditioned-multi-team-adverse-ce-mirror.md`.
+Status `Proposed → Accepted` au kick-off Phase 4a (création primitives
+`services/ce/`).
 
 ### 6.3 Phase 3.5 STRICT — leviers complémentaires (sans D-P3-19)
 
@@ -419,7 +422,7 @@ diagnostique mais **ne suffiront pas à atteindre les gates absolus** :
 - **D3** : étendre cohorte à J02 jeunes si modèle ad hoc disponible.
 - **D4** : étendre cohorte aux Coupes (rules différentes).
 
-### 6.3 Phase 5+ — calibration absolue
+### 6.4 Phase 5+ — calibration absolue
 
 - **D9 Adaptive Importance Sampling** (Veach & Guibas 1995, Cornuet et al.
   2012, Bugallo et al. 2017) + drift dashboard pour amener ECE-presence
@@ -429,7 +432,7 @@ diagnostique mais **ne suffiront pas à atteindre les gates absolus** :
   sur E[score] (corrige MAE 2.6 actuel via prediction intervals plutôt
   qu'estimateur ponctuel).
 
-### 6.4 Disclosure consommateurs `/compose`
+### 6.5 Disclosure consommateurs `/compose`
 
 - Exposer `ConfidenceLevel` dans response JSON (déjà désigné
   `services/ali/confidence.py` Phase 3 §4.13).
