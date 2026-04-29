@@ -1,7 +1,7 @@
 """Tests for feature store assembly (ISO 29119 / ISO 5259).
 
 Document ID: ALICE-TEST-FEATURE-STORE
-Version: 1.0.0
+Version: 1.1.0
 Count: 4
 """
 
@@ -11,10 +11,22 @@ import pytest
 from services.feature_store import FeatureStore
 
 
+def _write_training_mean(tmp_path, columns: list[str]) -> None:
+    """Write minimal training_mean.parquet fixture.
+
+    FeatureStore.load requires both training_mean.parquet AND
+    joueur_features.parquet — tests that call store.load() must seed both.
+    """
+    mean_df = pd.DataFrame([dict.fromkeys(columns, 0.0)])
+    mean_df.to_parquet(tmp_path / "training_mean.parquet")
+
+
 class TestFeatureStore:
     """Test feature assembly from parquets."""
 
     def test_assemble_returns_dataframe(self, tmp_path):
+        cols = ["blanc_elo", "win_rate_normal_blanc", "elo_diff", "division", "ronde"]
+        _write_training_mean(tmp_path, cols)
         joueur_df = pd.DataFrame(
             {
                 "joueur_nom": ["Player1"],
@@ -36,6 +48,8 @@ class TestFeatureStore:
         assert result.shape[1] > 0
 
     def test_unknown_player_returns_defaults(self, tmp_path):
+        cols = ["blanc_elo", "elo_diff"]
+        _write_training_mean(tmp_path, cols)
         joueur_df = pd.DataFrame({"joueur_nom": ["Player1"], "blanc_elo": [1800]})
         joueur_df.to_parquet(tmp_path / "joueur_features.parquet")
         store = FeatureStore(tmp_path)
@@ -50,6 +64,7 @@ class TestFeatureStore:
         assert len(result) == 1
 
     def test_age_hours(self, tmp_path):
+        _write_training_mean(tmp_path, ["any_col"])
         joueur_df = pd.DataFrame({"joueur_nom": []})
         joueur_df.to_parquet(tmp_path / "joueur_features.parquet")
         store = FeatureStore(tmp_path)

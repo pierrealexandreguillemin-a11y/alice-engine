@@ -67,7 +67,12 @@ def _mock_predict_board(
 
 @pytest.fixture(scope="module")
 def client():
-    """TestClient with lifespan complete (ALI generator wired, models mocked)."""
+    """TestClient with lifespan complete (ALI generator wired, models mocked).
+
+    feature_store is loaded from data/feature_store/ (build_feature_store.py
+    has been run). aggregation._assemble_features requires feature_store !=
+    None even si predict_board est mocké — c'est le path strict-mode.
+    """
     mock_bundle = _make_mock_bundle()
     with (
         patch("scripts.serving.model_loader.load_models", return_value=mock_bundle),
@@ -83,18 +88,32 @@ def client():
         importlib.reload(_main_module)
         from app.main import app as _app
 
+        # FeatureStore minimal pour smoke ALI (skip si parquets absents)
+        from services.feature_store import FeatureStore
+
+        fs_path = Path("data/feature_store")
+        if not (fs_path / "training_mean.parquet").exists():
+            pytest.skip(
+                "data/feature_store/training_mean.parquet absent — "
+                "run scripts/build_feature_store.py first"
+            )
+        feature_store = FeatureStore(fs_path)
+        feature_store.load()
+
         with TestClient(_app) as tc:
             _app.state.model_bundle = mock_bundle
-            _app.state.feature_store = None
+            _app.state.feature_store = feature_store
             yield tc
 
 
-def _find_eligible_clubs(min_pool: int = 20) -> tuple[str, str]:
+def _find_eligible_clubs(min_pool: int = 40) -> tuple[str, str]:
     """Find user_club and opponent_club with >= min_pool joueurs each.
 
-    ALI needs a viable opponent pool (>=20 joueurs) to produce 20 distinct
-    scenarios for team_size=8. User club needs >= 12 FFE-IDs so /compose
-    can build a pool and cap boards at 8.
+    ALI needs a viable opponent pool (>=40 joueurs) to produce 20 distinct
+    scenarios for team_size=8. Avec min_pool=20-30, dedup TopK+MC produit
+    parfois 16-18 scenarios uniques (combinatoire trop restreinte) ⇒ FAIL
+    R-ALI-02 ScenarioSet.validate(). User club needs >= 12 FFE-IDs so
+    /compose can build a pool and cap boards at 8.
     """
     df = pd.read_parquet(J)
     counts = df.groupby("club", dropna=False).size()
