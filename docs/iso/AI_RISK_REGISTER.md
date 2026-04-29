@@ -141,12 +141,13 @@ Legend:
 
 ---
 
-### 2.7 Phase 3 ALI Risks (R-ALI-01..05)
+### 2.7 Phase 3 ALI Risks (R-ALI-01..06)
 
 Risques spécifiques au système ALI (Adversarial Lineup Inference) Plan 3
 SOTA, identifiés via audit Model Card 2026-04-28 (Mitchell 2019 §9
-Limitations). Cross-référencés `docs/iso/ALI_MODEL_CARD.md` §10 et §7.0
-"Sources of Bias".
+Limitations) + T22 review post-mortem 2026-04-28 (R-ALI-06). Cross-référencés
+`docs/iso/ALI_MODEL_CARD.md` §10, `docs/iso/ALI_QUALITY_GATES_REPORT.md` §7.5
+et `docs/iso/AI_RISK_ASSESSMENT.md` §R-ALI-06.
 
 | ID | Risk | P | I | Score | Status | Owner | Due |
 |----|------|---|---|-------|--------|-------|-----|
@@ -155,6 +156,7 @@ Limitations). Cross-référencés `docs/iso/ALI_MODEL_CARD.md` §10 et §7.0
 | **R-ALI-03** | Bootstrap BCa CI degenerate on var=0 input → NaN propagation in gates | 1 | 2 | **2** 🟢 | ✅ Mitigated | ML Eng | Ongoing |
 | **R-ALI-04** | Season-over-season drift undetected (no AIS / drift dashboard) | 4 | 3 | **12** ⚠️ | 🟡 Monitor | MLOps | Phase 5+ (D9) |
 | **R-ALI-05** | Single-instance deployment, no horizontal scaling Phase 3 | 3 | 2 | **6** 🟡 | 🟡 Monitor | DevOps | Phase 5 |
+| **R-ALI-06** | ALI input non-conditionné multi-équipes adverse (pool club total au lieu de pool conditionné CE-adverse miroir) | 5 | 4 | **20** 🔴 | 🔴 CRITICAL OPEN | ML Eng + Architect | Phase 4a (D-P3-19) |
 
 **R-ALI-01 — PRIVATE rules unverifiable**
 - **Description** : 4 of 14 FFE A02 articles (3.7.b force équipes, 3.2
@@ -244,7 +246,47 @@ Limitations). Cross-référencés `docs/iso/ALI_MODEL_CARD.md` §10 et §7.0
 - **Status** : Monitor. Tracé en dette via `CLAUDE.md` Deploy SaaS
   manquant (Phase 5 scope étendu 2026-04-19).
 
-**Controls (R-ALI-01..05):**
+**R-ALI-06 — ALI input non-conditionné multi-équipes adverse (CRITICAL)**
+- **Description** : ALI Phase 3 prédit la composition d'une équipe adverse
+  spécifique mais reçoit en entrée le pool total du club via
+  `services/ali/pool_loader.py::load_pool(club_id, round_date)` sans
+  information sur l'allocation simultanée des autres équipes du même club
+  qui jouent le même weekend (ex Mulhouse Philidor 2 N4, Mulhouse Philidor
+  3 R1 simultanées avec Mulhouse Philidor 1 N3).
+- **Évidence empirique** : 117 clubs alignent 2-4 équipes simultanément
+  N3 ronde 5 saison 2024. Gap recall by_pool_size = 0.28 (small Q1 0.74
+  vs xlarge Q4 0.46) — direction cohérente avec hypothèse multi-équipes.
+- **Impact rationale** : Critical (4). Bloquant gates absolus P3G07-P3G11
+  (recall, jaccard, brier, ece, mae, mcnemar legacy). Sans fix, ALI
+  produit des prédictions structurellement erronées sur clubs multi-équipes
+  qui sont la majorité (117/N clubs N3 saison 2024).
+- **Probability rationale** : Certain (5). Vérifié empiriquement T22
+  backtest hold-out 2024 (commit bb9c434).
+- **Mitigation Phase 3** : NONE possible. Limitation acceptée gates
+  report §7.5. Compensé par Wilcoxon paired SOTA (ADR-017) qui démontre
+  significativité statistique sur recall continu (p=8.26e-13) malgré
+  gates absolus FAIL.
+- **Mitigation Phase 4a Approche A SOTA (REQUIRED, D-P3-19, ADR-016 NEW
+  à rédiger)** : ALI conditionné par CE-adverse miroir. Pour chaque club
+  adverse multi-équipes, un solveur OR-Tools simule l'allocation joueurs
+  × équipes adverses sous mêmes contraintes FFE A02 §3.7.b/c/d/f.
+  `ScenarioGenerator.generate(opponent_club_id, target_team,
+  simultaneous_teams)` reçoit la liste des autres équipes adverses + leur
+  allocation simulée. Pool sampling target_team = pool club moins
+  joueurs alloués aux équipes supérieures.
+- **Re-backtest hold-out 2024 attendu** : recall ≥ 0.65 (vs 0.57),
+  Jaccard ≥ 0.50 (vs 0.39), Brier ≤ 0.22 (vs 0.29). McNemar n_disc ≥ 25
+  attendu → puissance α=0.05 OK.
+- **Approche B rejetée** (joint sampling sans CE-adverse miroir) :
+  moins SOTA car ne réutilise pas primitives FFE OR-Tools Phase 4b ;
+  risque divergence logique CE-user vs inférence ALI.
+- **Status** : 🔴 CRITICAL OPEN. Bloquant Phase 4a acceptance gate.
+- **Cross-ref** : `docs/iso/AI_RISK_ASSESSMENT.md` §R-ALI-06,
+  `docs/iso/ALI_QUALITY_GATES_REPORT.md` §6.2 + §7.5,
+  `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md`
+  §Phase 4a + 4b, `memory/project_debt_current.md` D-P3-19.
+
+**Controls (R-ALI-01..06):**
 - R-ALI-01 : `services/ali/verifiability.py` PUBLIC/PRIVATE partition +
   `services/ali/confidence.py` ConfidenceLevel metadata (Phase 3 §4.13)
 - R-ALI-02 : `BacktestRunner.skip_failed_matches=True` default +
@@ -255,6 +297,9 @@ Limitations). Cross-référencés `docs/iso/ALI_MODEL_CARD.md` §10 et §7.0
   drift_tracker.py` (designed Phase 3 §4.15.3 spec, not implemented)
 - R-ALI-05 : Phase 5 deploy plan : Oracle VM + capacity benchmark +
   load test (`scripts/benchmark/ali_benchmark.py` designed Phase 3 §6ter)
+- R-ALI-06 : NONE Phase 3 (limitation acceptée). Phase 4a REQUIRED :
+  primitives `services/ce/` OR-Tools (à concevoir, ADR-016) +
+  `ScenarioGenerator.generate(simultaneous_teams=...)` extension
 
 **Cross-references** :
 - Sources de biais détaillées : `docs/iso/ALI_MODEL_CARD.md` §7.0
