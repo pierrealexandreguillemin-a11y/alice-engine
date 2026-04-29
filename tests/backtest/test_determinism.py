@@ -209,9 +209,12 @@ def test_backtest_runner_diverges_different_seed(harness: BacktestHarness) -> No
     """Sanity : seed=42 vs seed=123 produisent au moins 1 metric differente.
 
     Sans ce check, un bug "seed runner ignore" rendrait T18.3 vacuously true.
+
+    Note: max_matches=15 (vs 5 pre-T22) car stratified sampling + champion mode
+    skip clubs petits (R-ALI-02) — garantit n>=2 matches pour bootstrap.
     """
-    cfg42 = RunnerConfig(max_matches=5, rondes=(5,), n_bootstrap=200, seed=42)
-    cfg123 = RunnerConfig(max_matches=5, rondes=(5,), n_bootstrap=200, seed=123)
+    cfg42 = RunnerConfig(max_matches=15, rondes=(5, 7), n_bootstrap=200, seed=42)
+    cfg123 = RunnerConfig(max_matches=15, rondes=(5, 7), n_bootstrap=200, seed=123)
     r42 = BacktestRunner(harness=harness, config=cfg42).run()
     r123 = BacktestRunner(harness=harness, config=cfg123).run()
 
