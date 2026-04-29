@@ -130,5 +130,5 @@ stages:
     outs:
     - path: reports/backtest/ali_holdout_2024.json
       hash: md5
-      md5: 7b10b137f1a10c5e7065c16e39dfe2c1
-      size: 48932
+      md5: 5dad0346434e2b1ae04b37b52d153df6
+      size: 47401
