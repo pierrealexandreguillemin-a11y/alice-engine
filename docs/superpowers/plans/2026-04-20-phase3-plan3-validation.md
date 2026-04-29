@@ -239,9 +239,9 @@ Peer Review Final ─── Merge master
 **Files:** `dvc.yaml` (2 stages : refit_mlp_champion + backtest_holdout_2024), `dvc.lock`, `.dvc/config`, `.dvcignore`, doc append `docs/devops/ML_MODEL_VERSIONING_STANDARDS.md`
 **DoD:** reports/backtest/ali_holdout_2024.json tracked (cache: false, persist), models/cache/mlp_*.joblib + temperature_T DVC-cached avec md5 deps, DAG `refit → backtest`, `dvc status` reproducible, lineage commit ↔ artefacts via dvc.lock. **Limites assumées Phase 5** : pas de remote DVC distant + pas de couverture training Kaggle (CatBoost/XGB/LGB).
 
-### T25. verify_plan3_dod.sh + peer review FINAL + merge
-**Files:** `scripts/verify_plan3_dod.sh`
-**DoD:** 16 P3G gates + 7 structural gates via script. Exit 0 si all green. Peer review skill `superpowers:requesting-code-review` MANDATORY, 0 finding critique. Merge fast-forward master.
+### T25. verify_plan3_dod.sh + peer review FINAL + merge — DONE 2026-04-29
+**Files:** `scripts/verify_plan3_dod.sh` (270L), `docs/architecture/adr/ADR-016-ali-conditioned-multi-team-adverse-ce-mirror.md` (stub Proposed Phase 4a), `docs/project/DEBT_LEDGER.md` (versioned mirror), `docs/iso/AI_RISK_REGISTER.md` (R-ALI-06 ajouté §2.7), commit `9e51dd2` (JALON #3 fixes) + `652fac3` (dvc.lock resync), merge master fast-forward.
+**DoD:** 16 P3G gates + 9 structural gates via script (PRIMARY = BSS+Wilcoxon, SECONDARY = absolus FAIL accepté D-P3-19). DoD verify exit 0 "Plan 3 V2 DoD : SATISFIED". JALON #3 peer review (skill `superpowers:requesting-code-review`) verdict "Ready to merge WITH FIXES" — 2 Important + 2 Minor traçabilité ISO appliqués. 0 finding critique. Merge fast-forward master OK (commit `652fac3`, 90 commits ahead origin).
 
 ---
 

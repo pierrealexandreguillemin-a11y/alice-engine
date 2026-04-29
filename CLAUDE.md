@@ -90,7 +90,7 @@ Résumé session : `memory/project_session_resume.md`
 | Couche | Statut |
 |--------|--------|
 | ML Training | **DONE** — Champion MLP(32,16) stacking 0.5530, ECE_draw 0.0016. AG ÉLIMINÉ (ADR-011). |
-| API FastAPI | **DONE Plan 3 T22+T23 (dette résorbée 2026-04-28/29)** — /compose + /recompose wired. Stacking pipeline E2E champion mode FULL (D-P3-13 résorbée). 11 FFE rules (ADR-012). composer.py legacy supprimé (D5). seed exposé (D-P2-04). MC fail-fast (D-P3-12). Wilcoxon SOTA McNemar pivot (ADR-017, D-P3-18). VerifiabilityClassifier 3-class (D-P3-09). |
+| API FastAPI | **DONE Plan 3 V2 COMPLETE 2026-04-29 (T1-T25 + JALON #3 mergé master 652fac3)** — /compose + /recompose wired. Stacking pipeline E2E champion mode FULL (D-P3-13 résorbée). 11 FFE rules (ADR-012). composer.py legacy supprimé (D5). seed exposé (D-P2-04). MC fail-fast (D-P3-12). Wilcoxon SOTA McNemar pivot (ADR-017, D-P3-18). VerifiabilityClassifier 3-class (D-P3-09). T24 DVC dvc.yaml 2 stages reproducibles. T25 verify_plan3_dod.sh 16 P3G + 9 structural. ADR-016 stub Proposed Phase 4a + DEBT_LEDGER versionné. |
 | ALI prédiction adverse | **DONE-SOTA Plan 2** — Monte Carlo hybride (10 TopK + 10 MC LHS+antithetic), copule gaussienne (Sklar 1959) ; fallback Elo si pas d'opponent_club_id |
 | CE multi-équipe | **FALLBACK** — Tri Elo + E[score] (Phase 4 = OR-Tools) |
 | Deploy SaaS multi-tenant | MANQUANT (Phase 5 — scope étendu 2026-04-19) |
