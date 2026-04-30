@@ -33,6 +33,7 @@ autogluon-tabular>=1.5.0   # tabular-only sub-package (pas multimodal)
 torch>=2.0.0               # Required for TabPFN
 
 scikit-learn>=1.4.0
+statsmodels>=0.14.0        # McNemar exact + chi2 Yates (scripts/backtest/statistical.py)
 pandas>=2.1.0
 numpy>=1.26.0
 pyarrow>=14.0.0            # Parquet (plus rapide que CSV)
