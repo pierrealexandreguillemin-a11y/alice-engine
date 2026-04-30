@@ -122,6 +122,9 @@ asyncio_mode = "auto"
 # -p no:cacheprovider = évite le cache pytest qui consomme RAM
 # --import-mode=importlib = import plus léger
 addopts = "-v --tb=short -p no:cacheprovider --import-mode=importlib"
+markers = [
+    "slow: tests > 5s (e.g. parquets reload, full pipeline). Exclus pre-push via -m 'not slow'. Run en CI async ou via pytest -m slow.",
+]
 
 # ============================================
 # COVERAGE

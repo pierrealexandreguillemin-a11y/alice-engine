@@ -20,10 +20,13 @@ from services.ali.cache import ALIDataCache
 J = Path("data/joueurs.parquet")
 E = Path("data/echiquiers.parquet")
 
-pytestmark = pytest.mark.skipif(
-    not (J.exists() and E.exists()),
-    reason="data parquets absent du runner",
-)
+pytestmark = [
+    pytest.mark.slow,
+    pytest.mark.skipif(
+        not (J.exists() and E.exists()),
+        reason="data parquets absent du runner",
+    ),
+]
 
 
 def test_cache_loads_parquets() -> None:
