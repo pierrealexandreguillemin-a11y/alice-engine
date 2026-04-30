@@ -19,10 +19,13 @@ if TYPE_CHECKING:
 J = Path("data/joueurs.parquet")
 E = Path("data/echiquiers.parquet")
 
-pytestmark = pytest.mark.skipif(
-    not (J.exists() and E.exists()),
-    reason="data parquets absent",
-)
+pytestmark = [
+    pytest.mark.slow,
+    pytest.mark.skipif(
+        not (J.exists() and E.exists()),
+        reason="data parquets absent",
+    ),
+]
 
 
 @pytest.fixture(scope="module")

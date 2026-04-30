@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
+import pytest
 
 from services.ali.history import (
     HistoryEnricher,
@@ -129,8 +130,12 @@ def test_streak_current_round_1_all_false() -> None:
     assert lag3 is False
 
 
+@pytest.mark.slow
 def test_enricher_integration_real_parquets(ali_data_cache: ALIDataCache) -> None:
-    """Smoke test : enricher tourne end-to-end sur vrais parquets."""
+    """Smoke test : enricher tourne end-to-end sur vrais parquets.
+
+    Slow : charge ali_data_cache (~92s). Couvert en CI async.
+    """
     first_club = next(iter(ali_data_cache.joueurs_by_club.keys()))
     first_row = ali_data_cache.joueurs_by_club[first_club].iloc[0]
     candidate = PlayerCandidate(

@@ -26,6 +26,11 @@ if TYPE_CHECKING:
     from services.ali.cache import ALIDataCache
 
 
+# All tests in this file consume `ali_data_cache` fixture (loads real parquets,
+# ~92s). Excluded from pre-push hook (R-PRE-PUSH-01); covered by CI async.
+pytestmark = pytest.mark.slow
+
+
 REAL_A02 = Path("config/ffe_rules/a02.json")
 CLASSIF = Path("config/ffe_rules/alice_verifiability.json")
 

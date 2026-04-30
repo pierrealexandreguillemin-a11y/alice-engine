@@ -42,9 +42,15 @@ def ali_data_cache() -> ALIDataCache:
     return ALIDataCache.load_from_parquets(path_j, path_e)
 
 
-@pytest.fixture(autouse=True)
-def cleanup_after_test() -> None:
-    """Force garbage collection après chaque test."""
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_after_module() -> None:
+    """Force garbage collection après chaque module test.
+
+    Auparavant scope=function (autouse). Avec ali_data_cache session-scoped
+    (4.6 GB en RAM), gc.collect() prenait ~5.8s par test ⇒ ~6 min overhead
+    sur ~60 tests utilisant le cache (R-PRE-PUSH-01 root cause analysis
+    2026-04-30). Module-scoped suffit pour libérer mémoire entre fichiers.
+    """
     yield
     gc.collect()
 
