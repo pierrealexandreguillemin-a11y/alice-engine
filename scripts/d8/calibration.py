@@ -36,6 +36,13 @@ def expected_calibration_error(
         raise ValueError(msg)
     if len(probs) == 0:
         return 0.0
+    # ISO 27034 input validation : reject NaN/inf + out-of-range probs
+    if not np.all(np.isfinite(probs)):
+        msg = "probs contain NaN or inf values"
+        raise ValueError(msg)
+    if probs.min() < 0.0 or probs.max() > 1.0:
+        msg = f"probs out of [0, 1] range: min={probs.min():.4f} max={probs.max():.4f}"
+        raise ValueError(msg)
     edges = np.linspace(0, 1, n_bins + 1)
     ece = 0.0
     n = len(probs)

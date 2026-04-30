@@ -179,3 +179,31 @@ def test_multicalibration_alpha_returns_max() -> None:
 def test_ece_per_group_n_bins_validation() -> None:
     with pytest.raises(ValueError):
         compute_ece_per_group(np.array([0.5]), np.array([1]), ["M"], n_bins=0)
+
+
+def test_ece_nan_probs_raises() -> None:
+    probs = np.array([0.5, float("nan"), 0.7])
+    labels = np.array([1, 1, 1])
+    with pytest.raises(ValueError, match="NaN or inf"):
+        expected_calibration_error(probs, labels, n_bins=10)
+
+
+def test_ece_inf_probs_raises() -> None:
+    probs = np.array([0.5, float("inf"), 0.7])
+    labels = np.array([1, 1, 1])
+    with pytest.raises(ValueError, match="NaN or inf"):
+        expected_calibration_error(probs, labels, n_bins=10)
+
+
+def test_ece_probs_out_of_range_high_raises() -> None:
+    probs = np.array([0.5, 1.5, 0.7])
+    labels = np.array([1, 1, 1])
+    with pytest.raises(ValueError, match=r"out of \[0, 1\]"):
+        expected_calibration_error(probs, labels, n_bins=10)
+
+
+def test_ece_probs_out_of_range_low_raises() -> None:
+    probs = np.array([0.5, -0.1, 0.7])
+    labels = np.array([1, 1, 1])
+    with pytest.raises(ValueError, match=r"out of \[0, 1\]"):
+        expected_calibration_error(probs, labels, n_bins=10)
