@@ -84,4 +84,5 @@ Index complet de tous les docs du projet. Consulter AVANT de poser des questions
 - `docs/development/PYTHON-HOOKS-SETUP.md` — Setup hooks Python
 - `docs/devops/GITHUB_ACTIONS_DISK_CLEANUP.md` — CI disk cleanup
 - `docs/devops/ML_MODEL_VERSIONING_STANDARDS.md` — DVC versioning (TODO)
+- `docs/devops/PRE_PUSH_WORKFLOW.md` — **R-PRE-PUSH-01** push <90s + hooks pre-push/manual
 - `docs/operations/DEPLOIEMENT_RENDER.md` — Deploy Render

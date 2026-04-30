@@ -252,7 +252,8 @@ repos:
 
       # ------------------------------------------------------------------------
       # DOCUMENTATION: MkDocs Build (ISO 15289 - Documentation Quality)
-      # Validates documentation builds without errors
+      # Manual stage — mkdocs strict ~5min, viole le contrat push <2min.
+      # Run via : `pre-commit run --hook-stage manual mkdocs-build` ou en CI.
       # ------------------------------------------------------------------------
       - id: mkdocs-build
         name: "ISO 15289 | Documentation Build"
@@ -261,7 +262,7 @@ repos:
         args: [-m, mkdocs, build, --strict]
         language: system
         pass_filenames: false
-        stages: [pre-push]
+        stages: [manual]
 
   # ============================================================================
   # D10 : ALICE <-> chess-app FFE rules drift alert (Phase 3)
