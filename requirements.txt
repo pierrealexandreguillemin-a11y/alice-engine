@@ -20,10 +20,15 @@ lightgbm>=4.3.0            # 3eme choix - stacking ensemble
 optuna>=4.6.0              # Hyperparameter optimization (ISO 42001)
 
 # ============================================
-# AutoML - AutoGluon + TabPFN (ISO 42001)
-# @see docs/plans/AUTOGLUON_IMPLEMENTATION_PLAN.md
+# AutoML - AutoGluon (ISO 42001) — ÉLIMINÉ ADR-011 (2026-04-16)
+# Code legacy en scripts/autogluon/ et scripts/cloud/train_autogluon_*.py
+# n'importe que `autogluon.tabular.TabularPredictor` ⇒ on n'a besoin
+# que de `autogluon.tabular`. Le meta-pkg `autogluon` tire
+# `autogluon-multimodal` qui exige `lightning>=2.5.1,<2.6` insolvable
+# par uv (lightning absent du registry public récent).
+# @see docs/architecture/DECISIONS.md §ADR-011
 # ============================================
-autogluon>=1.5.0           # AutoML framework (multi-layer stacking)
+autogluon-tabular>=1.5.0   # tabular-only sub-package (pas multimodal)
 # tabpfn>=2.5.0            # Foundation model (GPU optional) - install separately
 torch>=2.0.0               # Required for TabPFN
 
