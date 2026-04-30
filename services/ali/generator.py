@@ -73,7 +73,7 @@ class ScenarioGenerator:
         pool = self._pool_loader.load_pool(opponent_club_id, round_date, overrides)
         if len(pool) < context.team_size:
             raise ValueError(
-                f"pool too small for {opponent_club_id}: " f"{len(pool)} < {context.team_size}",
+                f"pool too small for {opponent_club_id}: {len(pool)} < {context.team_size}",
             )
 
         # 2. Enrich features (F2 recency + F3 streak)

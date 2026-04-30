@@ -43,7 +43,7 @@ def resolve_chess_app_dir() -> Path | None:
         if path.exists():
             return path
         print(
-            f"WARNING: CHESS_APP_RULES_DIR={env_path} does not exist, " f"falling back to default",
+            f"WARNING: CHESS_APP_RULES_DIR={env_path} does not exist, falling back to default",
             file=sys.stderr,
         )
     if CHESS_APP_RULES_DIR_DEFAULT.exists():

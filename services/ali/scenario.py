@@ -84,5 +84,5 @@ class ScenarioSet:
         weights_sum = sum(s.weight for s in self.scenarios)
         if abs(weights_sum - 1.0) > _WEIGHTS_SUM_TOLERANCE:
             raise ValueError(
-                f"weights sum {weights_sum} != 1.0 " f"(tolerance {_WEIGHTS_SUM_TOLERANCE})",
+                f"weights sum {weights_sum} != 1.0 (tolerance {_WEIGHTS_SUM_TOLERANCE})",
             )
