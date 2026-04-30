@@ -87,11 +87,14 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install uv (fast resolver, avoids pip resolution-too-deep)
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install uv
+
+      - name: Install dependencies (via uv)
+        run: |
+          uv pip install --system -r requirements.txt -r requirements-dev.txt
 
       - name: Run Tests (ISO 29119)
         run: |
@@ -240,11 +243,11 @@ jobs:
       - name: Install Graphviz
         run: sudo apt-get install -y graphviz
 
-      - name: Install dependencies
+      - name: Install dependencies (via uv)
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install uv
+          uv pip install --system -r requirements.txt -r requirements-dev.txt
 
       - name: Architecture Health (ISO 42010)
         run: python -m scripts.analyze_architecture
@@ -294,11 +297,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install dependencies (via uv)
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install uv
+          uv pip install --system -r requirements.txt -r requirements-dev.txt
 
       - name: Generate ISO Documentation (ISO 15289)
         run: python -m scripts.update_iso_docs
