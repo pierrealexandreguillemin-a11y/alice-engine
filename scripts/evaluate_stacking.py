@@ -103,7 +103,6 @@ def fit_meta_learner(
     """Fit a meta-learner on stacked predictions, return model + test probas."""
     if kind == "lr":
         model = LogisticRegression(
-            multi_class="multinomial",
             solver="lbfgs",
             max_iter=1000,
             C=1.0,

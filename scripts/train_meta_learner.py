@@ -72,7 +72,7 @@ def _calibrate_dirichlet(
     reg = L2 regularization (high = closer to identity = temperature scaling).
     """
     log_probas = np.log(np.clip(y_proba, 1e-7, 1.0))
-    lr = LogisticRegression(C=1.0 / reg, max_iter=1000, multi_class="multinomial", solver="lbfgs")
+    lr = LogisticRegression(C=1.0 / reg, max_iter=1000, solver="lbfgs")
     lr.fit(log_probas, y_true)
     return lr
 
@@ -185,9 +185,7 @@ def main() -> None:
     # Wolpert 1992, mlxtend default, consensus recommendation
     # =========================================================
     # C=1.0 = moderate regularization. Will grid-search if needed.
-    lr = LogisticRegression(
-        C=1.0, max_iter=1000, multi_class="multinomial", solver="lbfgs", random_state=42
-    )
+    lr = LogisticRegression(C=1.0, max_iter=1000, solver="lbfgs", random_state=42)
     lr.fit(X_oof, y_oof)
     logger.info("LogReg trained: coef shape=%s", lr.coef_.shape)
 

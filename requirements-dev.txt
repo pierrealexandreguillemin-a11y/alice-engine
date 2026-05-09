@@ -16,7 +16,7 @@ mypy>=1.10.0
 types-requests>=2.32.0
 
 # === TESTING ===
-pytest>=8.2.0
+pytest>=9.0.3  # CVE-2025-71176 fix
 pytest-asyncio>=0.23.0
 pytest-cov>=5.0.0
 pytest-xdist>=3.6.0

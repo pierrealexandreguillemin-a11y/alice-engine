@@ -30,7 +30,13 @@ pre-commit/pre-push light en local, full suite + coverage en CI async.
 - ISO 27001 — large file detection
 - ISO 29119 — pytest-fast (`-m "not slow"` + 19 ignores)
 - ISO 25010 — xenon complexity
-- ISO 27001 — pip-audit (CVE local)
+- ISO 27001 — pip-audit (CVE — projet `.venv/` isolé, pas Python global)
+  - Wrapper : `scripts/dev/audit_venv.py` force `.venv/Scripts/python.exe` (Windows)
+    ou `.venv/bin/python` (POSIX) pour `--local`. Empêche la pollution
+    par tooling globalement installé (jupyter, langchain-core, banks, etc.)
+    qui ne fait pas partie d'Alice-Engine. Source ignore-list authoritative
+    dans le wrapper Python (annoté package + raison + re-check date).
+  - Fail-fast clair si `.venv/` manquant avec commande de remédiation.
 
 ### Manual stage (run on-demand)
 

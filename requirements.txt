@@ -72,7 +72,7 @@ lxml>=6.1.0  # CVE-2026-41066 fix
 # Persistance modeles et tracking
 # ============================================
 joblib>=1.3.0
-mlflow>=2.10.0             # Experiment tracking (ISO 42001)
+mlflow>=3.11.1             # Experiment tracking (ISO 42001) — CVE-2026-33865 fix
 pyyaml>=6.0                # Config hyperparameters
 
 # ============================================
@@ -89,7 +89,7 @@ tqdm>=4.66.0               # Progress bars
 # ============================================
 # Tests (ISO 29119)
 # ============================================
-pytest>=7.4.0
+pytest>=9.0.3              # CVE-2025-71176 fix
 pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0          # Coverage
 
@@ -103,6 +103,20 @@ mypy>=1.8.0                # Type checking
 # Securite (ISO 27034)
 # ============================================
 pip-audit>=2.6.0           # Audit dependances
+
+# ============================================
+# Security pins for transitive deps (ISO 27001 — CVE rotation 2026-05-09)
+# These minimums prevent installing vulnerable transitive versions in CI.
+# Re-audit quarterly. Ignore-list authoritative source: scripts/dev/audit_venv.py
+# ============================================
+aiohttp>=3.13.4            # CVE-2026-22815/34514/34518/34519/34520/34525
+cryptography>=46.0.7       # CVE-2026-34073, CVE-2026-39892
+gdown>=5.2.2               # CVE-2026-40491
+gitpython>=3.1.50          # CVE-2026-42215/42284/44244 + GHSA-mv93-w799-cj2w
+mako>=1.3.12               # CVE-2026-44307
+pillow>=12.2.0             # CVE-2026-40192/42308/42309/42310/42311
+python-multipart>=0.0.27   # CVE-2026-40347, CVE-2026-42561
+requests>=2.33.0           # CVE-2026-25645
 
 # ============================================
 # Explicabilite AI (ISO 42001)

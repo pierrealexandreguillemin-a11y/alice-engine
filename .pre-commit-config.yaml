@@ -181,21 +181,16 @@ repos:
       # ------------------------------------------------------------------------
       # SECURITY: Dependency Audit (ISO 27001 - Vulnerability Management)
       # Checks for known vulnerabilities in dependencies (CVE database)
+      #
+      # The wrapper scripts/dev/audit_venv.py forces pip-audit to target the
+      # project's isolated `.venv/` (not the host Python). `language: system`
+      # otherwise inherits the user's PATH Python which may contain unrelated
+      # tooling, polluting the security signal.
       # ------------------------------------------------------------------------
       - id: pip-audit
-        name: "ISO 27001 | Dependency Vulnerabilities"
-        description: "Audit dependencies for known CVEs"
-        entry: python
-        args: [
-          -m, pip_audit, --strict, --local,
-          # Unfixable upstream CVEs — autogluon transitive deps, not used by Alice-Engine
-          --ignore-vuln, CVE-2025-69872,
-          --ignore-vuln, GHSA-rf74-v2fm-23pw,   # nltk 3.9.3 - no fix available
-          --ignore-vuln, CVE-2026-33230,         # nltk 3.9.3 - no fix available
-          --ignore-vuln, CVE-2026-33231,         # nltk 3.9.3 - no fix available
-          --ignore-vuln, CVE-2026-25990,         # pillow 11.3 - autogluon caps <12
-          --ignore-vuln, CVE-2026-4539,          # pygments 2.19.2 - 2.20.0 breaks pymdownx
-        ]
+        name: "ISO 27001 | Dependency Vulnerabilities (project .venv)"
+        description: "Audit project .venv for known CVEs (isolated from host Python)"
+        entry: python scripts/dev/audit_venv.py
         language: system
         pass_filenames: false
         stages: [pre-push]
