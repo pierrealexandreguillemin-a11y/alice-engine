@@ -273,7 +273,7 @@ def main() -> None:
                 (
                     m.recall_ali
                     for m in per_match
-                    if m.user_team == c.user_team and m.opp_team == c.opp_team
+                    if m.user_team == c.user_team and m.opponent_team == c.opp_team
                 ),
                 0.0,
             )
