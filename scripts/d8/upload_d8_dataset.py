@@ -77,24 +77,11 @@ INPUT_ARTEFACT_SOURCES: tuple[tuple[Path, str], ...] = (
 # to sys.path at kernel runtime; run.py / aggregate.py rely on package layout).
 CODE_PACKAGE_DIRS: tuple[str, ...] = (
     "app",
-    "scripts/d8",
-    "scripts/backtest",
-    "scripts/features",
-    "scripts/serving",
-    "scripts/training",  # imported by scripts.serving.pyfunc_wrapper (NUMERIC_FEATURES)
-    "services/ali",
-    "services/ffe",
+    "scripts",  # whole tree — services.__init__ + scripts/training transitively
+    "services",  # idem
 )
 CODE_TOPLEVEL_FILES: tuple[str, ...] = (
-    "scripts/__init__.py",
-    "scripts/baselines.py",
-    "scripts/kaggle_metrics.py",
-    "scripts/kaggle_quality_gates.py",
     "scripts/d8/kaggle-requirements.txt",  # pip install at kernel boot
-    "services/__init__.py",
-    "services/inference.py",
-    "services/feature_store.py",
-    "services/data_loader.py",  # imported by services/__init__.py
 )
 # kaggle-deployment skill : `kaggle kernels push` uploads ONLY code_file.
 # Per-saison thin wrappers (run_2021.py … run_2024.py) are referenced by
@@ -200,35 +187,16 @@ def _write_code_sha(code_staging: Path, code_sha: str) -> None:
 
 
 def _kaggle_create_or_version(staging: Path, msg: str) -> None:
-    """Force `version` if dataset exists, else `create`.
-
-    `kaggle datasets create` exits 0 even on 'title in use' error → returncode
-    check is unreliable. We explicitly probe existence via `datasets status`.
-    Also creates Windows kaggle temp dir (kaggle-deployment skill 2026-03-23).
-    """
+    """Always `version` (assumes dataset already created)."""
     # Windows kaggle CLI temp dir bug — pre-create directories
     temp_root = Path.home() / "AppData" / "Local" / "Temp" / ".kaggle" / "uploads"
     (temp_root / "kaggle").mkdir(parents=True, exist_ok=True)
     (temp_root / staging.relative_to(REPO).parent).mkdir(parents=True, exist_ok=True)
 
-    slug = json.loads((staging / "dataset-metadata.json").read_text())["id"]
-    status = subprocess.run(  # noqa: S603 - args are static literals
-        ["kaggle", "datasets", "status", slug],
-        capture_output=True,
-        text=True,
-        check=False,
+    subprocess.run(  # noqa: S603 - static literals
+        ["kaggle", "datasets", "version", "-p", str(staging), "-m", msg, "-r", "zip"],
+        check=True,
     )
-    exists = status.returncode == 0 and status.stdout.strip() in ("ready", "creating")
-    if exists:
-        subprocess.run(  # noqa: S603
-            ["kaggle", "datasets", "version", "-p", str(staging), "-m", msg, "-r", "zip"],
-            check=True,
-        )
-    else:
-        subprocess.run(  # noqa: S603
-            ["kaggle", "datasets", "create", "-p", str(staging), "-r", "zip"],
-            check=True,
-        )
 
 
 def main() -> int:

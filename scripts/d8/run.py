@@ -127,11 +127,11 @@ def _run_backtest(saison: int) -> Any:
     """Boot Plan 3 BacktestHarness + run one saison via BacktestRunner."""
     from scripts.backtest.harness import BacktestHarness
     from scripts.backtest.runner import BacktestRunner
-    from scripts.backtest.runner_sampling import RunnerConfig
+    from scripts.backtest.runner_types import RunnerConfig
 
     harness = BacktestHarness()
     harness.setup()
-    config = RunnerConfig(saisons=(saison,))
+    config = RunnerConfig(saison=saison)
     runner = BacktestRunner(harness=harness, config=config)
     return runner, runner.run()
 
