@@ -6,7 +6,7 @@
   "kernel_type": "script",
   "is_private": true,
   "enable_gpu": false,
-  "enable_internet": false,
+  "enable_internet": true,
   "dataset_sources": [
     "pierrax/alice-d8-input",
     "pierrax/alice-d8-code"
@@ -15,7 +15,7 @@
   "competition_sources": [],
   "environment_variables": {
     "ALICE_SAISON": "2023",
-    "ALICE_CODE_SHA": "db1db62f4f57904b6aef355dc42aff62c7279da5",
+    "ALICE_CODE_SHA": "cba9df0e20001ed2758cd2f662707dcda7f208cb",
     "JOUEURS_PARQUET": "/kaggle/input/alice-d8-input/data/joueurs.parquet",
     "ECHIQUIERS_PARQUET": "/kaggle/input/alice-d8-input/data/echiquiers.parquet",
     "FFE_RULES_DIR": "/kaggle/input/alice-d8-input/config/ffe_rules",

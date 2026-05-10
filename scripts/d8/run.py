@@ -21,12 +21,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-# Kaggle entry point : prepend code dataset to sys.path BEFORE imports.
-# Datasets mount at /kaggle/input/<slug>/ on Kaggle; alice-d8-code holds Python
-# package tree (app/, scripts/, services/) per upload_d8_dataset.py staging.
+# Kaggle entry point : prepend code dataset to sys.path + pip install pinned deps.
 _KAGGLE_CODE_DIR = Path("/kaggle/input/alice-d8-code")
 if _KAGGLE_CODE_DIR.is_dir() and str(_KAGGLE_CODE_DIR) not in sys.path:
     sys.path.insert(0, str(_KAGGLE_CODE_DIR))
+    _req = _KAGGLE_CODE_DIR / "scripts" / "d8" / "kaggle-requirements.txt"
+    if _req.is_file():
+        import subprocess  # noqa: S404 - controlled args
+
+        subprocess.run(  # noqa: S603 - static literals
+            [sys.executable, "-m", "pip", "install", "--quiet", "-r", str(_req)],
+            check=False,
+        )
 
 from scripts.d8 import breakdowns, conformal, loader  # noqa: E402 - sys.path setup above
 from scripts.d8.types import D8GroupBreakdown, D8Lineage, D8SaisonReport  # noqa: E402
@@ -224,41 +230,51 @@ def main() -> None:
     logger.info("D8 saison %d — conformal coverage 90%%", saison)
     conformal_out = _compute_conformal_stage(per_match)
 
-    # Stress + DRO : per-match perturbation re-runs require BacktestHarness
-    # cache-mutation infrastructure (perturb opponent pool Elo / roster, re-run
-    # via runner.run_single, restore cache). That infra is NOT yet built —
-    # tracked as dette `D-2026-05-09-d8-perturbation-runs` in
-    # `memory/project_debt_current.md`. At this stage we emit a per-saison
-    # baseline summary only and flag `perturbation_closure_pending`. Aggregator
-    # (Task 10) + Kaggle exec (Task 14) will surface this gap to gates G_ROB_*.
-    recall_baseline_mean = float(sum(m.recall_baseline for m in per_match) / max(len(per_match), 1))
-    recall_ali_mean = float(sum(m.recall_ali for m in per_match) / max(len(per_match), 1))
-    logger.warning(
-        "D8 saison %d — stress_elo / stress_roster / DRO perturbation closures "
-        "NOT YET WIRED (dette D-2026-05-09-d8-perturbation-runs). Emitting "
-        "baseline-only summary; gates G_ROB_01..05 + G_ROB_08..09 will report "
-        "INCONCLUSIVE in aggregator until infra ready.",
-        saison,
+    # Real per-match perturbation closures via perturb_runner (cache-mutation
+    # context manager). Stratified subset N=30 per saison (spec §11 + Efron 1993).
+    # D-2026-05-09-d8-perturbation-runs RESORBE.
+    from scripts.d8.perturb_runner import (
+        compute_dro_real,
+        compute_stress_elo_real,
+        compute_stress_roster_real,
+        stratified_subset,
     )
-    pending_note = "perturbation_closure_pending — cf D-2026-05-09-d8-perturbation-runs"
+
+    candidates = runner.sample_matches()
+    subset = stratified_subset([c for c in candidates if c.saison == saison], seed=42)
+    logger.info("D8 saison %d — stress subset N=%d", saison, len(subset))
+    subset_baseline_recalls = [
+        float(
+            next(
+                (
+                    m.recall_ali
+                    for m in per_match
+                    if m.user_team == c.user_team and m.opp_team == c.opp_team
+                ),
+                0.0,
+            )
+        )
+        for c in subset
+    ]
     stress_elo_summary = {
         "noise_levels": list(NOISE_LEVELS_ELO),
-        "baseline_recall_mean": recall_baseline_mean,
-        "ali_recall_mean": recall_ali_mean,
-        "status": pending_note,
+        "subset_n": len(subset),
+        "outcomes": [
+            asdict(o) for o in compute_stress_elo_real(runner, subset, subset_baseline_recalls)
+        ],
     }
     stress_roster_summary = {
         "turnover_rates": list(TURNOVER_RATES_ROSTER),
-        "baseline_recall_mean": recall_baseline_mean,
-        "ali_recall_mean": recall_ali_mean,
-        "status": pending_note,
+        "subset_n": len(subset),
+        "outcomes": [
+            asdict(o) for o in compute_stress_roster_real(runner, subset, subset_baseline_recalls)
+        ],
     }
     dro_summary = {
         "epsilons": list(DRO_EPSILONS),
         "n_perturbations": DRO_N_PERTURBATIONS,
-        "baseline_recall_mean": recall_baseline_mean,
-        "ali_recall_mean": recall_ali_mean,
-        "status": pending_note,
+        "subset_n": len(subset),
+        "outcomes": {str(eps): asdict(o) for eps, o in compute_dro_real(runner, subset).items()},
     }
 
     logger.info("D8 saison %d — assembling D8SaisonReport", saison)

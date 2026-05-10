@@ -1,21 +1,20 @@
 """D8 aggregator — fuse 4 saisons + global gates + render markdown reports.
 
-Reads 4 d8_saison_{2021..2024}.json (per-saison kernel outputs schema d8.v1),
-verifies cross-saison lineage coherence (MLP champion + temp scaler SHA-256),
-recomputes breakdowns + multicalibration + conformal globally on N=280, evaluates
-19 G-A SOTA gates, marks stress/DRO INCONCLUSIVE pending D-2026-05-09-d8-perturbation-runs,
-renders D8_FINDINGS.md + D8_FAILURE_ANALYSIS_LOG.md + gates_19_status.json.
-
-Output schema d8-aggregator.v1 (D8FullReport types.py).
-ISO 27001 §A.14.2.5 lineage verification, 5055 (<300 lines).
+Reads 4 d8_saison_{2021..2024}.json kernel outputs schema d8.v1, verifies cross-
+saison MLP+temp_scaler SHA-256 coherence, fuses per_match (N≈280), aggregates
+real perturbation outcomes (D-2026-05-09 RESORBE), evaluates 19 G-A SOTA gates,
+emits INCONCLUSIVE only on missing data (epistemic uncertainty), renders
+D8_FINDINGS.md + D8_FAILURE_ANALYSIS_LOG.md + gates_19_status.json + JSON.
+Output schema d8-aggregator.v1. ISO 27001 §A.14.2.5 + 5055 (<300L).
 
 Document ID: ALICE-D8-AGGREGATE
-Version: 1.0.0
+Version: 2.0.0
 """
 
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,7 +28,7 @@ from scripts.d8.gates import (
     gates_summary,
     render_failure_analysis_md,
 )
-from scripts.d8.types import D8FullReport, D8GateEvaluation, D8GateStatus, D8Lineage
+from scripts.d8.types import D8FullReport, D8GateEvaluation, D8Lineage
 
 DEFAULT_SAISONS: tuple[int, ...] = (2021, 2022, 2023, 2024)
 PERTURBATION_GATES_INCONCLUSIVE: tuple[str, ...] = (
@@ -118,7 +117,7 @@ def _fairness_metrics(per_match: list[dict[str, Any]]) -> dict[str, float]:
     }
 
 
-_PERTURBATION_NAN_KEYS: tuple[str, ...] = (
+_PERTURBATION_NAN_KEYS_LOCAL: tuple[str, ...] = (
     "recall_drop_1pct",
     "recall_drop_5pct",
     "recall_drop_10pct",
@@ -129,21 +128,82 @@ _PERTURBATION_NAN_KEYS: tuple[str, ...] = (
 )
 
 
-def compute_global_metrics(per_match_global: list[dict[str, Any]]) -> dict[str, float]:
-    """Compute 19 gate-relevant metrics on N=280 fused matches.
+def _aggregate_perturbation_outcomes(
+    reports: dict[int, dict[str, Any]],
+    section: str,
+    key_field: str,
+    value_field: str,
+    aggregator: str,
+) -> dict[float, float]:
+    """Aggregate stress/DRO outcomes across saisons (D-2026-05-09 RESORBE)."""
+    by_key: dict[float, list[float]] = {}
+    for r in reports.values():
+        outcomes = (r.get(section) or {}).get("outcomes") or []
+        if isinstance(outcomes, dict):
+            outcomes = list(outcomes.values())
+        for o in outcomes:
+            by_key.setdefault(float(o[key_field]), []).append(float(o[value_field]))
+    fn = (lambda v: sum(v) / len(v)) if aggregator == "mean" else min
+    return {k: float(fn(v)) if v else float("nan") for k, v in by_key.items()}
 
-    Stress + DRO entries NaN — marked INCONCLUSIVE downstream per dette
-    D-2026-05-09-d8-perturbation-runs (cache-mutation infra pending).
+
+def compute_global_metrics(
+    per_match_global: list[dict[str, Any]],
+    reports: dict[int, dict[str, Any]] | None = None,
+) -> dict[str, float]:
+    """Compute 19 gate-relevant metrics on N≈280 fused matches.
+
+    Stress + DRO entries are populated from saison reports if provided
+    (real perturbation closures from scripts/d8/perturb_runner). Otherwise
+    NaN (gates downstream emit INCONCLUSIVE).
     """
     if not per_match_global:
         msg = "compute_global_metrics requires non-empty per_match_global"
         raise ValueError(msg)
     metrics = _fairness_metrics(per_match_global)
     nan = float("nan")
-    metrics.update(dict.fromkeys(_PERTURBATION_NAN_KEYS, nan))
+    if reports:
+        elo_drops = _aggregate_perturbation_outcomes(
+            reports, "stress_elo", "noise_pct", "recall_drop", "mean"
+        )
+        roster_drops = _aggregate_perturbation_outcomes(
+            reports, "stress_roster", "turnover_pct", "recall_drop", "mean"
+        )
+        dro_worst = _aggregate_perturbation_outcomes(
+            reports, "dro_wasserstein", "epsilon", "recall_worst_case", "min"
+        )
+        metrics["recall_drop_1pct"] = elo_drops.get(0.01, nan)
+        metrics["recall_drop_5pct"] = elo_drops.get(0.05, nan)
+        metrics["recall_drop_10pct"] = elo_drops.get(0.10, nan)
+        metrics["roster_5pct_recall_drop"] = roster_drops.get(0.05, nan)
+        metrics["roster_20pct_recall_drop"] = roster_drops.get(0.20, nan)
+        metrics["dro_eps_005_recall_worst"] = dro_worst.get(0.05, nan)
+        metrics["dro_eps_010_recall_worst"] = dro_worst.get(0.10, nan)
+    else:
+        for k in _PERTURBATION_NAN_KEYS_LOCAL:
+            metrics[k] = nan
     metrics["coverage_global"] = 0.90
     metrics["conformal_set_size_mean"] = 1.0
     return metrics
+
+
+def evaluate_19_with_inconclusive(metrics: dict[str, float]) -> list[D8GateEvaluation]:
+    """Evaluate 19 gates; mark INCONCLUSIVE only if metric is NaN (no data).
+
+    With real perturbation closures wired (D-2026-05-09 RESORBE), gates with
+    populated metrics evaluate normally. Only NaN values (missing data) trigger
+    INCONCLUSIVE per ISO 24029 §6.5 epistemic uncertainty.
+    """
+    safe = dict(metrics)
+    nan_gate_ids: set[str] = set()
+    for gate_id, (metric_key, _dummy) in _PERTURBATION_FILL.items():
+        if math.isnan(safe.get(metric_key, float("nan"))):
+            nan_gate_ids.add(gate_id)
+            # Fill with passing dummy so evaluate_19_gates doesn't fail validation;
+            # we then overwrite with INCONCLUSIVE below.
+            safe[metric_key] = THRESHOLDS[gate_id]
+    raw = evaluate_19_gates(safe)
+    return [evaluate_inconclusive(g.gate_id) if g.gate_id in nan_gate_ids else g for g in raw]
 
 
 _PERTURBATION_FILL: dict[str, tuple[str, float | None]] = {
@@ -157,53 +217,7 @@ _PERTURBATION_FILL: dict[str, tuple[str, float | None]] = {
 }
 
 
-def evaluate_19_with_inconclusive(metrics: dict[str, float]) -> list[D8GateEvaluation]:
-    """Evaluate gates; substitute INCONCLUSIVE for perturbation-pending gates."""
-    safe = dict(metrics)
-    for gate_id, (metric_key, dummy) in _PERTURBATION_FILL.items():
-        safe[metric_key] = THRESHOLDS[gate_id] if dummy is None else dummy
-    raw = evaluate_19_gates(safe)
-    inconclusive_set = set(PERTURBATION_GATES_INCONCLUSIVE)
-    return [evaluate_inconclusive(g.gate_id) if g.gate_id in inconclusive_set else g for g in raw]
-
-
-def render_findings_md(
-    report: D8FullReport,
-    run_at: datetime,
-    *,
-    summary: dict[str, int],
-) -> str:
-    """Render D8_FINDINGS.md (~8-12 pages humain)."""
-    lines = [
-        "# D8 Findings — Phase 3.5 STRICT\n",
-        f"**Run** : {run_at.isoformat()}\n",
-        f"**N matches** : {report.n_matches}\n",
-        f"**Saisons** : {report.saisons}\n",
-        f"**Gates G-A** : {summary['pass']}/19 PASS, "
-        f"{summary['fail']} FAIL, {summary['inconclusive']} INCONCLUSIVE\n\n",
-        "## Per-gate results\n\n",
-    ]
-    for g in report.gates_19:
-        measured = "n/a" if g.status is D8GateStatus.INCONCLUSIVE else f"{g.measured_value:.4f}"
-        lines.append(
-            f"- **{g.gate_id}** — {g.status.value.upper()} "
-            f"(measured={measured}, threshold={g.threshold:.4f}, source={g.source})\n"
-        )
-    lines.append("\n## Phase 4a entry gate\n\n")
-    if summary["fail"] == 0 and summary["inconclusive"] == 0:
-        lines.append("✅ All 19 gates PASS — ADR-016 ready to move Proposed → Accepted.\n")
-    elif summary["fail"] == 0:
-        lines.append(
-            f"⚠️  {summary['inconclusive']} gates INCONCLUSIVE "
-            "(perturbation closures pending — D-2026-05-09-d8-perturbation-runs).\n"
-            "Phase 4a entry gate BLOCKED until infra ready.\n"
-        )
-    else:
-        lines.append(
-            f"⚠️  {summary['fail']} gates FAIL — see D8_FAILURE_ANALYSIS_LOG.md "
-            "for case-by-case decisions.\n"
-        )
-    return "".join(lines)
+from scripts.d8.aggregate_render import render_findings_md  # noqa: E402, F401
 
 
 def main() -> None:  # pragma: no cover - integration entry point
@@ -220,7 +234,7 @@ def main() -> None:  # pragma: no cover - integration entry point
     reports = load_saison_reports(input_dir)
     verify_lineage_coherence(reports)
     per_match_global = fuse_per_match(reports)
-    metrics = compute_global_metrics(per_match_global)
+    metrics = compute_global_metrics(per_match_global, reports)
     # Override conformal globals from saison reports if present.
     cov_vals = [r["conformal"]["coverage_global"] for r in reports.values() if "conformal" in r]
     if cov_vals:
@@ -276,16 +290,21 @@ def main() -> None:  # pragma: no cover - integration entry point
 def _dump_full_report(report: D8FullReport) -> dict[str, Any]:
     """JSON-safe dump of D8FullReport (handles enum + dataclass nested)."""
     return {
-        "schema_version": report.schema_version,
-        "n_matches": report.n_matches,
-        "saisons": report.saisons,
+        **{
+            f: getattr(report, f)
+            for f in (
+                "schema_version",
+                "n_matches",
+                "saisons",
+                "breakdowns_global",
+                "multicalibration_global",
+                "stress_elo_global",
+                "stress_roster_global",
+                "conformal_global",
+                "dro_global",
+            )
+        },
         "lineage_per_saison": {str(k): asdict(v) for k, v in report.lineage_per_saison.items()},
-        "breakdowns_global": report.breakdowns_global,
-        "multicalibration_global": report.multicalibration_global,
-        "stress_elo_global": report.stress_elo_global,
-        "stress_roster_global": report.stress_roster_global,
-        "conformal_global": report.conformal_global,
-        "dro_global": report.dro_global,
         "gates_19": [{**asdict(g), "status": g.status.value} for g in report.gates_19],
     }
 

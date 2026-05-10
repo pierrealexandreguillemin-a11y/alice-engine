@@ -89,6 +89,7 @@ CODE_TOPLEVEL_FILES: tuple[str, ...] = (
     "scripts/baselines.py",
     "scripts/kaggle_metrics.py",
     "scripts/kaggle_quality_gates.py",
+    "scripts/d8/kaggle-requirements.txt",  # pip install at kernel boot
     "services/__init__.py",
     "services/inference.py",
     "services/feature_store.py",

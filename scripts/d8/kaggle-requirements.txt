@@ -1,0 +1,19 @@
+# Minimal runtime deps for Kaggle d8 saison + aggregator kernels.
+# Installed via `pip install -r /kaggle/input/alice-d8-code/kaggle-requirements.txt`
+# at kernel boot if enable_internet=true. Pinned to security-audited versions
+# (cf D-2026-05-09-cve-rotation re-check 2026-08).
+#
+# Kaggle base image typically includes : numpy, pandas, scipy, scikit-learn,
+# lightgbm, xgboost, catboost, joblib, pyarrow, pydantic, structlog. The lines
+# below either upgrade-pin (security) or add packages not in the base image.
+pydantic-settings>=2.0.0       # app/config.py BaseSettings
+pandera>=0.20.0                # services/feature_store.py + scripts/d8/loader.py
+mlflow>=3.11.1                 # CVE-2026-33865 fix
+scikit-learn>=1.8.0            # LogisticRegression(multi_class=) removed
+aiohttp>=3.13.4                # transitive security pin
+cryptography>=46.0.7           # transitive security pin
+gdown>=5.2.2                   # transitive security pin
+gitpython>=3.1.50              # transitive security pin
+pillow>=12.2.0                 # transitive security pin (CVE-2026-40192/etc)
+python-multipart>=0.0.27       # transitive security pin
+requests>=2.33.0               # transitive security pin
