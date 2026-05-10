@@ -1,0 +1,18 @@
+{
+  "id": "pierrax/d8-aggregator",
+  "title": "ALICE D8 Aggregator",
+  "code_file": "aggregate.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [
+    "pierrax/d8-saison-2021",
+    "pierrax/d8-saison-2022",
+    "pierrax/d8-saison-2023",
+    "pierrax/d8-saison-2024"
+  ],
+  "kernel_sources": [],
+  "competition_sources": []
+}

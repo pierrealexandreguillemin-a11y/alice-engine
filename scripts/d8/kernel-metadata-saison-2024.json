@@ -1,0 +1,17 @@
+{
+  "id": "pierrax/d8-saison-2024",
+  "title": "ALICE D8 Saison 2024",
+  "code_file": "run.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": ["pierrax/alice-d8-input"],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "environment_variables": {
+    "ALICE_SAISON": "2024",
+    "ALICE_CODE_SHA": "<set by upload script>"
+  }
+}
