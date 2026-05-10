@@ -81,6 +81,7 @@ CODE_PACKAGE_DIRS: tuple[str, ...] = (
     "scripts/backtest",
     "scripts/features",
     "scripts/serving",
+    "scripts/training",  # imported by scripts.serving.pyfunc_wrapper (NUMERIC_FEATURES)
     "services/ali",
     "services/ffe",
 )
