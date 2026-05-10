@@ -15,12 +15,28 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess  # noqa: S404
+import sys
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.d8.gates import (
+# Kaggle bootstrap : sys.path + pip install (mirrors run.py / wrappers).
+if Path("/kaggle/input").is_dir():
+    for _p in Path("/kaggle/input").glob("**/scripts/d8/aggregate.py"):
+        _root = str(_p.parents[2])
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        _req = Path(_root) / "scripts" / "d8" / "kaggle-requirements.txt"
+        if _req.is_file():
+            subprocess.run(  # noqa: S603
+                [sys.executable, "-m", "pip", "install", "--quiet", "-r", str(_req)],
+                check=False,
+            )
+        break
+
+from scripts.d8.gates import (  # noqa: E402
     THRESHOLDS,
     evaluate_19_gates,
     evaluate_inconclusive,
@@ -28,7 +44,7 @@ from scripts.d8.gates import (
     gates_summary,
     render_failure_analysis_md,
 )
-from scripts.d8.types import D8FullReport, D8GateEvaluation, D8Lineage
+from scripts.d8.types import D8FullReport, D8GateEvaluation, D8Lineage  # noqa: E402
 
 DEFAULT_SAISONS: tuple[int, ...] = (2021, 2022, 2023, 2024)
 PERTURBATION_GATES_INCONCLUSIVE: tuple[str, ...] = (
