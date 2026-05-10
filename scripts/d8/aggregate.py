@@ -94,11 +94,7 @@ def _by_ronde(per_match: list[dict[str, Any]], key: str) -> list[float]:
 
 
 def _fairness_metrics(per_match: list[dict[str, Any]]) -> dict[str, float]:
-    """10 fairness gates metrics (G_FAIR_01..10).
-
-    Proxy dim = ronde until full breakdowns wired (Phase 4+ raw demographics +
-    protected attrs).
-    """
+    """10 fairness gates metrics (G_FAIR_01..10) — proxy dim = ronde."""
     recall_means = _by_ronde(per_match, "recall_ali")
     brier_means = _by_ronde(per_match, "brier_ali")
     ece_means = _by_ronde(per_match, "ece_ali")

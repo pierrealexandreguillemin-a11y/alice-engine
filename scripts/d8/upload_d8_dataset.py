@@ -95,6 +95,16 @@ CODE_TOPLEVEL_FILES: tuple[str, ...] = (
     "services/feature_store.py",
     "services/data_loader.py",  # imported by services/__init__.py
 )
+# kaggle-deployment skill : `kaggle kernels push` uploads ONLY code_file.
+# Per-saison thin wrappers (run_2021.py … run_2024.py) are referenced by
+# kernel-metadata-saison-*.json::code_file. They live in scripts/d8/ and
+# are also staged in alice-d8-code so cross-imports resolve identically.
+CODE_PER_SAISON_WRAPPERS: tuple[str, ...] = (
+    "scripts/d8/run_2021.py",
+    "scripts/d8/run_2022.py",
+    "scripts/d8/run_2023.py",
+    "scripts/d8/run_2024.py",
+)
 
 
 def _validate_input_sources() -> None:
@@ -111,7 +121,7 @@ def _validate_code_sources() -> None:
     for pkg in CODE_PACKAGE_DIRS:
         if not (REPO / pkg).is_dir():
             missing.append(pkg)
-    for f in CODE_TOPLEVEL_FILES:
+    for f in (*CODE_TOPLEVEL_FILES, *CODE_PER_SAISON_WRAPPERS):
         if not (REPO / f).is_file():
             missing.append(f)
     if missing:
@@ -179,13 +189,13 @@ def _git_head_sha() -> str:
     return result.stdout.strip()
 
 
-def _inject_code_sha(code_sha: str) -> None:
-    """Replace `<set by upload script>` placeholder with real git SHA."""
-    for path in (REPO / "scripts" / "d8").glob("kernel-metadata-saison-*.json"):
-        content = json.loads(path.read_text(encoding="utf-8"))
-        env = content.setdefault("environment_variables", {})
-        env["ALICE_CODE_SHA"] = code_sha
-        path.write_text(json.dumps(content, indent=2) + "\n", encoding="utf-8")
+def _write_code_sha(code_staging: Path, code_sha: str) -> None:
+    """Stage CODE_SHA.txt in alice-d8-code at upload time.
+
+    kaggle-deployment skill 2026-03-29 : env vars not honored at runtime, so
+    run.py reads CODE_SHA.txt at boot via _resolve_code_sha().
+    """
+    (code_staging / "CODE_SHA.txt").write_text(code_sha + "\n", encoding="utf-8")
 
 
 def _kaggle_create_or_version(staging: Path, msg: str) -> None:
@@ -241,8 +251,8 @@ def main() -> int:
     _stage_code(code_staging)
     _write_dataset_metadata(code_staging, DATASET_CODE_SLUG, "ALICE D8 Code Sources")
 
-    _inject_code_sha(code_sha)
-    sys.stdout.write("Injected ALICE_CODE_SHA into 4 kernel-metadata-saison-*.json\n")
+    _write_code_sha(code_staging, code_sha)
+    sys.stdout.write(f"Staged CODE_SHA.txt in alice-d8-code (sha={code_sha[:7]})\n")
 
     if args.stage:
         sys.stdout.write(f"Staged at {input_staging} + {code_staging} (no push).\n")

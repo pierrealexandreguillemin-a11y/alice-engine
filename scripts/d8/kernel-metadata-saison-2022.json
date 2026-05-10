@@ -1,7 +1,7 @@
 {
   "id": "pierrax/d8-saison-2022",
-  "title": "ALICE D8 Saison 2022",
-  "code_file": "run.py",
+  "title": "d8 saison 2022",
+  "code_file": "run_2022.py",
   "language": "python",
   "kernel_type": "script",
   "is_private": true,
@@ -12,15 +12,5 @@
     "pierrax/alice-d8-code"
   ],
   "kernel_sources": [],
-  "competition_sources": [],
-  "environment_variables": {
-    "ALICE_SAISON": "2022",
-    "ALICE_CODE_SHA": "cba9df0e20001ed2758cd2f662707dcda7f208cb",
-    "JOUEURS_PARQUET": "/kaggle/input/alice-d8-input/data/joueurs.parquet",
-    "ECHIQUIERS_PARQUET": "/kaggle/input/alice-d8-input/data/echiquiers.parquet",
-    "FFE_RULES_DIR": "/kaggle/input/alice-d8-input/config/ffe_rules",
-    "MODEL_CACHE_DIR": "/kaggle/input/alice-d8-input/artefacts",
-    "FEATURE_STORE_PATH": "/kaggle/input/alice-d8-input/data/feature_store",
-    "FALLBACK_MODE": "false"
-  }
+  "competition_sources": []
 }

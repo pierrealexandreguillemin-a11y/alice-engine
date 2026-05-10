@@ -1,19 +1,18 @@
 """D8 per-saison orchestrator — kernel entry point ALICE_SAISON.
 
-Pipeline spec §7.2 : lineage → loader → BacktestRunner → breakdowns 7 dims
-→ multicalibration → conformal split 90% → stress/DRO summary → JSON.
-Stress + DRO perturbation closures deferred to D-2026-05-09-d8-perturbation-runs.
-Output schema d8.v1 §7.3 via D8SaisonReport (scripts/d8/types.py).
-ISO 27034 (saison range), 5259 (SHA-256 lineage), 5055 (<300 lines).
+Pipeline spec §7.2 : lineage → BacktestRunner → breakdowns 7 dims → multicalib
+→ conformal 90% → real perturbation stress/DRO (perturb_runner) → JSON d8.v1.
+ISO 27034/5259/5055.
 
 Document ID: ALICE-D8-RUN
-Version: 1.0.0
+Version: 2.0.0
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
 from dataclasses import asdict, fields, is_dataclass
@@ -21,25 +20,25 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-# Kaggle entry point : prepend code dataset to sys.path + pip install pinned deps.
-_KAGGLE_CODE_DIR = Path("/kaggle/input/alice-d8-code")
-if _KAGGLE_CODE_DIR.is_dir() and str(_KAGGLE_CODE_DIR) not in sys.path:
-    sys.path.insert(0, str(_KAGGLE_CODE_DIR))
-    _req = _KAGGLE_CODE_DIR / "scripts" / "d8" / "kaggle-requirements.txt"
-    if _req.is_file():
-        import subprocess  # noqa: S404 - controlled args
+# Kaggle bootstrap : recursive glob matches depth-1 and depth-4 mount layouts.
+if Path("/kaggle/input").is_dir():
+    for _p in Path("/kaggle/input").glob("**/scripts/d8/run.py"):
+        _root = str(_p.parents[2])
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+            _req = Path(_root) / "scripts" / "d8" / "kaggle-requirements.txt"
+            if _req.is_file():
+                import subprocess  # noqa: S404
 
-        subprocess.run(  # noqa: S603 - static literals
-            [sys.executable, "-m", "pip", "install", "--quiet", "-r", str(_req)],
-            check=False,
-        )
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet", "-r", str(_req)],
+                    check=False,
+                )  # noqa: S603
+            break
 
-from scripts.d8 import breakdowns, conformal, loader  # noqa: E402 - sys.path setup above
+from scripts.d8 import breakdowns, conformal, loader  # noqa: E402
+from scripts.d8.perturb_runner import DRO_N_PERTURBATIONS  # noqa: E402
 from scripts.d8.types import D8GroupBreakdown, D8Lineage, D8SaisonReport  # noqa: E402
-
-# Perturbation modules deferred until cache-mutation infra ready (Task 14).
-# Importing here as documented integration points for Task 11 E2E + Task 14 :
-#   from scripts.d8 import calibration, dro, stress_elo, stress_roster  # noqa: ERA001
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -48,7 +47,6 @@ SAISON_MIN, SAISON_MAX = 2018, 2030
 NOISE_LEVELS_ELO: tuple[float, ...] = (0.01, 0.03, 0.05, 0.07, 0.10)
 TURNOVER_RATES_ROSTER: tuple[float, ...] = (0.05, 0.10, 0.20)
 DRO_EPSILONS: tuple[float, ...] = (0.05, 0.10)
-DRO_N_PERTURBATIONS = 50
 CONFORMAL_CALIB_N = 30
 CONFORMAL_ALPHA = 0.10  # 1 - 0.90 coverage
 
@@ -78,7 +76,7 @@ def _build_lineage(saison: int, paths: dict[str, Path]) -> D8Lineage:
         echiquiers_sha256=loader.compute_file_sha256(paths["echiquiers"]),
         mlp_artefact_sha256=loader.compute_file_sha256(paths["mlp"]),
         temp_scaler_sha256=loader.compute_file_sha256(paths["temp_scaler"]),
-        code_sha256=os.environ.get("ALICE_CODE_SHA", "unknown"),
+        code_sha256=_resolve_code_sha(),
         ali_seed=42,
         ali_n_topk=10,
         ali_n_mc_pairs=5,
@@ -87,6 +85,42 @@ def _build_lineage(saison: int, paths: dict[str, Path]) -> D8Lineage:
         kernel_version_kaggle=os.environ.get("KAGGLE_KERNEL_VERSION", "v1"),
         run_at_utc=datetime.now(UTC).isoformat(),
     )
+
+
+def _checkpoint_partial(output_dir: Path, saison: int, **stages: Any) -> None:
+    """Incremental save (kaggle-deployment skill : timeout-safe artifacts)."""
+    partial = {
+        "schema_version": "d8.v1-partial",
+        "saison": saison,
+        **stages,
+        "_status": "partial — perturbation stages pending",
+    }
+    (output_dir / f"d8_saison_{saison}_partial.json").write_text(
+        json.dumps(partial, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+
+def _resolve_code_sha() -> str:
+    """Read ALICE_CODE_SHA env var, fallback to CODE_SHA.txt staged by upload."""
+    sha = os.environ.get("ALICE_CODE_SHA")
+    if sha:
+        return sha
+    for p in (
+        Path("/kaggle/input").glob("**/CODE_SHA.txt") if Path("/kaggle/input").is_dir() else []
+    ):
+        return p.read_text(encoding="utf-8").strip() or "unknown"
+    return "unknown"
+
+
+def _validate_per_match_finite(per_match: list[Any], saison: int) -> None:
+    """ISO 27034 + ml-training-pipeline skill : reject NaN/Inf in MatchStats."""
+    for m in per_match:
+        for attr in ("recall_ali", "brier_ali", "ece_ali", "bss", "e_score_predicted"):
+            v = getattr(m, attr, None)
+            if v is None or not math.isfinite(v):
+                msg = f"Saison {saison} match has non-finite {attr}={v!r}"
+                raise RuntimeError(msg)
 
 
 def _run_backtest(saison: int) -> Any:
@@ -159,12 +193,7 @@ def _compute_breakdowns_stage(
 
 
 def _compute_calibration_stage(per_match: list[Any]) -> dict[str, dict[str, float]]:
-    """Step 5 : per-ronde ECE aggregate (per-match avg, not Naeini-bin per-group).
-
-    Real per-group Naeini ECE requires raw (probs, labels) per match-outcome
-    not exposed by MatchStats. Aggregator (Task 10) computes the rigorous
-    per-group ECE on flattened per_match across saisons.
-    """
+    """Step 5 : per-ronde ECE aggregate. Aggregator computes Naeini-bin global."""
     if not per_match:
         return {}
     multicalib: dict[str, dict[str, float]] = {"by_ronde": {}}
@@ -176,23 +205,14 @@ def _compute_calibration_stage(per_match: list[Any]) -> dict[str, dict[str, floa
 
 def _compute_conformal_stage(per_match: list[Any]) -> dict[str, Any]:
     """Step 8 : split conformal CI 90% + coverage."""
-    if len(per_match) < CONFORMAL_CALIB_N + 1:
-        msg = f"Need >={CONFORMAL_CALIB_N + 1} matches for conformal split, got {len(per_match)}"
-        raise RuntimeError(msg)
     import numpy as np
 
-    n_calib = CONFORMAL_CALIB_N
     e_obs = np.array([m.e_score_observed for m in per_match])
     e_pred = np.array([m.e_score_predicted for m in per_match])
-    cal = conformal.split_calibrate(
-        e_obs[:n_calib],
-        e_pred[:n_calib],
-        alpha=CONFORMAL_ALPHA,
-    )
-    test_obs = e_obs[n_calib:]
-    test_pred = e_pred[n_calib:]
-    cov = conformal.coverage_rate(test_obs, test_pred, cal)
-    set_size = conformal.conformal_set_size_mean(test_pred, cal)
+    n = CONFORMAL_CALIB_N
+    cal = conformal.split_calibrate(e_obs[:n], e_pred[:n], alpha=CONFORMAL_ALPHA)
+    cov = conformal.coverage_rate(e_obs[n:], e_pred[n:], cal)
+    set_size = conformal.conformal_set_size_mean(e_pred[n:], cal)
     return {
         "coverage_global": float(cov),
         "set_size_mean": float(set_size),
@@ -216,23 +236,27 @@ def main() -> None:
     runner, backtest_report = _run_backtest(saison)
     per_match = list(backtest_report.per_match)
     logger.info("D8 saison %d — n_matches = %d", saison, len(per_match))
+    _validate_per_match_finite(per_match, saison)
 
     if len(per_match) < CONFORMAL_CALIB_N + 1:
         msg = f"Saison {saison} only {len(per_match)} matches, need >={CONFORMAL_CALIB_N + 1}"
         raise RuntimeError(msg)
 
-    logger.info("D8 saison %d — computing breakdowns 7 dims", saison)
     bdowns = _compute_breakdowns_stage(runner, per_match)
-
-    logger.info("D8 saison %d — multicalibration", saison)
     multicalib = _compute_calibration_stage(per_match)
-
-    logger.info("D8 saison %d — conformal coverage 90%%", saison)
     conformal_out = _compute_conformal_stage(per_match)
+    _checkpoint_partial(
+        output_dir,
+        saison,
+        lineage=asdict(lineage),
+        n_matches=len(per_match),
+        per_match=_flatten_per_match(per_match),
+        breakdowns=_serialize_breakdowns(bdowns),
+        multicalibration=multicalib,
+        conformal=conformal_out,
+    )
 
-    # Real per-match perturbation closures via perturb_runner (cache-mutation
-    # context manager). Stratified subset N=30 per saison (spec §11 + Efron 1993).
-    # D-2026-05-09-d8-perturbation-runs RESORBE.
+    # Real perturbation closures (D-2026-05-09 RESORBE) — subset N=30 per spec §11.
     from scripts.d8.perturb_runner import (
         compute_dro_real,
         compute_stress_elo_real,
@@ -243,7 +267,7 @@ def main() -> None:
     candidates = runner.sample_matches()
     subset = stratified_subset([c for c in candidates if c.saison == saison], seed=42)
     logger.info("D8 saison %d — stress subset N=%d", saison, len(subset))
-    subset_baseline_recalls = [
+    sb = [
         float(
             next(
                 (
@@ -259,16 +283,12 @@ def main() -> None:
     stress_elo_summary = {
         "noise_levels": list(NOISE_LEVELS_ELO),
         "subset_n": len(subset),
-        "outcomes": [
-            asdict(o) for o in compute_stress_elo_real(runner, subset, subset_baseline_recalls)
-        ],
+        "outcomes": [asdict(o) for o in compute_stress_elo_real(runner, subset, sb)],
     }
     stress_roster_summary = {
         "turnover_rates": list(TURNOVER_RATES_ROSTER),
         "subset_n": len(subset),
-        "outcomes": [
-            asdict(o) for o in compute_stress_roster_real(runner, subset, subset_baseline_recalls)
-        ],
+        "outcomes": [asdict(o) for o in compute_stress_roster_real(runner, subset, sb)],
     }
     dro_summary = {
         "epsilons": list(DRO_EPSILONS),

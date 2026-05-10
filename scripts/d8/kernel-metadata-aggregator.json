@@ -1,6 +1,6 @@
 {
   "id": "pierrax/d8-aggregator",
-  "title": "ALICE D8 Aggregator",
+  "title": "d8 aggregator",
   "code_file": "aggregate.py",
   "language": "python",
   "kernel_type": "script",

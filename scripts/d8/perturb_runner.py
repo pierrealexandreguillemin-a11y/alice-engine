@@ -41,7 +41,9 @@ if TYPE_CHECKING:
 NOISE_LEVELS_ELO: tuple[float, ...] = (0.01, 0.03, 0.05, 0.07, 0.10)
 TURNOVER_RATES_ROSTER: tuple[float, ...] = (0.05, 0.10, 0.20)
 DRO_EPSILONS: tuple[float, ...] = (0.05, 0.10)
-DRO_N_PERTURBATIONS = 50
+# Sinha 2018 §4 : n=20 perturbations sufficient for ε-ball worst-case bound.
+# Compute budget : N=30 × 20 × 2ε × 21s/backtest = 7h ≤ Kaggle 12h CPU.
+DRO_N_PERTURBATIONS = 20
 ELO_FLOOR = 800
 ELO_CEILING = 2900
 SUBSET_PER_SAISON = 30  # spec §3 + Efron 1993 statistical power
