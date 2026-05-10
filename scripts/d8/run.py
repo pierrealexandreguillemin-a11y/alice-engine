@@ -59,13 +59,14 @@ def _validate_saison(saison: int) -> None:
 
 
 def _input_paths() -> dict[str, Path]:
-    """Resolve Kaggle dataset input paths (alice-d8-input mounts at /kaggle/input/)."""
+    """Resolve input paths via env vars (Kaggle: alice-d8-input mount; local: ./)."""
     base = Path("/kaggle/input/alice-d8-input")
+    mcd = Path(os.environ.get("MODEL_CACHE_DIR", base / "artefacts"))
     return {
-        "joueurs": base / "data/joueurs.parquet",
-        "echiquiers": base / "data/echiquiers.parquet",
-        "mlp": base / "artefacts/mlp_meta_learner.joblib",
-        "temp_scaler": base / "artefacts/temperature_T.joblib",
+        "joueurs": Path(os.environ.get("JOUEURS_PARQUET", base / "data/joueurs.parquet")),
+        "echiquiers": Path(os.environ.get("ECHIQUIERS_PARQUET", base / "data/echiquiers.parquet")),
+        "mlp": mcd / "mlp_meta_learner.joblib",
+        "temp_scaler": mcd / "temperature_T.joblib",
     }
 
 
@@ -123,6 +124,24 @@ def _validate_per_match_finite(per_match: list[Any], saison: int) -> None:
                 raise RuntimeError(msg)
 
 
+SAISON_DIVISION_FILTER: dict[int, str] = {
+    # FFE renamed "Nationale III" → "Nationale 3" between saison 2021 and 2022.
+    2018: "Nationale III",
+    2019: "Nationale III",
+    2020: "Nationale III",
+    2021: "Nationale III",
+    2022: "Nationale 3",
+    2023: "Nationale 3",
+    2024: "Nationale 3",
+    2025: "Nationale 3",
+    2026: "Nationale 3",
+    2027: "Nationale 3",
+    2028: "Nationale 3",
+    2029: "Nationale 3",
+    2030: "Nationale 3",
+}
+
+
 def _run_backtest(saison: int) -> Any:
     """Boot Plan 3 BacktestHarness + run one saison via BacktestRunner."""
     from scripts.backtest.harness import BacktestHarness
@@ -131,7 +150,14 @@ def _run_backtest(saison: int) -> Any:
 
     harness = BacktestHarness()
     harness.setup()
-    config = RunnerConfig(saison=saison)
+    cfg_kwargs: dict[str, Any] = {
+        "saison": saison,
+        "division_filter": SAISON_DIVISION_FILTER[saison],
+    }
+    if (smoke := os.environ.get("SMOKE_MAX_MATCHES")) is not None:
+        cfg_kwargs["max_matches"] = int(smoke)
+        cfg_kwargs["stratify_min_per_ronde"] = 1  # relax for tiny smoke run
+    config = RunnerConfig(**cfg_kwargs)
     runner = BacktestRunner(harness=harness, config=config)
     return runner, runner.run()
 
@@ -233,8 +259,23 @@ def main() -> None:
     lineage = _build_lineage(saison, paths)
 
     logger.info("D8 saison %d — running BacktestRunner", saison)
-    runner, backtest_report = _run_backtest(saison)
-    per_match = list(backtest_report.per_match)
+    try:
+        runner, backtest_report = _run_backtest(saison)
+        per_match = list(backtest_report.per_match)
+    except ValueError as exc:
+        logger.warning("D8 saison %d — backtest failed: %s — emitting empty report", saison, exc)
+        partial = {
+            "schema_version": "d8.v1-empty",
+            "saison": saison,
+            "n_matches": 0,
+            "lineage": asdict(lineage),
+            "_status": f"insufficient_matches: {exc}",
+        }
+        (output_dir / f"d8_saison_{saison}.json").write_text(
+            json.dumps(partial, indent=2, default=str),
+            encoding="utf-8",
+        )
+        return
     logger.info("D8 saison %d — n_matches = %d", saison, len(per_match))
     _validate_per_match_finite(per_match, saison)
 
