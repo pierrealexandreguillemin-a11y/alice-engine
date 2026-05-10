@@ -369,7 +369,48 @@ with same E[score] but different variance thanks to P(draw).
 
 ---
 
-## Phase 5: **SaaS multi-tenant Deploy + Monitoring Stack** — STATUS: BLOCKED (Phase 4)
+## Phase 4.5: **PRE-V1 PRODUCTION AUDIT** (gate obligatoire) — STATUS: BLOCKED (Phase 4b)
+
+> **Origine** : user demande explicite 2026-05-10 — "j'ai besoin de ces étapes
+> pour que tu te challenges sur la qualité, les choix, la cohérence du projet".
+> Le rôle ML senior exige confrontation gain/effort/timeline AVANT prod, pas un
+> ship-as-is biaisé SOTA-only.
+
+**Trigger** : avant TOUT passage en prod (v1, vN+1, deploy SaaS, public release).
+Cette phase s'insère **entre Phase 4b done et Phase 5 boot**.
+
+**Délivrable** : `reports/pre_v1_audit/<YYYY-MM-DD>-<scope>.md` + decision user
+formelle (accept / override / adopt-subset / reject) signée.
+
+**Skill associée** : `.claude/skills/pre-v1-audit/SKILL.md` invocable
+`/pre-v1-audit <scope>` génère le rapport en remplissant les 8 sections.
+
+**Template** : `docs/process/PRE_V1_AUDIT_TEMPLATE.md` — 8 sections systématiques :
+
+| # | Section | Question maître | Output |
+|---|---------|-----------------|--------|
+| 1 | ML model self-challenge | Champion = optimal-wireable sur (data, features, base ensemble) ? | Tableau ROI alternatives (Deep Ensemble, Bayesian MLP, TTA, MoE…) avec 2+ sources publiées |
+| 2 | Feature/Data | Tous signaux disponibles exploités ? Drift FFE ? | Features deferred prioritaires + dette schema FFE |
+| 3 | CE/Optimization | OR-Tools encode contraintes FFE A02 §3.7 ? Sensitivity ? | Edge cases + adversarial inputs |
+| 4 | Performance/UX | Latency P95/P99 ? Cold start ? Error handling ? | SLA gap + UX defects |
+| 5 | Security/Compliance | 14 normes ISO audit final ? | Tableau PASS / FAIL / GAP / DEFERRED par norme |
+| 6 | Risk ISO 23894 | AI_RISK_REGISTER à jour ? Mitigations validées ? | Risques résiduels acceptés explicitement |
+| 7 | Cost/Effort matrix | Synthèse priorisée par ROI | Tableau ship-as-is / pre-V1 / post-V1 / never |
+| 8 | Senior reco + User decision | Avis ML senior + raisons techniques + user signature | Decision formelle |
+
+**Why NON NÉGOCIABLE** : feedback `complete_or_nothing` + `no_silent_debt` +
+`industry_standards` + user explicit demand. Pas de prod sans audit signé.
+
+**Dette tracée** : `D-2026-05-10-pre-v1-audit-gate` dans
+`memory/project_debt_current.md` (résorption = exécution avant Phase 5 boot).
+
+**Premier scope attendu** : `2026-XX-XX-v1-prod-launch` couvrant champion MLP +
+CE OR-Tools + API FastAPI + 14 normes ISO. Permet à user de prendre une decision
+informée (ship-as-is OU adopter améliorations identifiées) avant Phase 5 SaaS.
+
+---
+
+## Phase 5: **SaaS multi-tenant Deploy + Monitoring Stack** — STATUS: BLOCKED (Phase 4.5)
 
 > **Scope étendu 2026-04-19** : l'ambition confirmée de servir max clubs FFE France
 > requiert un déploiement multi-tenant, pas mono-user. Monitoring stack complet

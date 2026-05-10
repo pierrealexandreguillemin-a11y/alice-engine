@@ -37,6 +37,79 @@ tu le dis immédiatement.
 8. Présenter bilan → **ATTENDRE validation user**
 9. Push seulement APRÈS validation explicite
 
+### Pre-V1 Production Audit (NON NÉGOCIABLE — gate avant prod)
+
+Avant TOUT passage en prod (v1, vN+1, deploy SaaS, public release), exécuter
+intégralement `docs/process/PRE_V1_AUDIT_TEMPLATE.md`. **Skill `pre-v1-audit`
+invocable** : `/pre-v1-audit <scope>` génère le rapport en remplissant les 8
+sections (ML self-challenge / features / CE / perf / ISO / risk / ROI / senior
+reco). Délivrable : `reports/pre_v1_audit/<DATE>-<scope>.md` + decision user
+formelle (accept/override/adopt-subset/reject).
+
+**Pourquoi NON NÉGOCIABLE** : mon biais SOTA-only ne suffit pas — l'audit force
+la confrontation gain/effort/timeline sur 8 dimensions (ML, features, CE, perf,
+sécurité, risque, ROI matrix, senior reco). User exige cette gate explicitement
+(2026-05-10). **Pas de prod sans audit signé.**
+
+## ⚠️ STANDING PROCEDURE — POST-TASK MEMORY + FATIGUE SELF-ASSESSMENT (NON-NÉGOCIABLE)
+
+Après CHAQUE tâche atomique (spec / impl / bench / commit / push / build / fetch / Kaggle kernel push / debt resolution), exécuter la procédure suivante AVANT de demander la prochaine décision à l'utilisateur.
+
+### 1. Memory refresh autoportée
+
+> **FAST-PATH** : invoquer le skill `project-session-end` (`.claude/skills/project-session-end/SKILL.md`) — auto-fills 18 sections depuis git/pytest/ruff/Kaggle/champion state + écrit le memo dated + update `MEMORY.md` entry 0 + update `project_session_history_archive.md` ; ~1 min vs ~10 min manual. Skill **MANDATORY** pour T1-T5 — NOT optional.
+
+**Triggers automatiques** (memo refresh OBLIGATOIRE sans demander à user dès qu'UN tire) :
+
+| Trigger | Condition |
+|---|---|
+| **T1 post-task-long** | tâche > 30 min wall OU > 5 tool-calls OU 1 commit shippé |
+| **T2 fatigue ALERT** | ≥ 1 indicateur ALERT (cf §2 ci-dessous) |
+| **T3 fatigue STOP** | ≥ 1 indicateur STOP |
+| **T4 milestone naturelle** | Plan-T-N task SHIPPED OU Kaggle kernel push validé OU Phase milestone (P1-P7) atomic SHIPPED OU ADR adopted OU debt D-XX résolue |
+| **T5 user-explicit** | "memo update" / "doc de reprise" / "session-end" / "STOP" / "pause" / "fin de session" |
+
+Le memo DOIT contenir les **18 sections** définies dans `memory/feedback_session_end_template.md` + satisfaire la **checklist autoportée 7 critères** avant commit (= fresh-Claude resume sans context conversationnel via UNIQUEMENT ce memo).
+
+**Pattern fichier** : `memory/project_session_end_<YYYY-MM-DD>-<task-tag>.md` (dated, history archive préservé). **Legacy `project_session_resume.md`** (single rolling file) **frozen 2026-05-09** — ne plus y écrire.
+
+**Cohérence avec `feedback_self_contained_resume_after_each_task.md`** existing CRITIQUE : per-task discipline (entre tâches dans une session, lighter codification) reste applicable ; ce skill (T1-T5) est la version session-end ceremonial.
+
+### 2. Fatigue self-assessment
+
+Auto-évaluation après chaque tâche atomique (1-line output obligatoire dans message user-facing) per `memory/feedback_post_task_procedure_and_fatigue.md` :
+
+| Indicateur | OK | ALERT | STOP |
+|---|---|---|---|
+| Erreurs de tool répétées (même erreur ≥ 2× consecutive) | 0 | 1 | ≥ 2 |
+| Tâches atomiques shippées dans la session | < 8 | 8-12 | ≥ 13 |
+| Contexte conversationnel restant | > 30% | 15-30% | < 15% |
+| Tests rouges introduits dans la session | 0 | 1 (fixé) | ≥ 1 (non-fixé) |
+| Drift architectural (réécrire ce qui marchait) | 0 | 1 | ≥ 2 |
+| Tâche oubliée / bypass de procédure | 0 | 1 | ≥ 2 |
+
+**Output format obligatoire** :
+
+```
+Fatigue: [OK/ALERT/STOP] — <indicateur principal>. <recommandation: continue / break-suggested-in-N-tasks / break-now>.
+```
+
+**Action par verdict** :
+- **OK** : continuer dans l'ordre par défaut SOTA-ML (data-first → empirical-validation → highest-leverage ship → tuning → doc/commit).
+- **ALERT** : ship la tâche en cours uniquement, pas de nouvelle tâche atomique, annonce pause user avec recap.
+- **STOP** : exit clean — push commits, final session-end memo, 1-paragraph recap, NE PAS continuer sans pause user.
+
+### 3. Cross-refs (slow-changing rules)
+
+- `memory/feedback_session_end_template.md` (= 18 sections + checklist autoportée + triggers — source-of-truth doctrinale alice-engine, projection du GENERIC).
+- `memory/feedback_post_task_procedure_and_fatigue.md` (= rationale fatigue + ordre par défaut SOTA-ML).
+- `memory/feedback_per_task_memory_updates.md` (= discipline memo entre tâches, project-agnostic, coexiste avec `feedback_self_contained_resume_after_each_task.md`).
+- `memory/feedback_self_contained_resume_after_each_task.md` (= existing CRITIQUE, intent identique, codification plus légère).
+- `memory/feedback_diagnostic_first_doctrine.md` (= anti-pattern counter unifié — stub 2026-05-09, à enrichir).
+- `.claude/skills/project-session-end/SKILL.md` (= automation invocable 11-step protocol).
+- Source canonique du template : `C:\Dev\feedback_session_end_template_GENERIC.md`.
+- Source canonique du skill : `C:\Dev\skills-templates\project-session-end\SKILL.md`.
+
 ## NORMES ISO (14 normes, TOUTES obligatoires)
 
 Référence complète : `docs/iso/ISO_STANDARDS_REFERENCE.md`
