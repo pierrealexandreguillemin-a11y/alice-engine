@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
-KERNEL_SLUG = "pierrax/d8-aggregator"
+KERNEL_SLUG = "pguillemin/d8-aggregator"
 EXPECTED_OUTPUTS: tuple[str, ...] = (
     "d8_full_report.json",
     "D8_FINDINGS.md",

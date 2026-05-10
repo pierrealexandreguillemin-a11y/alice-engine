@@ -30,7 +30,7 @@ from pathlib import Path
 
 DATASET_INPUT_SLUG = "alice-d8-input"
 DATASET_CODE_SLUG = "alice-d8-code"
-KAGGLE_USERNAME = "pierrax"
+KAGGLE_USERNAME = "pguillemin"
 REPO = Path(__file__).resolve().parent.parent.parent
 
 # (source, staged_subpath) for alice-d8-input — fail-fast if missing.
@@ -201,25 +201,15 @@ def _write_code_sha(code_staging: Path, code_sha: str) -> None:
 def _kaggle_create_or_version(staging: Path, msg: str) -> None:
     """Try `kaggle datasets create`; fall back to `version` if exists."""
     create = subprocess.run(  # noqa: S603 - args are static literals
-        ["kaggle", "datasets", "create", "-p", str(staging), "--dir-mode", "tar"],
-        capture_output=True,
+        ["kaggle", "datasets", "create", "-p", str(staging), "-r", "zip"],
+        capture_output=False,
         text=True,
         check=False,
     )
     if create.returncode == 0:
         return
     subprocess.run(  # noqa: S603
-        [
-            "kaggle",
-            "datasets",
-            "version",
-            "-p",
-            str(staging),
-            "-m",
-            msg,
-            "--dir-mode",
-            "tar",
-        ],
+        ["kaggle", "datasets", "version", "-p", str(staging), "-m", msg, "-r", "zip"],
         check=True,
     )
 
@@ -247,9 +237,9 @@ def main() -> int:
     input_staging = REPO / "build" / "kaggle" / DATASET_INPUT_SLUG
     code_staging = REPO / "build" / "kaggle" / DATASET_CODE_SLUG
     _stage_input(input_staging)
-    _write_dataset_metadata(input_staging, DATASET_INPUT_SLUG, "ALICE D8 Fairness/Robustness Input")
+    _write_dataset_metadata(input_staging, DATASET_INPUT_SLUG, "alice d8 input")
     _stage_code(code_staging)
-    _write_dataset_metadata(code_staging, DATASET_CODE_SLUG, "ALICE D8 Code Sources")
+    _write_dataset_metadata(code_staging, DATASET_CODE_SLUG, "alice d8 code")
 
     _write_code_sha(code_staging, code_sha)
     sys.stdout.write(f"Staged CODE_SHA.txt in alice-d8-code (sha={code_sha[:7]})\n")

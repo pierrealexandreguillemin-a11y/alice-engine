@@ -1,5 +1,5 @@
 {
-  "id": "pierrax/d8-saison-2024",
+  "id": "pguillemin/d8-saison-2024",
   "title": "d8 saison 2024",
   "code_file": "run_2024.py",
   "language": "python",
@@ -8,8 +8,8 @@
   "enable_gpu": false,
   "enable_internet": true,
   "dataset_sources": [
-    "pierrax/alice-d8-input",
-    "pierrax/alice-d8-code"
+    "pguillemin/alice-d8-input",
+    "pguillemin/alice-d8-code"
   ],
   "kernel_sources": [],
   "competition_sources": []

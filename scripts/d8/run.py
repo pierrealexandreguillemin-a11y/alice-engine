@@ -81,7 +81,7 @@ def _build_lineage(saison: int, paths: dict[str, Path]) -> D8Lineage:
         ali_n_topk=10,
         ali_n_mc_pairs=5,
         ali_decay_lambda=0.9,
-        kernel_id=f"pierrax/d8-saison-{saison}",
+        kernel_id=f"pguillemin/d8-saison-{saison}",
         kernel_version_kaggle=os.environ.get("KAGGLE_KERNEL_VERSION", "v1"),
         run_at_utc=datetime.now(UTC).isoformat(),
     )
