@@ -182,8 +182,8 @@ def _compute_conformal_stage(per_match: list[Any]) -> dict[str, Any]:
     )
     test_obs = e_obs[n_calib:]
     test_pred = e_pred[n_calib:]
-    cov = conformal.coverage_rate(test_obs, test_pred, cal.quantile_threshold)
-    set_size = conformal.conformal_set_size_mean(cal.quantile_threshold)
+    cov = conformal.coverage_rate(test_obs, test_pred, cal)
+    set_size = conformal.conformal_set_size_mean(test_pred, cal)
     return {
         "coverage_global": float(cov),
         "set_size_mean": float(set_size),
