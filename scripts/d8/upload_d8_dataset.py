@@ -200,19 +200,35 @@ def _write_code_sha(code_staging: Path, code_sha: str) -> None:
 
 
 def _kaggle_create_or_version(staging: Path, msg: str) -> None:
-    """Try `kaggle datasets create`; fall back to `version` if exists."""
-    create = subprocess.run(  # noqa: S603 - args are static literals
-        ["kaggle", "datasets", "create", "-p", str(staging), "-r", "zip"],
-        capture_output=False,
+    """Force `version` if dataset exists, else `create`.
+
+    `kaggle datasets create` exits 0 even on 'title in use' error → returncode
+    check is unreliable. We explicitly probe existence via `datasets status`.
+    Also creates Windows kaggle temp dir (kaggle-deployment skill 2026-03-23).
+    """
+    # Windows kaggle CLI temp dir bug — pre-create directories
+    temp_root = Path.home() / "AppData" / "Local" / "Temp" / ".kaggle" / "uploads"
+    (temp_root / "kaggle").mkdir(parents=True, exist_ok=True)
+    (temp_root / staging.relative_to(REPO).parent).mkdir(parents=True, exist_ok=True)
+
+    slug = json.loads((staging / "dataset-metadata.json").read_text())["id"]
+    status = subprocess.run(  # noqa: S603 - args are static literals
+        ["kaggle", "datasets", "status", slug],
+        capture_output=True,
         text=True,
         check=False,
     )
-    if create.returncode == 0:
-        return
-    subprocess.run(  # noqa: S603
-        ["kaggle", "datasets", "version", "-p", str(staging), "-m", msg, "-r", "zip"],
-        check=True,
-    )
+    exists = status.returncode == 0 and status.stdout.strip() in ("ready", "creating")
+    if exists:
+        subprocess.run(  # noqa: S603
+            ["kaggle", "datasets", "version", "-p", str(staging), "-m", msg, "-r", "zip"],
+            check=True,
+        )
+    else:
+        subprocess.run(  # noqa: S603
+            ["kaggle", "datasets", "create", "-p", str(staging), "-r", "zip"],
+            check=True,
+        )
 
 
 def main() -> int:
