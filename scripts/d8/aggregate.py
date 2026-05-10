@@ -29,7 +29,7 @@ from scripts.d8.gates import (
     gates_summary,
     render_failure_analysis_md,
 )
-from scripts.d8.types import D8FullReport, D8GateEvaluation, D8GateStatus
+from scripts.d8.types import D8FullReport, D8GateEvaluation, D8GateStatus, D8Lineage
 
 DEFAULT_SAISONS: tuple[int, ...] = (2021, 2022, 2023, 2024)
 PERTURBATION_GATES_INCONCLUSIVE: tuple[str, ...] = (
@@ -207,8 +207,13 @@ def render_findings_md(
 
 
 def main() -> None:  # pragma: no cover - integration entry point
-    """Aggregator entry point (Kaggle d8-aggregator kernel)."""
-    input_dir = Path("/kaggle/input/datasets/pierrax")
+    """Aggregator entry point (Kaggle d8-aggregator kernel).
+
+    Saison kernel outputs auto-mount at /kaggle/input/<output-dataset-slug>/
+    when listed in dataset_sources. Convention : per-saison output kernel
+    saves d8_saison_{S}.json which surfaces under d8-saison-{S} dataset slug.
+    """
+    input_dir = Path("/kaggle/input")
     output_dir = Path("/kaggle/working")
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -229,11 +234,14 @@ def main() -> None:  # pragma: no cover - integration entry point
     failures = filter_failures(gates_19)
     failure_md = render_failure_analysis_md(failures)
 
+    # Hydrate JSON lineage dicts → D8Lineage frozen dataclasses (ISO 5259 type-safe).
+    lineage_typed = {s: D8Lineage(**r["lineage"]) for s, r in reports.items()}
+
     full_report = D8FullReport(
         schema_version="d8-aggregator.v1",
         n_matches=len(per_match_global),
         saisons=list(reports.keys()),
-        lineage_per_saison={s: r["lineage"] for s, r in reports.items()},
+        lineage_per_saison=lineage_typed,
         breakdowns_global={},
         multicalibration_global={},
         stress_elo_global={},
@@ -271,7 +279,7 @@ def _dump_full_report(report: D8FullReport) -> dict[str, Any]:
         "schema_version": report.schema_version,
         "n_matches": report.n_matches,
         "saisons": report.saisons,
-        "lineage_per_saison": {str(k): v for k, v in report.lineage_per_saison.items()},
+        "lineage_per_saison": {str(k): asdict(v) for k, v in report.lineage_per_saison.items()},
         "breakdowns_global": report.breakdowns_global,
         "multicalibration_global": report.multicalibration_global,
         "stress_elo_global": report.stress_elo_global,

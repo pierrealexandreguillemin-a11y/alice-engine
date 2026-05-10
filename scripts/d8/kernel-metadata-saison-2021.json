@@ -7,11 +7,20 @@
   "is_private": true,
   "enable_gpu": false,
   "enable_internet": false,
-  "dataset_sources": ["pierrax/alice-d8-input"],
+  "dataset_sources": [
+    "pierrax/alice-d8-input",
+    "pierrax/alice-d8-code"
+  ],
   "kernel_sources": [],
   "competition_sources": [],
   "environment_variables": {
     "ALICE_SAISON": "2021",
-    "ALICE_CODE_SHA": "<set by upload script>"
+    "ALICE_CODE_SHA": "db1db62f4f57904b6aef355dc42aff62c7279da5",
+    "JOUEURS_PARQUET": "/kaggle/input/alice-d8-input/data/joueurs.parquet",
+    "ECHIQUIERS_PARQUET": "/kaggle/input/alice-d8-input/data/echiquiers.parquet",
+    "FFE_RULES_DIR": "/kaggle/input/alice-d8-input/config/ffe_rules",
+    "MODEL_CACHE_DIR": "/kaggle/input/alice-d8-input/artefacts",
+    "FEATURE_STORE_PATH": "/kaggle/input/alice-d8-input/data/feature_store",
+    "FALLBACK_MODE": "false"
   }
 }

@@ -21,12 +21,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-# Kaggle entry point pattern : setup sys.path BEFORE imports
-if "/kaggle/input/notebooks" in os.environ.get("PWD", ""):
-    sys.path.insert(0, "/kaggle/input/notebooks/pierrax/alice-d8-code")
+# Kaggle entry point : prepend code dataset to sys.path BEFORE imports.
+# Datasets mount at /kaggle/input/<slug>/ on Kaggle; alice-d8-code holds Python
+# package tree (app/, scripts/, services/) per upload_d8_dataset.py staging.
+_KAGGLE_CODE_DIR = Path("/kaggle/input/alice-d8-code")
+if _KAGGLE_CODE_DIR.is_dir() and str(_KAGGLE_CODE_DIR) not in sys.path:
+    sys.path.insert(0, str(_KAGGLE_CODE_DIR))
 
-from scripts.d8 import breakdowns, conformal, loader
-from scripts.d8.types import D8GroupBreakdown, D8Lineage, D8SaisonReport
+from scripts.d8 import breakdowns, conformal, loader  # noqa: E402 - sys.path setup above
+from scripts.d8.types import D8GroupBreakdown, D8Lineage, D8SaisonReport  # noqa: E402
 
 # Perturbation modules deferred until cache-mutation infra ready (Task 14).
 # Importing here as documented integration points for Task 11 E2E + Task 14 :
@@ -52,13 +55,13 @@ def _validate_saison(saison: int) -> None:
 
 
 def _input_paths() -> dict[str, Path]:
-    """Resolve Kaggle dataset input paths."""
-    base = Path("/kaggle/input/datasets/pierrax/alice-d8-input")
+    """Resolve Kaggle dataset input paths (alice-d8-input mounts at /kaggle/input/)."""
+    base = Path("/kaggle/input/alice-d8-input")
     return {
         "joueurs": base / "data/joueurs.parquet",
         "echiquiers": base / "data/echiquiers.parquet",
         "mlp": base / "artefacts/mlp_meta_learner.joblib",
-        "temp_scaler": base / "artefacts/temp_scaler.joblib",
+        "temp_scaler": base / "artefacts/temperature_T.joblib",
     }
 
 
