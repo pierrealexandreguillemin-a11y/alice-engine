@@ -1,0 +1,16 @@
+{
+  "id": "pguillemin/d8-2024-nationale-1",
+  "title": "d8 2024 nationale-1",
+  "code_file": "run_2024_nationale_1.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "pguillemin/alice-d8-input",
+    "pguillemin/alice-d8-code"
+  ],
+  "kernel_sources": [],
+  "competition_sources": []
+}

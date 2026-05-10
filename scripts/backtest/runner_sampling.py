@@ -58,6 +58,9 @@ def enumerate_candidates(cache: ALIDataCache, config: RunnerConfig) -> list[Matc
         ronde = int(row["ronde"])
         user_team = str(row["equipe_dom"])
         opp_team = str(row["equipe_ext"])
+        # FFE bye teams ("Exempt") are not real matches — skip (D-2026-05-10-bye)
+        if user_team == "Exempt" or opp_team == "Exempt":
+            continue
         key = (ronde, user_team, opp_team)
         if key in seen:
             continue

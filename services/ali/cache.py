@@ -59,6 +59,77 @@ class ALIDataCache:
             loaded_at=datetime.now(UTC),
         )
 
+    @classmethod
+    def from_parquets_at_saison(
+        cls,
+        path_joueurs: Path,
+        path_echiquiers: Path,
+        saison: int,
+    ) -> ALIDataCache:
+        """Reconstruct historical cache state from echiquiers[saison=S] (ADR-018).
+
+        Treats `equipe` as both team_id and club_id (identity mapping). Roster
+        per equipe = players who played for it during the saison. Per-saison
+        Elo = median across rounds. Mute/licence/age default to safe values
+        (R-ALI-07 documented). app/main.py FastAPI continues to use
+        load_from_parquets() — this method is for D8 cross-year audit only.
+        """
+        sig_j = hashlib.sha256(path_joueurs.read_bytes()).hexdigest()
+        sig_e = hashlib.sha256(path_echiquiers.read_bytes()).hexdigest()
+        df_e_all = pd.read_parquet(path_echiquiers)
+        df_e = df_e_all[df_e_all["saison"] == saison].copy()
+        if df_e.empty:
+            msg = f"No echiquiers rows for saison {saison}"
+            raise ValueError(msg)
+        # Build per-saison joueurs DataFrame from echiquiers stack (blanc + noir).
+        df_j = cls._historical_joueurs_df(df_e)
+        return cls(
+            joueurs_total=df_j,
+            echiquiers_total=df_e,
+            joueurs_by_club=cls._index_by_club(df_j),
+            echiquiers_by_player=cls._index_by_player(df_e),
+            team_to_club={t: t for t in cls._all_equipes(df_e)},  # identity (ADR-018)
+            parquet_sig_joueurs=f"historical-{saison}-{sig_j[:16]}",
+            parquet_sig_echiquiers=f"saison-{saison}-{sig_e[:16]}",
+            loaded_at=datetime.now(UTC),
+        )
+
+    @staticmethod
+    def _all_equipes(df_e: pd.DataFrame) -> set[str]:
+        eqs: set[str] = set()
+        for col in ("equipe_dom", "equipe_ext", "blanc_equipe", "noir_equipe"):
+            if col in df_e.columns:
+                eqs |= {str(v) for v in df_e[col].dropna().unique() if str(v)}
+        return eqs
+
+    @staticmethod
+    def _historical_joueurs_df(df_e: pd.DataFrame) -> pd.DataFrame:
+        """Reconstruct joueurs DataFrame from echiquiers stack (R-ALI-07 defaults)."""
+        frames = []
+        for color in ("blanc", "noir"):
+            cols = {f"{color}_nom": "nom_complet", f"{color}_elo": "elo", f"{color}_equipe": "club"}
+            present = {k: v for k, v in cols.items() if k in df_e.columns}
+            if len(present) < 2:  # noqa: PLR2004
+                continue
+            sub = df_e[list(present)].dropna(subset=[f"{color}_nom"]).rename(columns=present)
+            frames.append(sub)
+        if not frames:
+            return pd.DataFrame(columns=["nom_complet", "elo", "club"])
+        stacked = pd.concat(frames, ignore_index=True)
+        # Aggregate per (nom_complet, club) : median Elo across rondes.
+        agg = stacked.groupby(["nom_complet", "club"], dropna=False)["elo"].median().reset_index()
+        agg["elo"] = agg["elo"].fillna(1500).astype(int)
+        # R-ALI-07 defaults : mute/licence/age unverifiable historically.
+        agg["mute"] = False
+        agg["licence_active"] = True
+        agg["genre"] = "M"
+        agg["categorie"] = "SE"
+        agg["age_min"] = None
+        agg["age_max"] = None
+        # Synthesize nr_ffe from nom_complet (stable per session, not real FFE ID).
+        agg["nr_ffe"] = "H" + agg["nom_complet"].str.replace(" ", "").str[:8].str.upper()
+        return agg
+
     @staticmethod
     def _index_by_club(df_j: pd.DataFrame) -> dict[str, pd.DataFrame]:
         """Index joueurs par club (cle = str(club))."""

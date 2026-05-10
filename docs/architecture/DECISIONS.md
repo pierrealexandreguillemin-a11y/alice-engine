@@ -514,3 +514,140 @@ avec la meme exhaustivite que chess-app. Ou integration API si chess-app reprend
 - `feedback_time_budget_kernels` : CALCULER avant d'ecrire
 - `feedback_websearch_api_before_code` : WebFetch doc param par param
 - `feedback_no_lies` : ne pas promettre AG > hand-tuned sans donnees
+
+---
+
+## ADR-018: ALIDataCache historical state reconstruction depuis echiquiers.parquet
+
+**Date**: 10 Mai 2026
+**Statut**: Accepte (D8 Phase 3.5 STRICT scope §1.3 N≥200)
+
+### Contexte
+
+D8 audit (Phase 3.5 STRICT, spec `2026-04-30-d8-fairness-robustness-design.md`)
+exige N≥200 matches multi-saisons cross-year pour validation ML champion. Tentative
+initiale (saisons 2021-2024 × division N3) a échoué empiriquement à 0 matches
+sur saisons antérieures.
+
+**Root cause** : `ALIDataCache.team_to_club` et `joueurs_by_club` sont chargés
+depuis `joueurs.parquet` qui contient UNIQUEMENT le snapshot CURRENT (scrape FFE
+le plus récent). Pour saison antérieure, équipes/clubs/rosters ont muté
+(départs, dissolutions, transferts), `team_to_club.get(equipe_dom)` retourne
+None → enumerate_candidates exclut le match.
+
+### Decision
+
+Ajouter `classmethod ALIDataCache.from_parquets_at_saison(joueurs_path,
+echiquiers_path, saison)` qui reconstruit l'état historique du cache à partir
+des matches eux-mêmes (`echiquiers.parquet`).
+
+### Reasons
+
+1. `echiquiers.parquet` contient pour CHAQUE match toutes les infos requises :
+   `equipe_dom`, `equipe_ext`, `nr_blanc/noir`, `nom`, `prenom`, `elo_blanc/noir`,
+   `equipe` (club_id).
+2. Reconstruct historique = groupby(equipe, nr_ffe) → roster réel à saison X.
+3. Permet audit D8 cross-year SOTA (spec §1.3 N≥200) sans porter joueurs.parquet
+   à un format temporal versioning lourd.
+4. `from_parquets()` API CURRENT préservée (aucun impact app/main.py FastAPI).
+
+### Limitations reconnues (R-ALI-05 NEW)
+
+| Champ historique | Reconstructible ? | Workaround |
+|------------------|-------------------|------------|
+| Elo (per saison) | ✅ via `elo_blanc/noir` | median(elos) across rondes |
+| nr_ffe, nom, prenom | ✅ stable FFE | direct |
+| Club d'équipe | ✅ via `equipe` | direct |
+| Catégorie (Sen/Vet/etc) | ⚠️ peut être nullable historique | défaut "Sen" |
+| Genre | ⚠️ peut être nullable | défaut "M" |
+| `mute` status | ❌ non capturé historique | défaut False — **R-ALI-05** |
+| `licence_active` | ❌ non historique | défaut True (a joué donc actif) |
+| `age_min/max` | ❌ non historique | None |
+
+`RuleEngine.A02 §3.7.f noyau` (mutes) non validable empiriquement historique
+→ tag violations potentielles dans D8_FAILURE_ANALYSIS_LOG.md.
+
+### Consequences
+
+- **Code** : `services/ali/cache.py` ADD classmethod ~80L. Tests 5 NEW dans
+  `tests/services/test_cache.py`.
+- **Production app** : `app/main.py::lifespan` continue d'utiliser
+  `from_parquets()` (current state). Pas de régression FastAPI.
+- **D8 pipeline** : `BacktestHarness.setup(historical_saison=int|None)` route
+  vers la bonne factory. Default None = current behavior.
+- **Audit cross-year** : R-ALI-04 (drift FFE rules + roster turnover) validable
+  empiriquement Phase B (saisons 2021-2023).
+- **Phase 4+ extension** : reconstruction historique extensible à J02 jeunes
+  (D3) et Coupes (D4) en lisant les divisions adaptées.
+
+### Sources
+
+- ISO/IEC TR 24029-2:2024 §6.6 robustness under distribution shift cross-year
+- Tran et al. 2022 NeurIPS — distribution shifts ML
+- Spec D8 §1.3 (`2026-04-30-d8-fairness-robustness-design.md`)
+- Plan implémentation `2026-05-10-d8-historical-multidiv-implementation.md`
+
+---
+
+## ADR-019: D8 audit pivot multi-divisions × multi-saisons (rejection trade-off "saison 2024 N3 seule")
+
+**Date**: 10 Mai 2026
+**Statut**: Accepte (user explicit 2026-05-10 "j'exige produit livrable SOTA pour commercialisation")
+
+### Contexte
+
+Premier diagnostic D8 sur saison 2024 N3 seule a livré N=38 matches valides
+(<200 spec §1.3). Trade-off paresseux initialement proposé : "accepter N=38 saison
+2024 N3 seule, tracer dette multi-saisons Phase 5+". User a rejeté ("trade-off
+ou paresse !") et exigé résolution propre.
+
+### Decision
+
+Pivot architecture D8 vers **5 divisions × saisons disponibles** :
+
+- **Phase A** (atteinte spec §1.3 garantie) : saison 2024 × {Top 16, N1, N2, N3, N4}
+  - 5 kernels CPU Kaggle
+  - Total candidates ~2700 → N>>200 garanti
+- **Phase B** (optional post-V1, validation drift R-ALI-04) : saisons 2021-2023
+  × 5 divisions, sur état historique reconstruit (ADR-018)
+  - 15 kernels supplémentaires (optional)
+
+### Reasons
+
+1. Spec §1.3 N≥200 atteinte sans relâcher
+2. ISO 24027 §6 `by_niveau` breakdown enrichi : 5 niveaux Elo distincts
+   (Top 16 ≈ 2300+, N1 ≈ 2100-2300, N2 ≈ 1900-2100, N3 ≈ 1700-1900,
+   N4 ≈ 1500-1700) → validation champion cross-niveau pour SaaS multi-tenant
+3. R-ALI-01 (PRIVATE rules unverifiable cross-niveau N1 stricter) quantifiable
+   empiriquement
+4. Naming FFE stable saison 2024 (pas de problème "Nationale III" vs "Nationale 3")
+5. CPU illimité Kaggle → 5 kernels parallèles = ~12h wallclock max, vs GPU 30h
+   quota/sem bottleneck
+
+### Alternatives rejetées
+
+| Alternative | Verdict | Raison |
+|-------------|---------|--------|
+| Saison 2024 N3 seule (N=38) | Rejeté | Spec §1.3 non atteinte, R-ALI-01 / R-ALI-04 non quantifiés |
+| GPU acceleration cuML/Triton | Rejeté | Per-match batch 8 boards trop petit, overhead transfer > gain. Quota GPU 30h/sem bottleneck. Port LGB/XGB/CB/MLP = effort substantiel + risque regression D-P3-13. |
+| Multi-saisons seules (sans multi-div) | Insuffisant | Reconstruction historique = R-ALI-05 NEW, gain by_niveau perdu |
+| **Multi-divisions saison 2024 + Phase B optional** | **Accepte** | Phase A garantit spec §1.3, Phase B post-V1 valide drift cross-year |
+
+### Consequences
+
+- **Code** : `scripts/d8/run.py` lit `ALICE_DIVISION` env var. `D8Lineage` extend
+  avec field `division`. `aggregate.py` fuse keyed par `(saison, division)`.
+- **Wrappers** : 5 wrappers Phase A `run_2024_{top16,n1,n2,n3,n4}.py` +
+  kernel-metadata associés.
+- **Aggregator** : `D8_FINDINGS.md` template ajoute sections by_niveau (Phase A)
+  + by_saison (Phase B). Phase A skip by_saison si saison unique.
+- **Tests** : ~10 nouveaux tests parametrisés (saison, division).
+- **ADR-016** (ALI multi-équipes joint conditionné Phase 4a) : non impacté.
+
+### Sources
+
+- Spec D8 §1.3 (N≥200), §3.5 (by_niveau breakdown ISO 24027 §6.1)
+- Pappalardo 2019 sport prediction baseline (per-level evaluation SOTA)
+- Mehrabi 2021 §4.1 (max_gap fairness across groups)
+- WebSearch Kaggle limites 2026 (CPU illimité, GPU 30h/sem)
+- NVIDIA cuML/FIL benchmark (rejetée car batch trop petit)

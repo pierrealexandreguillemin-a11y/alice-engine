@@ -42,12 +42,23 @@ class BacktestHarness:
         self.inference: StackingInferenceService | None = None
         self.feature_store: FeatureStore | None = None
 
-    def setup(self) -> None:
-        """Charge tous services. Raise si données absentes (fail-fast)."""
-        self.cache = ALIDataCache.load_from_parquets(
-            Path(settings.joueurs_parquet),
-            Path(settings.echiquiers_parquet),
-        )
+    def setup(self, *, historical_saison: int | None = None) -> None:
+        """Charge tous services. Raise si données absentes (fail-fast).
+
+        @param historical_saison: si fourni, reconstruit cache état historique
+            depuis echiquiers[saison=S] (ADR-018, R-ALI-07). None = current state.
+        """
+        if historical_saison is not None:
+            self.cache = ALIDataCache.from_parquets_at_saison(
+                Path(settings.joueurs_parquet),
+                Path(settings.echiquiers_parquet),
+                historical_saison,
+            )
+        else:
+            self.cache = ALIDataCache.load_from_parquets(
+                Path(settings.joueurs_parquet),
+                Path(settings.echiquiers_parquet),
+            )
         self.rule_engine = RuleEngine.from_json_file(
             Path(settings.ffe_rules_dir) / "a02.json",
         )

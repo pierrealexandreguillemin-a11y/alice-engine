@@ -157,6 +157,7 @@ et `docs/iso/AI_RISK_ASSESSMENT.md` §R-ALI-06.
 | **R-ALI-04** | Season-over-season drift undetected (no AIS / drift dashboard) | 4 | 3 | **12** ⚠️ | 🟡 Monitor | MLOps | Phase 5+ (D9) |
 | **R-ALI-05** | Single-instance deployment, no horizontal scaling Phase 3 | 3 | 2 | **6** 🟡 | 🟡 Monitor | DevOps | Phase 5 |
 | **R-ALI-06** | ALI input non-conditionné multi-équipes adverse (pool club total au lieu de pool conditionné CE-adverse miroir) | 5 | 4 | **20** 🔴 | 🔴 CRITICAL OPEN | ML Eng + Architect | Phase 4a (D-P3-19) |
+| **R-ALI-07** | Noyau historique unverifiable (ALIDataCache reconstruction at_saison) — `mute` status not captured in echiquiers.parquet for historical saisons → defaults to False → A02 §3.7.f noyau cannot be empirically validated on Phase B audit data | 3 | 2 | **6** 🟡 | 🟡 Monitor | ML Eng | Phase 5+ (FFE historical snapshot integration) |
 
 **R-ALI-01 — PRIVATE rules unverifiable**
 - **Description** : 4 of 14 FFE A02 articles (3.7.b force équipes, 3.2
@@ -301,6 +302,11 @@ et `docs/iso/AI_RISK_ASSESSMENT.md` §R-ALI-06.
   primitives `services/ce/` OR-Tools + `ScenarioGenerator.generate(
   simultaneous_teams=...)` extension. Design retenu :
   `docs/architecture/adr/ADR-016-ali-conditioned-multi-team-adverse-ce-mirror.md`
+- R-ALI-07 : `ALIDataCache.from_parquets_at_saison()` (ADR-018) reconstructs
+  historical roster but `mute` defaults to False. D8 Phase B audit logs
+  potential violations in `D8_FAILURE_ANALYSIS_LOG.md` under
+  `noyau_historical_unverifiable` tag. Phase 5+ : integrate FFE historical
+  mute snapshot via web scraping yearly archives.
   (status: Proposed). Versioned debt mirror :
   `docs/project/DEBT_LEDGER.md` D-P3-19.
 

@@ -49,6 +49,8 @@ class D8Lineage:
     kernel_id: str
     kernel_version_kaggle: str
     run_at_utc: str
+    division: str = ""  # ADR-019 multi-division audit (Top 16/N1/N2/N3/N4)
+    saison: int = 0  # ADR-019 explicit saison (vs default kernel_id parsing)
 
 
 class D8GateStatus(Enum):

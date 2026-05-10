@@ -72,6 +72,8 @@ def _input_paths() -> dict[str, Path]:
 
 def _build_lineage(saison: int, paths: dict[str, Path]) -> D8Lineage:
     """ISO 5259 SHA-256 lineage at kernel start."""
+    division = os.environ.get("ALICE_DIVISION", SAISON_DIVISION_FILTER[saison])
+    div_slug = division.lower().replace(" ", "-")
     return D8Lineage(
         joueurs_sha256=loader.compute_file_sha256(paths["joueurs"]),
         echiquiers_sha256=loader.compute_file_sha256(paths["echiquiers"]),
@@ -82,21 +84,24 @@ def _build_lineage(saison: int, paths: dict[str, Path]) -> D8Lineage:
         ali_n_topk=10,
         ali_n_mc_pairs=5,
         ali_decay_lambda=0.9,
-        kernel_id=f"pguillemin/d8-saison-{saison}",
+        kernel_id=f"pguillemin/d8-{saison}-{div_slug}",
         kernel_version_kaggle=os.environ.get("KAGGLE_KERNEL_VERSION", "v1"),
         run_at_utc=datetime.now(UTC).isoformat(),
+        division=division,
+        saison=saison,
     )
 
 
-def _checkpoint_partial(output_dir: Path, saison: int, **stages: Any) -> None:
+def _checkpoint_partial(output_dir: Path, saison: int, div_slug: str, **stages: Any) -> None:
     """Incremental save (kaggle-deployment skill : timeout-safe artifacts)."""
     partial = {
         "schema_version": "d8.v1-partial",
         "saison": saison,
+        "division_slug": div_slug,
         **stages,
         "_status": "partial — perturbation stages pending",
     }
-    (output_dir / f"d8_saison_{saison}_partial.json").write_text(
+    (output_dir / f"d8_{saison}_{div_slug}_partial.json").write_text(
         json.dumps(partial, indent=2, default=str),
         encoding="utf-8",
     )
@@ -141,18 +146,49 @@ SAISON_DIVISION_FILTER: dict[int, str] = {
     2030: "Nationale 3",
 }
 
+# type_competition naming change FFE (parser pre-2022 tagged "autre", post tag "national").
+SAISON_TYPE_COMPETITION: dict[int, str] = {
+    2018: "autre",
+    2019: "autre",
+    2020: "autre",
+    2021: "autre",
+    2022: "national",
+    2023: "national",
+    2024: "national",
+    2025: "national",
+    2026: "national",
+    2027: "national",
+    2028: "national",
+    2029: "national",
+    2030: "national",
+}
+
+
+CURRENT_SAISON = 2024  # ALIDataCache from_parquets() reflects this saison's roster
+
 
 def _run_backtest(saison: int) -> Any:
-    """Boot Plan 3 BacktestHarness + run one saison via BacktestRunner."""
+    """Boot Plan 3 BacktestHarness + run one (saison, division) via BacktestRunner.
+
+    Reads `ALICE_DIVISION` env var to override default mapping.
+    Routes to historical cache reconstruction (ADR-018) when saison != CURRENT_SAISON.
+    """
     from scripts.backtest.harness import BacktestHarness
     from scripts.backtest.runner import BacktestRunner
     from scripts.backtest.runner_types import RunnerConfig
 
     harness = BacktestHarness()
-    harness.setup()
+    harness.setup(historical_saison=None if saison == CURRENT_SAISON else saison)
+
+    division = os.environ.get("ALICE_DIVISION", SAISON_DIVISION_FILTER[saison])
+    type_comp = SAISON_TYPE_COMPETITION[saison]
+    rondes_default = (5, 7, 9, 11) if saison >= 2022 else (1, 3, 5, 7, 9)  # noqa: PLR2004
+
     cfg_kwargs: dict[str, Any] = {
         "saison": saison,
-        "division_filter": SAISON_DIVISION_FILTER[saison],
+        "division_filter": division,
+        "type_competition": type_comp,
+        "rondes": rondes_default,
     }
     if (smoke := os.environ.get("SMOKE_MAX_MATCHES")) is not None:
         cfg_kwargs["max_matches"] = int(smoke)
@@ -248,14 +284,16 @@ def _compute_conformal_stage(per_match: list[Any]) -> dict[str, Any]:
 
 
 def main() -> None:
-    """Per-saison D8 orchestrator entry point."""
+    """Per-(saison, division) D8 orchestrator entry point."""
     saison = int(os.environ["ALICE_SAISON"])
     _validate_saison(saison)
+    division = os.environ.get("ALICE_DIVISION", SAISON_DIVISION_FILTER[saison])
+    div_slug = division.lower().replace(" ", "-")
     output_dir = Path(os.environ.get("KAGGLE_WORKING_DIR", "/kaggle/working"))
     output_dir.mkdir(parents=True, exist_ok=True)
 
     paths = _input_paths()
-    logger.info("D8 saison %d — building lineage", saison)
+    logger.info("D8 saison %d %s — building lineage", saison, division)
     lineage = _build_lineage(saison, paths)
 
     logger.info("D8 saison %d — running BacktestRunner", saison)
@@ -271,7 +309,7 @@ def main() -> None:
             "lineage": asdict(lineage),
             "_status": f"insufficient_matches: {exc}",
         }
-        (output_dir / f"d8_saison_{saison}.json").write_text(
+        (output_dir / f"d8_{saison}_{div_slug}.json").write_text(
             json.dumps(partial, indent=2, default=str),
             encoding="utf-8",
         )
@@ -281,6 +319,22 @@ def main() -> None:
 
     if len(per_match) < CONFORMAL_CALIB_N + 1:
         msg = f"Saison {saison} only {len(per_match)} matches, need >={CONFORMAL_CALIB_N + 1}"
+        if os.environ.get("SMOKE_MAX_MATCHES") is not None:
+            # Smoke mode: emit partial report (skip downstream stages requiring N>=31)
+            partial = {
+                "schema_version": "d8.v1-smoke",
+                "saison": saison,
+                "n_matches": len(per_match),
+                "lineage": asdict(lineage),
+                "per_match": _flatten_per_match(per_match),
+                "_status": f"smoke_below_conformal_threshold: {msg}",
+            }
+            (output_dir / f"d8_{saison}_{div_slug}.json").write_text(
+                json.dumps(partial, indent=2, default=str),
+                encoding="utf-8",
+            )
+            logger.info("D8 saison %d smoke partial written (n=%d)", saison, len(per_match))
+            return
         raise RuntimeError(msg)
 
     bdowns = _compute_breakdowns_stage(runner, per_match)
@@ -289,6 +343,7 @@ def main() -> None:
     _checkpoint_partial(
         output_dir,
         saison,
+        div_slug,
         lineage=asdict(lineage),
         n_matches=len(per_match),
         per_match=_flatten_per_match(per_match),
@@ -353,7 +408,7 @@ def main() -> None:
         dro_wasserstein=dro_summary,
     )
 
-    output_path = output_dir / f"d8_saison_{saison}.json"
+    output_path = output_dir / f"d8_{saison}_{div_slug}.json"
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(_dump_report(report), f, indent=2, default=str, ensure_ascii=False)
     logger.info("D8 saison %d — wrote %s", saison, output_path)

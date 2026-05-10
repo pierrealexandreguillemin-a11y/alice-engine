@@ -88,10 +88,17 @@ CODE_TOPLEVEL_FILES: tuple[str, ...] = (
 # kernel-metadata-saison-*.json::code_file. They live in scripts/d8/ and
 # are also staged in alice-d8-code so cross-imports resolve identically.
 CODE_PER_SAISON_WRAPPERS: tuple[str, ...] = (
+    # Legacy single-saison wrappers (still functional via SAISON_DIVISION_FILTER default).
     "scripts/d8/run_2021.py",
     "scripts/d8/run_2022.py",
     "scripts/d8/run_2023.py",
     "scripts/d8/run_2024.py",
+    # Phase A pivot (ADR-019) : 5 divisions saison 2024.
+    "scripts/d8/run_2024_top_16.py",
+    "scripts/d8/run_2024_nationale_1.py",
+    "scripts/d8/run_2024_nationale_2.py",
+    "scripts/d8/run_2024_nationale_3.py",
+    "scripts/d8/run_2024_nationale_4.py",
 )
 
 

@@ -47,6 +47,14 @@ from scripts.d8.gates import (  # noqa: E402
 from scripts.d8.types import D8FullReport, D8GateEvaluation, D8Lineage  # noqa: E402
 
 DEFAULT_SAISONS: tuple[int, ...] = (2021, 2022, 2023, 2024)
+PHASE_A_AUDITS: tuple[tuple[int, str], ...] = (
+    # ADR-019 Phase A : saison 2024 × 5 divisions
+    (2024, "top-16"),
+    (2024, "nationale-1"),
+    (2024, "nationale-2"),
+    (2024, "nationale-3"),
+    (2024, "nationale-4"),
+)
 PERTURBATION_GATES_INCONCLUSIVE: tuple[str, ...] = (
     "G_ROB_01_recall_drop_1pct",
     "G_ROB_02_recall_drop_5pct",
@@ -75,6 +83,30 @@ def load_saison_reports(
             raise FileNotFoundError(msg)
         with found.open(encoding="utf-8") as f:
             out[saison] = json.load(f)
+    return out
+
+
+def load_audit_reports(
+    input_dir: Path,
+    audits: tuple[tuple[int, str], ...] = PHASE_A_AUDITS,
+) -> dict[tuple[int, str], dict[str, Any]]:
+    """Load d8_{saison}_{div-slug}.json reports keyed by (saison, division) — ADR-019.
+
+    Skip reports with _status='insufficient_matches' or 'd8.v1-empty' schema
+    (aggregator handles them as 0-count contributors).
+    """
+    out: dict[tuple[int, str], dict[str, Any]] = {}
+    for saison, div_slug in audits:
+        candidates = (
+            input_dir / f"d8-{saison}-{div_slug}" / f"d8_{saison}_{div_slug}.json",
+            input_dir / f"d8_{saison}_{div_slug}.json",
+        )
+        found = next((p for p in candidates if p.exists()), None)
+        if found is None:
+            msg = f"Missing audit (saison={saison}, division={div_slug}); tried {candidates}"
+            raise FileNotFoundError(msg)
+        with found.open(encoding="utf-8") as f:
+            out[(saison, div_slug)] = json.load(f)
     return out
 
 
