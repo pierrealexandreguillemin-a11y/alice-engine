@@ -58,9 +58,33 @@ def _validate_saison(saison: int) -> None:
         raise ValueError(msg)
 
 
+def _resolve_input_base() -> Path:
+    """Probe Kaggle mount layout (depth-1 OR depth-4 for freshly-uploaded datasets).
+
+    kaggle-deployment skill 2026-05-04 : fresh dataset_sources mount at depth-4
+    `/kaggle/input/datasets/{user}/{slug}/`, NOT depth-1 `/kaggle/input/{slug}/`.
+    Probe both, fail-fast if neither contains joueurs.parquet.
+    """
+    candidates = [
+        Path("/kaggle/input/alice-d8-input"),
+        Path("/kaggle/input/datasets/pguillemin/alice-d8-input"),
+    ]
+    # Robust glob fallback in case Kaggle layout shifts again
+    for p in (
+        Path("/kaggle/input").glob("**/data/joueurs.parquet")
+        if Path("/kaggle/input").is_dir()
+        else []
+    ):
+        candidates.append(p.parents[1])
+    for base in candidates:
+        if (base / "data" / "joueurs.parquet").is_file():
+            return base
+    return Path("/kaggle/input/alice-d8-input")  # local dev fallback
+
+
 def _input_paths() -> dict[str, Path]:
     """Resolve input paths via env vars (Kaggle: alice-d8-input mount; local: ./)."""
-    base = Path("/kaggle/input/alice-d8-input")
+    base = _resolve_input_base()
     mcd = Path(os.environ.get("MODEL_CACHE_DIR", base / "artefacts"))
     return {
         "joueurs": Path(os.environ.get("JOUEURS_PARQUET", base / "data/joueurs.parquet")),
