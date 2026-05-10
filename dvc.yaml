@@ -55,3 +55,45 @@ stages:
       - reports/backtest/ali_holdout_2024.json:
           cache: false
           persist: true
+
+  d8_audit:
+    desc: >
+      D8 Phase 3.5 STRICT — fairness/robustness audit ALI champion sur N=280
+      multi-saisons (2021-2024), 19 gates G-A SOTA strict + case-by-case.
+      Stage local-side : downloads aggregator outputs from Kaggle d8-aggregator
+      kernel and persists into reports/d8/. Real compute (4 saison kernels +
+      aggregator, ~75 min wallclock) lives on Kaggle CPU (cf scripts/d8/
+      kernel-metadata-*.json + scripts/d8/upload_d8_dataset.py).
+      Sources : ISO/IEC TR 24027:2021 (fairness), 24029-2:2024 (robustness),
+      Mehrabi 2021, Hardt 2016, Pleiss 2017, Hébert-Johnson 2018, Vovk 2024,
+      Sinha 2018, Duchi & Namkoong 2021. Spec : docs/superpowers/specs/
+      2026-04-30-d8-fairness-robustness-design.md.
+    cmd: python -m scripts.d8.download_outputs
+    deps:
+      - scripts/d8/download_outputs.py
+      - scripts/d8/aggregate.py
+      - scripts/d8/run.py
+      - scripts/d8/breakdowns.py
+      - scripts/d8/calibration.py
+      - scripts/d8/conformal.py
+      - scripts/d8/dro.py
+      - scripts/d8/gates.py
+      - scripts/d8/loader.py
+      - scripts/d8/stress_elo.py
+      - scripts/d8/stress_roster.py
+      - scripts/d8/types.py
+      - models/cache/mlp_meta_learner.joblib
+      - models/cache/temperature_T.joblib
+    outs:
+      - reports/d8/d8_full_report.json:
+          cache: false
+          persist: true
+      - reports/d8/D8_FINDINGS.md:
+          cache: false
+          persist: true
+      - reports/d8/gates_19_status.json:
+          cache: false
+          persist: true
+      - reports/d8/D8_FAILURE_ANALYSIS_LOG.md:
+          cache: false
+          persist: true
