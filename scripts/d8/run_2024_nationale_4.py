@@ -13,6 +13,9 @@ from pathlib import Path
 
 os.environ["ALICE_SAISON"] = "2024"
 os.environ["ALICE_DIVISION"] = "Nationale 4"
+# D-2026-05-11 : N4 a ~24% taux validation post-filter, default max_matches=50
+# donnait 19 valid < 31 conformal threshold. Bump 200 → ~48 valid >= 31.
+os.environ.setdefault("ALICE_MAX_MATCHES", "200")
 
 
 # Probe mount layout (depth-1 OR depth-4 for fresh datasets) — INLINE per

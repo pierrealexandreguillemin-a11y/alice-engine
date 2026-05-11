@@ -289,8 +289,14 @@ def _compute_calibration_stage(per_match: list[Any]) -> dict[str, dict[str, floa
     return multicalib
 
 
-def _compute_conformal_stage(per_match: list[Any]) -> dict[str, Any]:
-    """Step 8 : split conformal CI 90% + coverage."""
+def _compute_conformal_stage(
+    per_match: list[Any], support_max: float = 8.0
+) -> dict[str, Any]:
+    """Step 8 : split conformal CI 90% + coverage.
+
+    @param support_max: upper bound of e_score support (D-2026-05-11). For
+        Phase A all 5 divisions team_size=8 → support_max=8.0.
+    """
     import numpy as np
 
     e_obs = np.array([m.e_score_observed for m in per_match])
@@ -298,10 +304,12 @@ def _compute_conformal_stage(per_match: list[Any]) -> dict[str, Any]:
     n = CONFORMAL_CALIB_N
     cal = conformal.split_calibrate(e_obs[:n], e_pred[:n], alpha=CONFORMAL_ALPHA)
     cov = conformal.coverage_rate(e_obs[n:], e_pred[n:], cal)
-    set_size = conformal.conformal_set_size_mean(e_pred[n:], cal)
+    set_size = conformal.conformal_set_size_mean(e_pred[n:], cal, support_max=support_max)
     return {
         "coverage_global": float(cov),
         "set_size_mean": float(set_size),
+        "set_size_relative": float(set_size / support_max),
+        "support_max": float(support_max),
         "quantile_threshold": float(cal.quantile_threshold),
         "n_calibration": cal.n_calibration,
     }
@@ -363,7 +371,9 @@ def main() -> None:
 
     bdowns = _compute_breakdowns_stage(runner, per_match)
     multicalib = _compute_calibration_stage(per_match)
-    conformal_out = _compute_conformal_stage(per_match)
+    conformal_out = _compute_conformal_stage(
+        per_match, support_max=float(runner.config.team_size)
+    )
     _checkpoint_partial(
         output_dir,
         saison,

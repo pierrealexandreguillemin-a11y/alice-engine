@@ -50,18 +50,34 @@ def enumerate_candidates(cache: ALIDataCache, config: RunnerConfig) -> list[Matc
         & (df["division"] == config.division_filter)
         & (df["ronde"].isin(list(config.rondes)))
     ]
-    sub = sub.drop_duplicates(subset=["saison", "ronde", "equipe_dom", "equipe_ext"])
+    # D-2026-05-11 : include `groupe` in dedup key — Top 16 saison 2024 a 4 groupes
+    # (Groupe A/B rondes 1-7 régulière + Poule Haute/Basse rondes 1-4 finale).
+    # Une équipe qualifiée (ex Bischwiller) apparaît en Groupe B ET Poule Haute
+    # à la même ronde nominale → 2 matches distincts mais (ronde, dom, ext)
+    # collision sans `groupe`. Resilient à colonne absente (tests + données historiques).
+    has_groupe = "groupe" in sub.columns
+    dedup_cols = ["saison", "ronde", "equipe_dom", "equipe_ext"]
+    if has_groupe:
+        dedup_cols.append("groupe")
+    sub = sub.drop_duplicates(subset=dedup_cols)
 
     out: list[MatchCandidate] = []
-    seen: set[tuple[int, str, str]] = set()
+    seen: set[tuple[int, str, str, str]] = set()
     for _, row in sub.iterrows():
         ronde = int(row["ronde"])
         user_team = str(row["equipe_dom"])
         opp_team = str(row["equipe_ext"])
+        if has_groupe:
+            groupe_raw = row.get("groupe")
+            groupe = (
+                str(groupe_raw) if groupe_raw is not None and str(groupe_raw) != "nan" else ""
+            )
+        else:
+            groupe = ""
         # FFE bye teams ("Exempt") are not real matches — skip (D-2026-05-10-bye)
         if user_team == "Exempt" or opp_team == "Exempt":
             continue
-        key = (ronde, user_team, opp_team)
+        key = (ronde, user_team, opp_team, groupe)
         if key in seen:
             continue
         opp_club = team_to_club.get(opp_team)
@@ -81,6 +97,7 @@ def enumerate_candidates(cache: ALIDataCache, config: RunnerConfig) -> list[Matc
                 user_team=user_team,
                 opp_team=opp_team,
                 opp_club=opp_club,
+                groupe=groupe,
             )
         )
         seen.add(key)

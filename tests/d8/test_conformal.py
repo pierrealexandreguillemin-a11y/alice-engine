@@ -286,3 +286,66 @@ def test_nonconf_scores_sorted() -> None:
     cal = split_calibrate(y_obs, y_pred, alpha=0.10)
     sorted_scores = np.sort(cal.nonconf_scores)
     assert np.array_equal(cal.nonconf_scores, sorted_scores)
+
+
+# D-2026-05-11 support_max fix tests (E[score] match sum ∈ [0, K=team_size])
+
+
+def test_conformal_set_size_support_max_k_boards() -> None:
+    """E[score] match sum ∈ [0, K=8] : set_size doit refléter K, pas saturer à 1.
+
+    D-2026-05-11 : avant le fix, le clip [0, 1.0] saturait set_size_mean=1.0
+    pour q_hat=4.4 sur range [0, 8]. Avec support_max=8.0, set_size_mean reflète
+    réellement l'efficiency Angelopoulos 2023 §4.2.
+    """
+    rng = np.random.default_rng(42)
+    n = 100
+    # E[score] simulated on [0, 8] : 8 boards × per-board E[score] ∈ [0, 1]
+    y_obs = rng.uniform(0, 8, n)
+    y_pred = y_obs + rng.normal(0, 1.0, n)
+    cal = split_calibrate(y_obs, y_pred, alpha=0.10)
+    # Without support_max (default 1.0), saturates at 1.0
+    size_clipped = conformal_set_size_mean(y_pred, cal, support_max=1.0)
+    # With support_max=8.0, reflects real interval width
+    size_real = conformal_set_size_mean(y_pred, cal, support_max=8.0)
+    assert size_real > size_clipped, (
+        f"support_max fix should expand set_size : clipped={size_clipped:.3f} "
+        f"vs real={size_real:.3f} (q_hat={cal.quantile_threshold:.3f})"
+    )
+    assert 0.0 < size_real <= 8.0
+
+
+def test_conformal_set_size_support_max_zero_raises() -> None:
+    """ISO 27034 input validation : support_max must be > 0."""
+    cal = ConformalCalibration(
+        quantile_threshold=0.5,
+        nonconf_scores=np.array([0.1, 0.5]),
+        n_calibration=2,
+        alpha=0.10,
+    )
+    with pytest.raises(ValueError, match=r"support_max"):
+        conformal_set_size_mean(np.array([4.0]), cal, support_max=0.0)
+
+
+def test_conformal_set_size_support_max_negative_raises() -> None:
+    cal = ConformalCalibration(
+        quantile_threshold=0.5,
+        nonconf_scores=np.array([0.1, 0.5]),
+        n_calibration=2,
+        alpha=0.10,
+    )
+    with pytest.raises(ValueError, match=r"support_max"):
+        conformal_set_size_mean(np.array([4.0]), cal, support_max=-1.0)
+
+
+def test_conformal_set_size_clipped_at_support_max() -> None:
+    """Set bounds clipped to [0, support_max] : never exceeds support range."""
+    cal = ConformalCalibration(
+        quantile_threshold=10.0,  # huge q_hat = full coverage
+        nonconf_scores=np.array([5.0, 10.0]),
+        n_calibration=2,
+        alpha=0.10,
+    )
+    # Even with q=10, y_pred=4, support_max=8 → set = [0, 8] = 8.0
+    size = conformal_set_size_mean(np.array([4.0]), cal, support_max=8.0)
+    assert size == pytest.approx(8.0)

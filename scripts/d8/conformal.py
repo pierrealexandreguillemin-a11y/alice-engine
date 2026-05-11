@@ -149,25 +149,39 @@ def coverage_per_group(
 def conformal_set_size_mean(
     y_predicted: NDArray[np.float64],
     calibration: ConformalCalibration,
+    support_max: float = 1.0,
     grid_resolution: float = 0.01,
 ) -> float:
     """Mean conformal set size = efficiency (Angelopoulos 2023 §4.2).
 
-    For each y_pred, the conformal set is { y in [0, 1] : |y - y_pred| <= q_hat }.
-    Set size = min(y_pred + q_hat, 1) - max(y_pred - q_hat, 0).
+    For each y_pred, the conformal set is { y in [0, support_max] :
+    |y - y_pred| <= q_hat }.
+    Set size = min(y_pred + q_hat, support_max) - max(y_pred - q_hat, 0).
 
-    @param y_predicted: model predictions in [0, 1]
+    D-2026-05-11 fix : ``support_max`` était hardcodé 1.0, masquant la vraie
+    efficiency pour métriques sur [0, K] (E[score] match sum, K=team_size=8).
+    Pour q_hat=4.4 sur [0,8], le clip [0,1] saturait artificiellement set_size
+    à 1.0. ISO 24029 §5.3 (robustness via prediction intervals) requiert que
+    l'efficiency soit mesurable, donc support_max doit refléter le vrai
+    support de la prédiction.
+
+    @param y_predicted: model predictions in [0, support_max]
     @param calibration: ConformalCalibration from split_calibrate
+    @param support_max: upper bound of the prediction support (default 1.0
+        pour probas. Pour E[score] match sum sur K boards, passer K=team_size).
     @param grid_resolution: granularity for clipping bounds (default 0.01)
-    @raises ValueError: grid_resolution not in (0, 1]
+    @raises ValueError: grid_resolution not in (0, 1], support_max <= 0
     """
     if not (0.0 < grid_resolution <= 1.0):
         msg = f"grid_resolution must be in (0, 1], got {grid_resolution}"
         raise ValueError(msg)
+    if support_max <= 0.0:
+        msg = f"support_max must be > 0, got {support_max}"
+        raise ValueError(msg)
     if len(y_predicted) == 0:
         return 0.0
     q = calibration.quantile_threshold
-    upper = np.minimum(y_predicted + q, 1.0)
+    upper = np.minimum(y_predicted + q, support_max)
     lower = np.maximum(y_predicted - q, 0.0)
     sizes = upper - lower
     return float(sizes.mean())

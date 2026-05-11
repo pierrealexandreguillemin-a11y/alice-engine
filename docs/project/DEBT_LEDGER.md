@@ -18,6 +18,44 @@ memory).
 
 ## Open Critical Debt (referenced from versioned ISO docs)
 
+### D-2026-05-11-d8-groupe-filter — RÉSOLUE 2026-05-11
+
+- **Source** : D8 Phase A push v12 (2026-05-10) ERROR Top 16 saison 2024.
+  Investigation 2026-05-11 a identifié `_select_match_rows` filtre incomplet
+  `(saison, ronde, club)` sans `groupe` → mélange Phase 1 (Groupe B) + Phase 2
+  (Poule Haute) pour équipes qualifiées → invariant FFE trip.
+- **Resolution** : `MatchCandidate.groupe` propagé partout + filter par groupe.
+  Voir ADR-020.
+- **Cross-references** : ADR-020, ADR-019 (Phase A spec), R-ALI-01 fairness.
+
+### D-2026-05-11-conformal-support-max — RÉSOLUE 2026-05-11
+
+- **Source** : Audit outputs Phase A v2 N1/N2/N3 a montré `set_size_mean=1.0`
+  saturé. Root cause = `conformal_set_size_mean` clip [0, 1.0] alors que
+  E[score] ∈ [0, K=team_size=8]. Gate G_ROB_07 non-discriminant.
+- **Resolution** : `support_max: float = 1.0` param + clip [0, support_max].
+  `run.py::_compute_conformal_stage` passe `support_max=team_size=8.0`.
+  Voir ADR-020.
+- **Cross-references** : ADR-020, ISO 24029 §5.3 robustness, Vovk 2024 §2.3
+  + Angelopoulos 2023 §4.2.
+
+### D-2026-05-10-max-matches-default — RÉSOLUE 2026-05-11
+
+- **Source** : Phase A push v12 (2026-05-10) ERROR N4 (only 19 valid < 31
+  conformal threshold) à cause de `RunnerConfig.max_matches=50` hardcoded.
+- **Resolution** : `ALICE_MAX_MATCHES` env var (default 50 préservé) + 5
+  wrappers Phase A set à "200". Voir ADR-020.
+- **Cross-references** : ADR-020, R-PRE-PUSH-01 (slow tests préservé).
+
+### D-2026-05-10-ffe-quality-data — RÉSOLUE 2026-05-11
+
+- **Source** : Phase A push v12 ERROR Top 16 saison 2024 "Bischwiller 4 teams
+  1 match" suspected scrape bug.
+- **Resolution** : Investigation parquet 2026-05-11 a confirmé data CORRECTE.
+  Bug était dans le code Alice-Engine (D-2026-05-11-d8-groupe-filter), pas
+  dans ffe-scrapper. Aucune action upstream requise.
+- **Cross-references** : ADR-020, D-2026-05-11-d8-groupe-filter.
+
 ### D-P3-19 — ALI multi-équipes joint conditionné (CRITICAL, Phase 4a)
 
 - **Source** : T22 review post-mortem 2026-04-28 (commit `88ba3a1`)

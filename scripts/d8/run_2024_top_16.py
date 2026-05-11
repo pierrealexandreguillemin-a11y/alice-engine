@@ -13,6 +13,9 @@ from pathlib import Path
 
 os.environ["ALICE_SAISON"] = "2024"
 os.environ["ALICE_DIVISION"] = "Top 16"
+# D-2026-05-11 : Top 16 a 4 groupes (Groupe A/B régulière + Poule Haute/Basse
+# finale). Candidates total ~88. Bump 200 pour couvrir tous + buffer post-filter.
+os.environ.setdefault("ALICE_MAX_MATCHES", "200")
 
 
 # Probe mount layout (depth-1 OR depth-4 for fresh datasets) — INLINE per

@@ -55,6 +55,7 @@ def extract_observed_lineup(
     ronde: int,
     *,
     as_domicile: bool | None = None,
+    groupe: str = "",
 ) -> ObservedLineup:
     """Extract real lineup from echiquiers.parquet for (club, saison, ronde).
 
@@ -68,12 +69,17 @@ def extract_observed_lineup(
     @param as_domicile: if True, filter matches where club is home;
         if False, filter matches where club is away; if None, try home first
         then away.
+    @param groupe: optional FFE groupe disambiguator (D-2026-05-11). Required
+        for multi-phase competitions (Top 16 = Groupe A/B + Poule Haute/Basse).
+        Empty = no groupe filter (backward compat for N1-N4 mono-groupe).
     @raises KeyError: no match found for the given club/saison/ronde.
     """
     df = cache.echiquiers_total
     sub = df[(df["saison"] == saison) & (df["ronde"] == ronde)]
+    if groupe:
+        sub = sub[sub["groupe"] == groupe]
     if sub.empty:
-        msg = f"No match found for saison={saison} ronde={ronde}"
+        msg = f"No match found for saison={saison} ronde={ronde} groupe={groupe!r}"
         raise KeyError(msg)
 
     match_rows, is_home = _select_match_rows(sub, club_name, as_domicile)

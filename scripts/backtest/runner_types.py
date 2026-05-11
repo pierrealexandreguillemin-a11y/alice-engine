@@ -9,10 +9,25 @@ Version: 1.0.0
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from services.ali.types import PlayerCandidate
+
+
+def _max_matches_default() -> int:
+    """ALICE_MAX_MATCHES env var override (D-2026-05-11). Default 50 preserved."""
+    raw = os.environ.get("ALICE_MAX_MATCHES", "50")
+    try:
+        v = int(raw)
+    except (TypeError, ValueError) as exc:
+        msg = f"ALICE_MAX_MATCHES must be int, got {raw!r}"
+        raise ValueError(msg) from exc
+    if v < 1:
+        msg = f"ALICE_MAX_MATCHES must be >=1, got {v}"
+        raise ValueError(msg)
+    return v
 
 if TYPE_CHECKING:
     from scripts.backtest.bootstrap import BootstrapCI
@@ -109,6 +124,13 @@ class MatchCandidate:
     """One sampled hold-out match candidate (pre-attempt).
 
     Frozen for ISO 29119 deterministic sampling lineage.
+
+    D-2026-05-11 fix : ``groupe`` disambiguates multi-phase competitions
+    (Top 16 saison 2024 = 4 groupes : "Groupe A", "Groupe B" rondes 1-7
+    régulière puis "Poule Haute"/"Poule Basse" rondes 1-4 finale). Sans
+    groupe, ``_select_match_rows`` mélange phase 1 et phase 2 pour une
+    équipe qualifiée → trip invariant FFE A02 §3.6. Default empty pour
+    backward compat (N1/N2/N3/N4 : 1 équipe = 1 groupe par saison).
     """
 
     saison: int
@@ -116,6 +138,7 @@ class MatchCandidate:
     user_team: str
     opp_team: str
     opp_club: str
+    groupe: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,7 +157,7 @@ class RunnerConfig:
 
     saison: int = 2024
     rondes: tuple[int, ...] = (5, 7, 9, 11)
-    max_matches: int = 50
+    max_matches: int = field(default_factory=_max_matches_default)
     team_size: int = 8
     division: str = "N3"
     nb_rondes_total: int = 11

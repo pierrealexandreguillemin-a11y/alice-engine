@@ -96,6 +96,7 @@ class BacktestRunner:
         user_team: str,
         opp_team: str,
         opp_club: str,
+        groupe: str = "",
     ) -> MatchStats | None:
         """Run one match : ALI predictions + baseline + metrics."""
         cache = self.harness.cache
@@ -124,7 +125,9 @@ class BacktestRunner:
                 seed=self.config.seed,
                 strict=False,
             )
-            observed = extract_observed_lineup(cache, opp_team, saison, ronde, as_domicile=False)
+            observed = extract_observed_lineup(
+                cache, opp_team, saison, ronde, as_domicile=False, groupe=groupe
+            )
         except Exception:
             logger.exception("match failed saison=%s ronde=%s opp=%s", saison, ronde, opp_team)
             if self.config.skip_failed_matches:
@@ -179,7 +182,12 @@ class BacktestRunner:
         stats: list[MatchStats] = []
         for cand in self.sample_matches():
             s = self.run_single(
-                cand.saison, cand.ronde, cand.user_team, cand.opp_team, cand.opp_club
+                cand.saison,
+                cand.ronde,
+                cand.user_team,
+                cand.opp_team,
+                cand.opp_club,
+                groupe=cand.groupe,
             )
             if s is not None:
                 stats.append(s)

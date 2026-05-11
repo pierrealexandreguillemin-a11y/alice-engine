@@ -589,6 +589,43 @@ des matches eux-mêmes (`echiquiers.parquet`).
 
 ---
 
+## ADR-020: D8 match identity `groupe` + conformal `support_max` fix
+
+**Date**: 11 Mai 2026
+**Statut**: Accepté (user explicit 2026-05-11 "SOTA ML + ISO conforme")
+**Detail**: `docs/architecture/adr/ADR-020-d8-groupe-filter-and-conformal-support-fix.md`
+
+### Décision
+
+3 fixes structurels D8 Phase A 2024 :
+
+1. **Match identity étendue** : `MatchCandidate.groupe` propagé partout (Top 16
+   saison 2024 = 4 groupes Groupe A/B + Poule Haute/Basse séquentiels). Sans
+   `groupe`, `_select_match_rows` mélange Phase 1 + Phase 2 → invariant FFE
+   trip → matches skipped.
+2. **Conformal `support_max`** : `conformal_set_size_mean` clip [0, K=team_size]
+   au lieu de [0, 1.0]. Pour E[score] ∈ [0, 8], le clip [0,1] saturait
+   `set_size_mean=1.0` artificiellement. Gate G_ROB_07 non-discriminant.
+3. **`ALICE_MAX_MATCHES` env var** : RunnerConfig.max_matches paramétrable via
+   env (default 50 préservé). Wrappers Phase A bump à 200 pour buffer post-filter
+   conformal N≥31.
+
+### Conséquences
+
+- 6 fichiers source + 5 wrappers Phase A + 3 fichiers tests modifiés.
+- 49 tests scope ciblé PASS + 9 ground_truth (slow) PASS + 3 test_runner E2E PASS.
+- Backward compat préservé (defaults safe : groupe="", support_max=1.0, max_matches=50).
+- Phase A v2 outputs (3 COMPLETE N1/N2/N3) **à invalider** : `set_size_mean=1.0`
+  saturé artificiellement, Phase A v3 re-push requis.
+
+### Sources SOTA
+
+- Vovk 2024 §2.3 split conformal
+- Angelopoulos & Bates 2023 §4.2 efficiency
+- ISO 5259 data lineage, ISO 24029 §5.3 robustness, ISO 27034 input validation
+
+---
+
 ## ADR-019: D8 audit pivot multi-divisions × multi-saisons (rejection trade-off "saison 2024 N3 seule")
 
 **Date**: 10 Mai 2026
