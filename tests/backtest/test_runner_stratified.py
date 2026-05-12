@@ -109,6 +109,53 @@ def test_dedup_same_pair() -> None:
     assert len(cands) == 1
 
 
+def test_enumerate_candidates_groupe_propagation_dedup() -> None:
+    """D-2026-05-11 Top 16 multi-phase groupe propagation.
+
+    Same (saison, ronde, dom, ext) BUT different groupe = 2 distinct candidates.
+    Without groupe in dedup key, would merge. Match identity = (saison, division,
+    groupe, ronde, dom, ext). MatchCandidate.groupe propagated from echiquiers.
+    """
+    rows = [
+        _row(2024, 5, "Bischwiller", "Tremblay", groupe="Groupe B"),
+        _row(2024, 5, "Bischwiller", "Clichy", groupe="Poule Haute"),
+        _row(2024, 5, "Bischwiller", "Tremblay", groupe="Groupe B"),  # exact dup → 1 candidate
+    ]
+    cfg = RunnerConfig(saison=2024, rondes=(5,), max_matches=10, team_size=8)
+    cache = _make_cache(rows, pool_size=10)
+    cands = enumerate_candidates(cache, cfg)  # type: ignore[arg-type]
+    # 2 distinct candidates because different opp + groupe
+    assert len(cands) == 2
+    groupes = {c.groupe for c in cands}
+    assert groupes == {"Groupe B", "Poule Haute"}
+    opps = {c.opp_team for c in cands}
+    assert opps == {"Tremblay", "Clichy"}
+
+
+def test_enumerate_candidates_groupe_resilient_column_absent() -> None:
+    """Backward compat : echiquiers without `groupe` column.
+
+    Legacy data / tests fixtures sans `groupe` → all candidates get groupe=""
+    without crash. `has_groupe` branch in enumerate_candidates handles it.
+    """
+    rows = [_row(2024, 5, "TeamA", "TeamB")]
+    cfg = RunnerConfig(saison=2024, rondes=(5,), max_matches=10, team_size=8)
+    cache = _make_cache(rows, pool_size=10)
+    cands = enumerate_candidates(cache, cfg)  # type: ignore[arg-type]
+    assert len(cands) == 1
+    assert cands[0].groupe == ""
+
+
+def test_enumerate_candidates_groupe_nan_handling() -> None:
+    """NaN value in groupe column → coerced to empty string (not "nan" str)."""
+    rows = [_row(2024, 5, "TeamA", "TeamB", groupe=float("nan"))]
+    cfg = RunnerConfig(saison=2024, rondes=(5,), max_matches=10, team_size=8)
+    cache = _make_cache(rows, pool_size=10)
+    cands = enumerate_candidates(cache, cfg)  # type: ignore[arg-type]
+    assert len(cands) == 1
+    assert cands[0].groupe == ""
+
+
 def test_stratify_balanced_per_ronde() -> None:
     """ISO 24027 §6 : stratification donne ~équilibré par ronde."""
     cands = [
