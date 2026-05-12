@@ -289,9 +289,7 @@ def _compute_calibration_stage(per_match: list[Any]) -> dict[str, dict[str, floa
     return multicalib
 
 
-def _compute_conformal_stage(
-    per_match: list[Any], support_max: float = 8.0
-) -> dict[str, Any]:
+def _compute_conformal_stage(per_match: list[Any], support_max: float = 8.0) -> dict[str, Any]:
     """Step 8 : split conformal CI 90% + coverage.
 
     @param support_max: upper bound of e_score support (D-2026-05-11). For
@@ -371,9 +369,7 @@ def main() -> None:
 
     bdowns = _compute_breakdowns_stage(runner, per_match)
     multicalib = _compute_calibration_stage(per_match)
-    conformal_out = _compute_conformal_stage(
-        per_match, support_max=float(runner.config.team_size)
-    )
+    conformal_out = _compute_conformal_stage(per_match, support_max=float(runner.config.team_size))
     _checkpoint_partial(
         output_dir,
         saison,

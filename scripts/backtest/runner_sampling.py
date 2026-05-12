@@ -69,9 +69,7 @@ def enumerate_candidates(cache: ALIDataCache, config: RunnerConfig) -> list[Matc
         opp_team = str(row["equipe_ext"])
         if has_groupe:
             groupe_raw = row.get("groupe")
-            groupe = (
-                str(groupe_raw) if groupe_raw is not None and str(groupe_raw) != "nan" else ""
-            )
+            groupe = str(groupe_raw) if groupe_raw is not None and str(groupe_raw) != "nan" else ""
         else:
             groupe = ""
         # FFE bye teams ("Exempt") are not real matches — skip (D-2026-05-10-bye)

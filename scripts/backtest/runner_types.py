@@ -29,6 +29,7 @@ def _max_matches_default() -> int:
         raise ValueError(msg)
     return v
 
+
 if TYPE_CHECKING:
     from scripts.backtest.bootstrap import BootstrapCI
     from scripts.backtest.statistical import McNemarResult, WilcoxonResult
