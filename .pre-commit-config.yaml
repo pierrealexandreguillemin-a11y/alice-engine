@@ -195,6 +195,20 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+      # ------------------------------------------------------------------------
+      # FORMATTING: Ruff Format Check (ISO 5055 - Maintainability)
+      # CI parity gate (D-2026-05-12) : CI runs `ruff format --check` strict.
+      # Local pre-commit `ruff-format` rewrites files, but pre-push must
+      # detect any un-formatted state BEFORE push to avoid CI red.
+      # ------------------------------------------------------------------------
+      - id: ruff-format-check
+        name: "ISO 5055 | Ruff Format Check (CI parity)"
+        description: "Detect unformatted files at pre-push (mirrors CI strict mode)"
+        entry: python -m ruff format --check app/ services/ scripts/
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
   # ============================================================================
   # STAGE: MANUAL
   # Focus: Documentation and architecture artifacts (on-demand)
