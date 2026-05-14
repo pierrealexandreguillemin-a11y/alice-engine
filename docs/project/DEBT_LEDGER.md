@@ -1,8 +1,8 @@
 # Debt Ledger — ALICE Engine (versioned mirror)
 
 **Document ID** : ALICE-DEBT-LEDGER
-**Version** : 1.0.0
-**Last updated** : 2026-04-29 (Plan 3 V2 T25 finalization, JALON #3 peer review Minor #5)
+**Version** : 1.0.1
+**Last updated** : 2026-05-14 (ADR-021 Top 16 rondes_default fix, D-2026-05-12-top16-v3-error RÉSOLUE)
 **ISO Compliance** : ISO/IEC 42001:2023 Annex A.6 (Lifecycle traceability),
 ISO/IEC 42010 (architecture description)
 
@@ -55,6 +55,27 @@ memory).
   Bug était dans le code Alice-Engine (D-2026-05-11-d8-groupe-filter), pas
   dans ffe-scrapper. Aucune action upstream requise.
 - **Cross-references** : ADR-020, D-2026-05-11-d8-groupe-filter.
+
+### D-2026-05-12-top16-v3-error — RÉSOLUE 2026-05-14 (ADR-021)
+
+- **Source** : Push Phase A v3 (2026-05-12) post-ADR-020. 4/5 kernels N1-N4
+  COMPLETE confirmed (410 matches total) mais Top 16 v3 ERROR, log Kaggle
+  0-byte. Investigation 2026-05-14 par lecture code + parquet (diagnostic-first,
+  pas de smoke local).
+- **Root cause** : `scripts/d8/run.py:209` `rondes_default=(5,7,9,11) if
+  saison >= 2022` calibré pour Nationale 1-4. Top 16 format élite = 7 rondes
+  régulière (Groupe A/B) + 4 rondes finale (Poule Haute/Basse) → 88 candidates
+  total, mais filtre (5,7,9,11) en retient seulement 16 → `len(per_match) <
+  CONFORMAL_CALIB_N+1=31` → `raise RuntimeError(msg)` ligne 368 uncaught
+  (try/except ValueError ligne 333 ne match pas) → kernel ERROR, stderr non
+  flushed (log 0-byte).
+- **Resolution** : `DIVISION_RONDES_DEFAULT: dict[str, tuple[int, ...]] = {"Top
+  16": (1,2,3,4,5,6,7)}` table dans `scripts/d8/run.py`, override division-specific
+  consulté AVANT fallback saison-based. Backward-compat strict N1-N4 (absent du
+  mapping). 3 tests garde-fou `tests/d8/test_run.py`. Voir ADR-021.
+- **Cross-references** : ADR-021, ADR-020 (préalable groupe propagation),
+  ISO 5055 SRP, ISO 42010 ADR, Vovk 2024 §2.3 N≥30 split-conformal,
+  `memory/project_debt_current.md` D-2026-05-12-top16-v3-error (RÉSOLUE).
 
 ### D-P3-19 — ALI multi-équipes joint conditionné (CRITICAL, Phase 4a)
 

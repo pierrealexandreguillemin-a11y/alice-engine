@@ -187,6 +187,17 @@ SAISON_TYPE_COMPETITION: dict[int, str] = {
     2030: "national",
 }
 
+# ADR-021 : Division-specific rondes filter.
+# Nationale 1-4 format championnat : rondes 5,7,9,11 (fin-saison reporting).
+# Top 16 format élite : 7 rondes régulière (Groupe A/B) + 4 rondes finale
+# (Poule Haute/Basse). All rondes 1-7 must be included → 88 candidates,
+# satisfait CONFORMAL_CALIB_N=30 invariant (line 350).
+# Without override, rondes_default=(5,7,9,11) filtre 88→16 matches Top 16
+# → RuntimeError ligne 368 uncaught → kernel ERROR (Phase A v3 Top 16 2026-05-12).
+DIVISION_RONDES_DEFAULT: dict[str, tuple[int, ...]] = {
+    "Top 16": (1, 2, 3, 4, 5, 6, 7),
+}
+
 
 CURRENT_SAISON = 2024  # ALIDataCache from_parquets() reflects this saison's roster
 
@@ -206,7 +217,12 @@ def _run_backtest(saison: int) -> Any:
 
     division = os.environ.get("ALICE_DIVISION", SAISON_DIVISION_FILTER[saison])
     type_comp = SAISON_TYPE_COMPETITION[saison]
-    rondes_default = (5, 7, 9, 11) if saison >= 2022 else (1, 3, 5, 7, 9)  # noqa: PLR2004
+    # ADR-021 : division-specific override (Top 16 = 7 rondes), default fallback
+    # Nationale 1-4 = (5,7,9,11) post-2022 / (1,3,5,7,9) pre-2022.
+    if division in DIVISION_RONDES_DEFAULT:
+        rondes_default = DIVISION_RONDES_DEFAULT[division]
+    else:
+        rondes_default = (5, 7, 9, 11) if saison >= 2022 else (1, 3, 5, 7, 9)  # noqa: PLR2004
 
     cfg_kwargs: dict[str, Any] = {
         "saison": saison,

@@ -626,6 +626,50 @@ des matches eux-mêmes (`echiquiers.parquet`).
 
 ---
 
+## ADR-021: D8 `DIVISION_RONDES_DEFAULT` mapping (Top 16 full 7 rondes)
+
+**Date**: 14 Mai 2026
+**Statut**: Accepté (user explicit 2026-05-14 "démarche ISO+SOTA guide solution")
+**Detail**: `docs/architecture/adr/ADR-021-d8-rondes-default-division-specific.md`
+
+### Décision
+
+Introduction d'un mapping `DIVISION_RONDES_DEFAULT` dans `scripts/d8/run.py`
+override division-specific consulté AVANT le fallback saison-based pour
+`rondes_default`. Top 16 = `(1,2,3,4,5,6,7)` complet (régulière 1-7 + finale 1-4
+agrégées). N1-N4 absents du mapping → fallback `(5,7,9,11)` préservé.
+
+### Root cause Phase A v3 Top 16 ERROR (2026-05-12, log Kaggle 0-byte)
+
+`rondes_default = (5, 7, 9, 11) if saison >= 2022` calibré pour Nationale 1-4
+format championnat fin-saison. Top 16 format élite (7 rondes régulière +
+4 rondes finale) capture seulement 16/88 candidates → `len(per_match) < 31` →
+`raise RuntimeError(msg)` uncaught (ValueError catch run.py:333 ne match pas) →
+kernel ERROR Kaggle worker, stderr non-flushed (log .log 0-byte).
+
+### Conséquences
+
+- 1 fichier source modifié (`scripts/d8/run.py` +14 LoC mapping + 4 LoC branche).
+- 1 fichier tests créé (`tests/d8/test_run.py` 3 tests).
+- Top 16 v4 attendu : **88 candidates** → conformal robuste.
+- Backward compat strict (N1-N4 inchangés, mapping additif).
+- Phase A v3 outputs N1-N4 valides (rondes default 5,7,9,11 OK pour Nationale).
+- Mapping extensible futurs formats FFE (Top 12, Coupes, ...) sans toucher
+  `_run_backtest`.
+
+### Sources SOTA
+
+- Vovk 2024 §2.3 split-conformal minimum N=30
+- Lei et al. 2014/2018 minimum calibration set 30+
+- ISO 5055 SRP single-source-of-truth, ISO 42010 ADR, ISO 27034 input validation
+
+### Liens
+
+- ADR-020 (préalable structurel groupe propagation) — ADR-021 complète sur
+  dimension temporelle (rondes) après ADR-020 dimension identitaire (groupe).
+
+---
+
 ## ADR-019: D8 audit pivot multi-divisions × multi-saisons (rejection trade-off "saison 2024 N3 seule")
 
 **Date**: 10 Mai 2026
