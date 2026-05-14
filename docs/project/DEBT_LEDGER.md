@@ -1,8 +1,8 @@
 # Debt Ledger — ALICE Engine (versioned mirror)
 
 **Document ID** : ALICE-DEBT-LEDGER
-**Version** : 1.0.1
-**Last updated** : 2026-05-14 (ADR-021 Top 16 rondes_default fix, D-2026-05-12-top16-v3-error RÉSOLUE)
+**Version** : 1.0.2
+**Last updated** : 2026-05-14 (ADR-021 Top 16 fix + coverage restoration 70% threshold)
 **ISO Compliance** : ISO/IEC 42001:2023 Annex A.6 (Lifecycle traceability),
 ISO/IEC 42010 (architecture description)
 
@@ -55,6 +55,21 @@ memory).
   Bug était dans le code Alice-Engine (D-2026-05-11-d8-groupe-filter), pas
   dans ffe-scrapper. Aucune action upstream requise.
 - **Cross-references** : ADR-020, D-2026-05-11-d8-groupe-filter.
+
+### D-2026-05-12-coverage-restore — RÉSOLUE 2026-05-14
+
+- **Source** : ADR-020 commit `11db85f` + followups ont ajouté ~225 LoC sur 14
+  fichiers. Coverage globale 70.x% → 69.19%. Workaround temporaire commit
+  `9af9569` lowered `--cov-fail-under` 70 → 69 (2026-05-12).
+- **Resolution** : Commit `d0b8df4` (2026-05-14) a ajouté 17 tests pure-function
+  dans `tests/d8/test_run.py` (DIVISION_RONDES_DEFAULT + _validate_saison +
+  _validate_per_match_finite + _compute_calibration_stage + _compute_conformal_stage
+  + _resolve_code_sha + _checkpoint_partial). scripts/d8/run.py 18% → 37%.
+- **Mesure empirique 2026-05-14** : TOTAL = **73%** (14327 stmts, 3597 missed,
+  sur full pytest suite). Marge 3 points >> threshold 70.
+- **ci.yml revert** : `--cov-fail-under` restauré de 69 → 70 (cette session).
+- **Cross-references** : ADR-020 (origine déficit), ADR-021 (Top 16 fix
+  même session), `memory/project_debt_current.md` D-2026-05-12-coverage-restore.
 
 ### D-2026-05-12-top16-v3-error — RÉSOLUE 2026-05-14 (ADR-021)
 

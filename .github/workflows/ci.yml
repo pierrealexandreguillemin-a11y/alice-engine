@@ -97,16 +97,16 @@ jobs:
           uv pip install --system --prerelease=allow -r requirements.txt -r requirements-dev.txt
 
       - name: Run Tests (ISO 29119)
-        # D-2026-05-12-coverage-restore : threshold temporarily lowered to 69
-        # post-ADR-020 (groupe + conformal + env var fixes added ~225 LoC,
-        # coverage dropped 70.x% -> 69.19%). Restoration to 70% tracked in
-        # `memory/project_debt_current.md` D-2026-05-12-coverage-restore.
+        # D-2026-05-12-coverage-restore RÉSOLUE 2026-05-14 : threshold restauré
+        # à 70% après ajout de 17 tests pure-function dans tests/d8/test_run.py
+        # (commit d0b8df4). Global coverage local mesuré = 73% (14327 stmts,
+        # 3597 missed). ADR-021 + restoration shipped même session.
         run: |
           pytest tests/ \
             --cov=app --cov=services --cov=scripts \
             --cov-report=xml \
             --cov-report=html \
-            --cov-fail-under=69 \
+            --cov-fail-under=70 \
             --junitxml=test-results.xml \
             -v --tb=short
 
