@@ -1,8 +1,8 @@
 # Debt Ledger — ALICE Engine (versioned mirror)
 
 **Document ID** : ALICE-DEBT-LEDGER
-**Version** : 1.0.2
-**Last updated** : 2026-05-14 (ADR-021 Top 16 fix + coverage restoration 70% threshold)
+**Version** : 1.0.3
+**Last updated** : 2026-05-16 (ADR-022 Phase A acceptance verdict + 5 dettes ouvertes 2026-05-16 + 2 RÉSOLUES cette session)
 **ISO Compliance** : ISO/IEC 42001:2023 Annex A.6 (Lifecycle traceability),
 ISO/IEC 42010 (architecture description)
 
@@ -94,21 +94,102 @@ memory).
 
 ### D-P3-19 — ALI multi-équipes joint conditionné (CRITICAL, Phase 4a)
 
-- **Source** : T22 review post-mortem 2026-04-28 (commit `88ba3a1`)
+- **Source** : T22 review post-mortem 2026-04-28 (commit `88ba3a1`) +
+  **confirmation empirique 2026-05-16 D8 Phase A aggregator** (ADR-022)
 - **Severity** : 🔴 CRITICAL OPEN, score 20 (per `AI_RISK_REGISTER.md`
   R-ALI-06)
 - **Why** : ALI Phase 3 sample dans pool club total au lieu de pool
   conditionné sur équipes simultanées du club adverse. Bloquant gates
   absolus P3G07-P3G11. Évidence : 117 clubs N3 saison 2024 alignent
   2-4 équipes simultanées, gap recall by_size = 0.28.
+- **Empirical confirmation 2026-05-16** : D8 Phase A 6/19 PASS, 13 FAIL.
+  Cross-niveau gap stress Elo ×20 (Top 16 = 0.335 vs N4 = 0.017 @ 1% noise).
+  ECE_ali uniforme par strata Elo (Q1 n=39 = 0.468, Q2 n=38 = 0.467).
+  Roster turnover 5% Top 16 amplifié ×7 vs N4. Signatures cohérentes
+  mécanisme A02 §3.7.b manquant.
 - **Resolution** : Phase 4a Approche A SOTA (CE-adverse miroir OR-Tools)
 - **Cross-references** :
   - `docs/architecture/adr/ADR-016-ali-conditioned-multi-team-adverse-ce-mirror.md` (status: Proposed)
+  - `docs/architecture/adr/ADR-022-d8-phase-a-acceptance-verdict-ali-conditional-phase-4a.md` (decision Phase 4a entry, 2026-05-16)
   - `docs/iso/AI_RISK_REGISTER.md` §2.7 R-ALI-06
   - `docs/iso/AI_RISK_ASSESSMENT.md` §R-ALI-06
   - `docs/iso/ALI_QUALITY_GATES_REPORT.md` §6.2 §7.5
   - `docs/superpowers/specs/2026-03-23-alice-prod-roadmap-design.md` §Phase 4a + 4b
-  - `memory/project_debt_current.md` D-P3-19 (full detail)
+  - `reports/d8/phase_a/2026-05-16-acceptance.md` (acceptance report détaillé)
+  - `memory/project_debt_current.md` D-P3-19 + D-2026-05-16-ali-conditional-multi-team-empirical (full detail)
+
+### D-2026-05-16-rob07-threshold-absolute — Phase 3.5b cleanup (mineur)
+
+- **Source** : D8 Phase A aggregator 2026-05-16, ADR-022
+- **Severity** : 🟢 Minor, non-bloquant Phase 4a entry
+- **Why** : G_ROB_07 conformal_set_size threshold absolu 3.0 (spec D8 §5.2)
+  hérité sans context support_max=8 boards Phase A (ADR-020). Angelopoulos
+  2023 §4.2 définit efficiency en relatif. Mesuré 6.04 vs 3.0 = FAIL.
+  Note : avec ratio 0.50 (= 4.0 absolu pour support 8), mesure 6.04 reste
+  FAIL → cause sous-jacente (set_size élevé) reste Phase 4a (D-P3-19).
+- **Resolution** : Phase 3.5b cleanup — threshold relatif `set_size_mean /
+  support_max ≤ 0.50` (Angelopoulos 2023 §4.2). Modifier
+  `scripts/d8/gates.py::THRESHOLDS` + adapter signature pour context.
+- **Cross-references** : ADR-022, `memory/project_debt_current.md`
+  D-2026-05-16-rob07-threshold-absolute
+
+### D-2026-05-16-dro-aggregation-min-vs-percentile — Phase 3.5b cleanup (mineur)
+
+- **Source** : D8 Phase A aggregator 2026-05-16, ADR-022
+- **Severity** : 🟢 Minor, non-bloquant Phase 4a entry
+- **Why** : G_ROB_08/09 DRO Wasserstein `recall_worst_case = 0.0` car kernel
+  `scripts/d8/dro.py` agrégation `min over per-match worst-perturbation`.
+  1 match catastrophique domine min absolu. Sinha 2018 §4 + Duchi 2021 §6
+  Wasserstein worst-case prévu pour distribution shift continu, pas pour
+  outlier match dominant. Gate FAIL artificiel masque distribution signal.
+- **Resolution** : Phase 3.5b cleanup — agrégation `min` → `percentile(5%)
+  over per-match worst` OU `mean over worst-k`. Re-run Kaggle Phase A
+  5 kernels v(N+5).
+- **Cross-references** : ADR-022, `memory/project_debt_current.md`
+  D-2026-05-16-dro-aggregation-min-vs-percentile
+
+### D-2026-05-16-aggregator-fairness-uses-by-ronde — Phase 3.5b cleanup (mineur)
+
+- **Source** : D8 Phase A aggregator 2026-05-16, ADR-022
+- **Severity** : 🟢 Minor, non-bloquant (conclusions D-P3-19 inchangées)
+- **Why** : `scripts/d8/aggregate.py::_fairness_metrics` réimplémente proxy
+  `_by_ronde` pour ECE/Brier mean cross-rondes alors que outputs per-division
+  contiennent `r["breakdowns"]["by_elo_strata"]` (n statistique solide :
+  Top 16 Q1 n=39, Q2 n=38). Architecture sous-optimale ISO 5055 SRP.
+  Note : conclusions D-P3-19 inchangées car ECE_ali confirmé uniforme par
+  strata Elo (signal réel, pas artifact).
+- **Resolution** : Phase 3.5b cleanup — refactor `_fairness_metrics` pour
+  consommer `r["breakdowns"]` (source canonique) au lieu de proxy `_by_ronde`.
+- **Cross-references** : ADR-022, `memory/project_debt_current.md`
+  D-2026-05-16-aggregator-fairness-uses-by-ronde
+
+### D-2026-05-16-lineage-code-sha-disparate-phase-a — Phase 5+ re-deploy
+
+- **Source** : D8 Phase A 2026-05-16, ADR-022
+- **Severity** : 🟢 Minor, traçabilité ISO 5259 §lineage
+- **Why** : Phase A outputs N1-N4 v3 = CODE_SHA `11db85f` (ADR-020) vs Top 16
+  v4 = `84d2f6d` (ADR-020 + ADR-021). ADR-021 fonctionnellement isolé Top 16
+  (N1-N4 fallback inchangé) → équivalence fonctionnelle. Mais lineage ISO
+  5259 §lineage non-cohérent stricto sensu.
+- **Resolution** : Phase 5+ re-deploy uniform OU closure design-decision
+  (ADR-021 isolé = lineage delta acceptable). Trade-off effort vs valeur
+  ISO 5259 stricte.
+- **Cross-references** : ADR-021, ADR-022, `memory/project_debt_current.md`
+  D-2026-05-16-lineage-code-sha-disparate-phase-a
+
+### D-2026-05-16-phase-3-6-adversarial-contingency — CONTINGENCY (pas pré-emptive)
+
+- **Source** : D8 Phase A 2026-05-16, ADR-022 decision matrix Option C rejected
+- **Severity** : 🟡 Contingency, planifiée si Phase 4a insuffisant
+- **Why** : Phase 3.6 retraining adversarial (Madry 2018 PGD + Goodfellow 2015
+  augmentation Elo) considérée comme alternative aux 13 FAIL. NON RETENUE
+  pré-emptive car patch symptomatique qui ne corrige pas cause profonde
+  D-P3-19 (manque conditionnement multi-équipes A02 §3.7.b structurel).
+- **Resolution** : Contingency POST-Phase 4a — si robustness post-Phase 4a
+  re-run D8 toujours insuffisante (FAIL famille 1 résiduels), ALORS Phase 3.6
+  justifiée. **AUCUN effort engagé tant que Phase 4a non-franchi**.
+- **Cross-references** : ADR-022, `memory/project_debt_current.md`
+  D-2026-05-16-phase-3-6-adversarial-contingency
 
 ### D8 — ALI fairness/robustness breakdown rigoureux (Phase 3.5 STRICT)
 

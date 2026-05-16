@@ -626,6 +626,63 @@ des matches eux-mêmes (`echiquiers.parquet`).
 
 ---
 
+## ADR-022: D8 Phase A acceptance verdict — Phase 4a ALI conditional retained (D-P3-19 empirical confirmation)
+
+**Date**: 16 Mai 2026
+**Statut**: Accepté (user explicit 2026-05-16, pivot diagnostique guidé ISO+SOTA ML)
+**Detail**: `docs/architecture/adr/ADR-022-d8-phase-a-acceptance-verdict-ali-conditional-phase-4a.md`
+
+### Décision principale
+
+Phase 4a (ALI joint conditionnel CE-adverse miroir Approche A SOTA, déjà validée
+2026-04-28) RETENUE comme entry strategy. 10/13 FAIL D8 Phase A = confirmation
+empirique quantifiée D-P3-19 / R-ALI-06 (T22 post-mortem 2026-04-28).
+
+### Verdict aggregator empirique 2026-05-16
+
+- **6/19 PASS, 13 FAIL, 0 INCONCLUSIVE** sur 492 matches Phase A (Top 16 v4 + N1-N4 v3).
+- Cross-niveau gap stress Elo ×20 : Top 16 = 0.335 vs N4 = 0.017 @ 1% noise.
+- ECE_ali uniforme cross-strata Elo (Q1 n=39 = 0.468, Q2 n=38 = 0.467) → calibration ALI mauvaise par construction (sample pool club total ignore A02 §3.7.b).
+
+### Décisions dérivées
+
+1. **Phase 3.5b cleanup mineur** (non-bloquant Phase 4a entry, tracé) :
+   - G_ROB_07 threshold `set_size_max ≤ 3.0` absolu → `set_size_mean / support_max ≤ 0.50` ratio (Angelopoulos 2023 §4.2)
+   - Kernel `scripts/d8/dro.py` agrégation `min over per-match` → `percentile(5%)` (Sinha 2018 §4)
+   - Refactor `_fairness_metrics` consommer `r["breakdowns"]` au lieu de proxy `_by_ronde`
+2. **Phase 3.6 retraining adversarial** : NON RETENUE pré-emptive (patch symptomatique), PLANIFIÉE contingency post-Phase 4a si robustness insuffisante.
+3. **Aggregator patch ISO 5055 SRP** (cette session RÉSOLUE) : `aggregate.py main()` argparse `--mode {saison,phase-a}` + branche `load_audit_reports` ADR-019. 29 tests PASS (17 saison + 12 phase-a).
+
+### Pourquoi Phase 4a (pas Phase 3.6)
+
+Madry 2018 PGD + Goodfellow 2015 augmentation rendrait MLP plus robuste à small noise local Elo, **mais ne corrige pas le bug structurel sampling pool naïf** (cause profonde D-P3-19 manque A02 §3.7.b conditionnement multi-équipes). Logique SOTA = corriger architecture (Phase 4a) avant patcher symptômes (Phase 3.6 contingency).
+
+### Conséquences
+
+- 5 fichiers source touchés (aggregate.py + types.py + nouveau test file + acceptance report + ADR-022).
+- 29 tests aggregator PASS (saison + phase-a modes).
+- 11/13 FAIL → phase résolution prévue (Phase 4a), 3/13 FAIL → Phase 3.5b cleanup.
+- 7 dettes traceables (no silent debt) : 2 RÉSOLUES + 4 OPEN Phase 3.5b/5/contingency.
+
+### Sources SOTA
+
+- Mehrabi 2021 §4.1 (fairness max_gap)
+- Pleiss 2017 §4 (calibration ECE per-group)
+- Goodfellow 2015 ε=0.01 robustness
+- Tran 2022 §3.4 roster turnover
+- ISO 24029-2 (robustness), 24027 (fairness), 42001 (lifecycle), 42005 (impact), 23894 (risk)
+
+### Liens
+
+- ADR-016 (Phase 4a Approche A SOTA decision)
+- ADR-019 (Phase A multi-divisions)
+- ADR-020 (groupe filter + conformal support)
+- ADR-021 (Top 16 rondes_default)
+- D-P3-19 source of truth : `memory/project_debt_current.md`
+- Acceptance report détaillé : `reports/d8/phase_a/2026-05-16-acceptance.md`
+
+---
+
 ## ADR-021: D8 `DIVISION_RONDES_DEFAULT` mapping (Top 16 full 7 rondes)
 
 **Date**: 14 Mai 2026

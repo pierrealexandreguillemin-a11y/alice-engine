@@ -13,6 +13,7 @@ Version: 2.0.0
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import subprocess  # noqa: S404
@@ -92,13 +93,16 @@ def load_audit_reports(
 ) -> dict[tuple[int, str], dict[str, Any]]:
     """Load d8_{saison}_{div-slug}.json reports keyed by (saison, division) — ADR-019.
 
-    Skip reports with _status='insufficient_matches' or 'd8.v1-empty' schema
-    (aggregator handles them as 0-count contributors).
+    Three candidate layouts supported :
+    1. Kaggle dataset auto-mount : input_dir/d8-{saison}-{div}/d8_{saison}_{div}.json
+    2. Local download layout    : input_dir/{div}/d8_{saison}_{div}.json
+    3. Flat fallback (tests)    : input_dir/d8_{saison}_{div}.json
     """
     out: dict[tuple[int, str], dict[str, Any]] = {}
     for saison, div_slug in audits:
         candidates = (
             input_dir / f"d8-{saison}-{div_slug}" / f"d8_{saison}_{div_slug}.json",
+            input_dir / div_slug / f"d8_{saison}_{div_slug}.json",
             input_dir / f"d8_{saison}_{div_slug}.json",
         )
         found = next((p for p in candidates if p.exists()), None)
@@ -264,18 +268,118 @@ _PERTURBATION_FILL: dict[str, tuple[str, float | None]] = {
 from scripts.d8.aggregate_render import render_findings_md  # noqa: E402, F401
 
 
-def main() -> None:  # pragma: no cover - integration entry point
-    """Aggregator entry point (Kaggle d8-aggregator kernel).
+def _build_full_report_saison(
+    reports: dict[int, dict[str, Any]],
+    per_match_global: list[dict[str, Any]],
+    metrics: dict[str, float],
+    gates_19: list[D8GateEvaluation],
+) -> D8FullReport:
+    """Build D8FullReport for saison-mode (4 saisons × multi-division)."""
+    lineage_typed = {s: D8Lineage(**r["lineage"]) for s, r in reports.items()}
+    return D8FullReport(
+        schema_version="d8-aggregator.v1",
+        n_matches=len(per_match_global),
+        saisons=list(reports.keys()),
+        lineage_per_saison=lineage_typed,
+        breakdowns_global={},
+        multicalibration_global={},
+        stress_elo_global={},
+        stress_roster_global={},
+        conformal_global={
+            "coverage_global": metrics["coverage_global"],
+            "set_size_mean": metrics["conformal_set_size_mean"],
+        },
+        dro_global={},
+        gates_19=gates_19,
+        audit_mode="saison",
+        divisions=[],
+    )
 
-    Saison kernel outputs auto-mount at /kaggle/input/<output-dataset-slug>/
-    when listed in dataset_sources. Convention : per-saison output kernel
-    saves d8_saison_{S}.json which surfaces under d8-saison-{S} dataset slug.
+
+def _build_full_report_phase_a(
+    reports: dict[tuple[int, str], dict[str, Any]],
+    per_match_global: list[dict[str, Any]],
+    metrics: dict[str, float],
+    gates_19: list[D8GateEvaluation],
+) -> D8FullReport:
+    """Build D8FullReport for phase-a-mode (ADR-019 : 1 saison × 5 divisions).
+
+    MLP + temp_scaler SHA verified identical cross-divisions (champion invariant),
+    so lineage_per_saison collapses to one canonical entry per saison. The
+    `divisions` field tracks the audited division slugs.
     """
-    input_dir = Path("/kaggle/input")
-    output_dir = Path("/kaggle/working")
+    saisons = sorted({s for (s, _) in reports})
+    lineage_per_saison: dict[int, D8Lineage] = {}
+    for saison in saisons:
+        first_key = next(k for k in reports if k[0] == saison)
+        lineage_per_saison[saison] = D8Lineage(**reports[first_key]["lineage"])
+    divisions = sorted({div for (_, div) in reports})
+    return D8FullReport(
+        schema_version="d8-aggregator.v1",
+        n_matches=len(per_match_global),
+        saisons=saisons,
+        lineage_per_saison=lineage_per_saison,
+        breakdowns_global={},
+        multicalibration_global={},
+        stress_elo_global={},
+        stress_roster_global={},
+        conformal_global={
+            "coverage_global": metrics["coverage_global"],
+            "set_size_mean": metrics["conformal_set_size_mean"],
+        },
+        dro_global={},
+        gates_19=gates_19,
+        audit_mode="phase-a",
+        divisions=divisions,
+    )
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI args : --mode, --input-dir, --output-dir."""
+    parser = argparse.ArgumentParser(
+        prog="d8-aggregator",
+        description="D8 aggregator : saison-mode (4×multi-div) or phase-a (ADR-019 : 1×5-div).",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("saison", "phase-a"),
+        default="saison",
+        help="Aggregation mode (default: saison)",
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=Path("/kaggle/input"),
+        help="Directory containing per-kernel JSON outputs (default: /kaggle/input)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("/kaggle/working"),
+        help="Directory for aggregator outputs (default: /kaggle/working)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:  # pragma: no cover - integration entry point
+    """Aggregator entry point.
+
+    saison-mode (default) : 4 saisons × multi-division cross-saison fusion. Inputs
+    mount as d8_saison_{S}.json (Kaggle dataset_sources convention).
+
+    phase-a-mode (ADR-019) : 1 saison × 5 divisions Phase A acceptance gate.
+    Inputs mount as d8_{saison}_{div-slug}.json under the audit folder layout.
+    """
+    args = _parse_args(argv)
+    input_dir: Path = args.input_dir
+    output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    reports = load_saison_reports(input_dir)
+    reports: dict[Any, dict[str, Any]]
+    if args.mode == "phase-a":
+        reports = dict(load_audit_reports(input_dir))
+    else:
+        reports = dict(load_saison_reports(input_dir))
     verify_lineage_coherence(reports)
     per_match_global = fuse_per_match(reports)
     metrics = compute_global_metrics(per_match_global, reports)
@@ -292,25 +396,10 @@ def main() -> None:  # pragma: no cover - integration entry point
     failures = filter_failures(gates_19)
     failure_md = render_failure_analysis_md(failures)
 
-    # Hydrate JSON lineage dicts → D8Lineage frozen dataclasses (ISO 5259 type-safe).
-    lineage_typed = {s: D8Lineage(**r["lineage"]) for s, r in reports.items()}
-
-    full_report = D8FullReport(
-        schema_version="d8-aggregator.v1",
-        n_matches=len(per_match_global),
-        saisons=list(reports.keys()),
-        lineage_per_saison=lineage_typed,
-        breakdowns_global={},
-        multicalibration_global={},
-        stress_elo_global={},
-        stress_roster_global={},
-        conformal_global={
-            "coverage_global": metrics["coverage_global"],
-            "set_size_mean": metrics["conformal_set_size_mean"],
-        },
-        dro_global={},
-        gates_19=gates_19,
-    )
+    if args.mode == "phase-a":
+        full_report = _build_full_report_phase_a(reports, per_match_global, metrics, gates_19)
+    else:
+        full_report = _build_full_report_saison(reports, per_match_global, metrics, gates_19)
 
     (output_dir / "d8_full_report.json").write_text(
         json.dumps(_dump_full_report(full_report), indent=2, default=str),
@@ -326,7 +415,7 @@ def main() -> None:  # pragma: no cover - integration entry point
         encoding="utf-8",
     )
     print(  # noqa: T201
-        f"D8 aggregator complete : {summary['pass']}/19 PASS, "
+        f"D8 aggregator complete ({args.mode}) : {summary['pass']}/19 PASS, "
         f"{summary['fail']} FAIL, {summary['inconclusive']} INCONCLUSIVE"
     )
 
@@ -346,6 +435,8 @@ def _dump_full_report(report: D8FullReport) -> dict[str, Any]:
                 "stress_roster_global",
                 "conformal_global",
                 "dro_global",
+                "audit_mode",
+                "divisions",
             )
         },
         "lineage_per_saison": {str(k): asdict(v) for k, v in report.lineage_per_saison.items()},

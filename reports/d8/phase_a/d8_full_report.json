@@ -1,0 +1,177 @@
+{
+  "schema_version": "d8-aggregator.v1",
+  "n_matches": 492,
+  "saisons": [
+    2024
+  ],
+  "breakdowns_global": {},
+  "multicalibration_global": {},
+  "stress_elo_global": {},
+  "stress_roster_global": {},
+  "conformal_global": {
+    "coverage_global": 0.948610905322479,
+    "set_size_mean": 6.042909855160964
+  },
+  "dro_global": {},
+  "audit_mode": "phase-a",
+  "divisions": [
+    "nationale-1",
+    "nationale-2",
+    "nationale-3",
+    "nationale-4",
+    "top-16"
+  ],
+  "lineage_per_saison": {
+    "2024": {
+      "joueurs_sha256": "07dc5bd4984f020558b2d9e365c8f74f62cba4c24f71cb08511f549c2d6afc61",
+      "echiquiers_sha256": "bd40e1fb7ffda4eedee65ce5b39547d47c006c3f890dadd53b96ce108416992e",
+      "mlp_artefact_sha256": "7583f541731c2719f32433571c6abc9eecb13e97a458ef3d5eedc7b3a03a0a48",
+      "temp_scaler_sha256": "1b8094a1304fa042efc14b1e0815c3d52be33878e7e21635c0d6fd7d68497694",
+      "code_sha256": "84d2f6dc1063c9ee5c38fca4f1ea00ad6ff0ed0c",
+      "ali_seed": 42,
+      "ali_n_topk": 10,
+      "ali_n_mc_pairs": 5,
+      "ali_decay_lambda": 0.9,
+      "kernel_id": "pguillemin/d8-2024-top-16",
+      "kernel_version_kaggle": "v1",
+      "run_at_utc": "2026-05-14T15:48:19.987885+00:00",
+      "division": "Top 16",
+      "saison": 2024
+    }
+  },
+  "gates_19": [
+    {
+      "gate_id": "G_FAIR_01_max_gap_recall",
+      "threshold": 0.1,
+      "measured_value": 0.22578125000000004,
+      "status": "fail",
+      "source": "Mehrabi 2021 \u00a74.1"
+    },
+    {
+      "gate_id": "G_FAIR_02_recall_per_group_min",
+      "threshold": 0.85,
+      "measured_value": 0.5158854166666667,
+      "status": "fail",
+      "source": "P3G07 - 5pts"
+    },
+    {
+      "gate_id": "G_FAIR_03_demographic_parity_diff",
+      "threshold": 0.1,
+      "measured_value": 0.0,
+      "status": "pass",
+      "source": "Hardt 2016"
+    },
+    {
+      "gate_id": "G_FAIR_04_equalized_odds_diff",
+      "threshold": 0.1,
+      "measured_value": 0.0,
+      "status": "pass",
+      "source": "Hardt 2016 \u00a73.2"
+    },
+    {
+      "gate_id": "G_FAIR_05_calibration_ECE_per_group",
+      "threshold": 0.05,
+      "measured_value": 0.4957897776188277,
+      "status": "fail",
+      "source": "Pleiss 2017 \u00a74"
+    },
+    {
+      "gate_id": "G_FAIR_06_multicalibration_alpha",
+      "threshold": 0.05,
+      "measured_value": 0.4957897776188277,
+      "status": "fail",
+      "source": "H\u00e9bert-Johnson 2018"
+    },
+    {
+      "gate_id": "G_FAIR_07_TPR_ratio_min",
+      "threshold": 0.8,
+      "measured_value": 1.0,
+      "status": "pass",
+      "source": "EEOC \u00a71607.4D + Feldman 2015"
+    },
+    {
+      "gate_id": "G_FAIR_08_brier_per_group",
+      "threshold": 0.3,
+      "measured_value": 0.4604660597917828,
+      "status": "fail",
+      "source": "Brier 1950 + Pappalardo 2019"
+    },
+    {
+      "gate_id": "G_FAIR_09_BSS_per_group",
+      "threshold": 0.3,
+      "measured_value": 0.3942063477701802,
+      "status": "pass",
+      "source": "Pappalardo 2019 \u00a73.4"
+    },
+    {
+      "gate_id": "G_FAIR_10_PSI_per_dim",
+      "threshold": 0.2,
+      "measured_value": 0.0,
+      "status": "pass",
+      "source": "Yurdakul 2020"
+    },
+    {
+      "gate_id": "G_ROB_01_recall_drop_1pct",
+      "threshold": 0.02,
+      "measured_value": 0.11863095238095238,
+      "status": "fail",
+      "source": "Goodfellow 2015 \u03b5=0.01"
+    },
+    {
+      "gate_id": "G_ROB_02_recall_drop_5pct",
+      "threshold": 0.05,
+      "measured_value": 0.13904761904761903,
+      "status": "fail",
+      "source": "Madry 2018"
+    },
+    {
+      "gate_id": "G_ROB_03_recall_drop_10pct",
+      "threshold": 0.1,
+      "measured_value": 0.11047619047619048,
+      "status": "fail",
+      "source": "Madry 2018 strict"
+    },
+    {
+      "gate_id": "G_ROB_04_roster_5pct",
+      "threshold": 0.05,
+      "measured_value": 0.14434523809523808,
+      "status": "fail",
+      "source": "Tran 2022 \u00a73.4"
+    },
+    {
+      "gate_id": "G_ROB_05_roster_20pct",
+      "threshold": 0.15,
+      "measured_value": 0.19964285714285715,
+      "status": "fail",
+      "source": "Recht 2019 \u00a75"
+    },
+    {
+      "gate_id": "G_ROB_06_conformal_coverage_90",
+      "threshold": 0.9,
+      "measured_value": 0.948610905322479,
+      "status": "pass",
+      "source": "Vovk 2024 \u00a72.3"
+    },
+    {
+      "gate_id": "G_ROB_07_conformal_set_size_max",
+      "threshold": 3.0,
+      "measured_value": 6.042909855160964,
+      "status": "fail",
+      "source": "Angelopoulos 2023 \u00a74.2"
+    },
+    {
+      "gate_id": "G_ROB_08_DRO_eps_005_min",
+      "threshold": 0.7,
+      "measured_value": 0.0,
+      "status": "fail",
+      "source": "Sinha 2018 \u00a74"
+    },
+    {
+      "gate_id": "G_ROB_09_DRO_eps_010_min",
+      "threshold": 0.55,
+      "measured_value": 0.0,
+      "status": "fail",
+      "source": "Duchi 2021 \u00a76"
+    }
+  ]
+}

@@ -91,7 +91,12 @@ class D8SaisonReport:
 
 @dataclass
 class D8FullReport:
-    """Aggregator output schema d8-aggregator.v1."""
+    """Aggregator output schema d8-aggregator.v1.
+
+    Default audit_mode='saison' (4 saisons × multi-division, cross-saison fusion).
+    audit_mode='phase-a' (ADR-019 : 1 saison × 5 divisions, Phase A acceptance gate)
+    populates `divisions` field with the audited division slugs.
+    """
 
     schema_version: str
     n_matches: int
@@ -104,3 +109,5 @@ class D8FullReport:
     conformal_global: dict[str, Any]
     dro_global: dict[str, dict[str, Any]]
     gates_19: list[D8GateEvaluation]
+    audit_mode: str = "saison"
+    divisions: list[str] = field(default_factory=list)
