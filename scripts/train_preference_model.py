@@ -46,11 +46,13 @@ def main() -> None:
     artifact = model.fit(df, args.saison)
     save_artifact(artifact, args.output)
     print(f"Saved artifact to {args.output}")
-    print(f"  Input SHA-256     : {artifact.input_sha256}")
-    print(f"  Artifact SHA-256  : {artifact.artifact_sha256}")
-    print(f"  Train size        : {artifact.train_size}")
-    print(f"  N teams max       : {artifact.n_teams_max}")
-    print(f"  Bias gate skipped : {artifact.bias_gate_skipped}")
+    print(f"  Input SHA-256          : {artifact.input_sha256}")
+    print(f"  Estimator bytes SHA-256: {artifact.estimator_bytes_sha256}")
+    print("  (Note: on-disk file SHA differs - includes dataclass metadata.")
+    print(f"   Run `sha256sum {args.output}` for the file digest.)")
+    print(f"  Train size             : {artifact.train_size}")
+    print(f"  N teams max            : {artifact.n_teams_max}")
+    print(f"  Bias gate skipped      : {artifact.bias_gate_skipped}")
 
 
 if __name__ == "__main__":

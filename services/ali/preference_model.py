@@ -74,7 +74,11 @@ class PreferenceModelArtifact:
     n_teams_max: int
     saison: int
     input_sha256: str
-    artifact_sha256: str
+    # estimator_bytes_sha256 : SHA-256 of inner estimator joblib bytes ONLY
+    # (NOT the on-disk file). `sha256sum models/preference_model_<saison>.joblib`
+    # returns a DIFFERENT digest because save_artifact adds dataclass metadata.
+    # Tracks model bytes for lineage parity across save/load roundtrips (ISO 5259).
+    estimator_bytes_sha256: str
     train_size: int
     laplace_alpha: float
     seed: int
@@ -140,7 +144,7 @@ class PreferenceModel:
         bias_skipped = self._check_bias_gate(df_train, estimator)
 
         input_sha = self._sha256_dataframe(df_train)
-        artifact_sha = self._sha256_estimator(estimator)
+        estimator_bytes_sha = self._sha256_estimator(estimator)
 
         artifact = PreferenceModelArtifact(
             estimator=estimator,
@@ -149,7 +153,7 @@ class PreferenceModel:
             n_teams_max=n_teams_max,
             saison=saison,
             input_sha256=input_sha,
-            artifact_sha256=artifact_sha,
+            estimator_bytes_sha256=estimator_bytes_sha,
             train_size=int(len(df_train)),
             laplace_alpha=self._alpha,
             seed=self._seed,
@@ -157,11 +161,6 @@ class PreferenceModel:
         )
         self._artifact = artifact
         return artifact
-
-    def fit_with_self_return(self, df: pd.DataFrame, saison: int) -> PreferenceModel:
-        """Fit then return self (chainable convenience for one-liner tests)."""
-        self.fit(df, saison)
-        return self
 
     def predict_proba(self, features: list[PreferenceFeatures]) -> NDArray[np.float64]:
         """Predict P(team_rank | features) for batch of players.
@@ -273,7 +272,12 @@ class PreferenceModel:
 
     @staticmethod
     def _sha256_estimator(estimator: Any) -> str:
-        """SHA-256 of joblib-pickled estimator bytes (ISO 5259 + 42001)."""
+        """SHA-256 of joblib-pickled INNER estimator bytes only (ISO 5259 + 42001).
+
+        Hashes the sklearn estimator alone, NOT the on-disk artifact file
+        (which includes the dataclass metadata wrapper added by `save_artifact`).
+        See `PreferenceModelArtifact.estimator_bytes_sha256` field docstring.
+        """
         buf = io.BytesIO()
         joblib.dump(estimator, buf)
         return hashlib.sha256(buf.getvalue()).hexdigest()

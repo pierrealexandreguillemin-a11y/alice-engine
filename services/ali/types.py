@@ -161,4 +161,4 @@ class PreferenceFeatures:
     recency_decay: float  # F2 recency (decay_lambda=0.9 over rounds)
     streak_count: int  # F3 consecutive participations (MVP placeholder)
     brule_count: int  # A02 §3.7.c history count higher teams (MVP placeholder)
-    historical_team_rank: int  # Observed team_rank for this player in saison
+    historical_team_rank: int  # MVP placeholder = 0 (Phase 4a); using observed rank = label leakage

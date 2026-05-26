@@ -1,11 +1,18 @@
 # Model Card — PreferenceModel 2024 (Phase 4a)
 
 **Document ID** : ALICE-MODEL-CARD-PREFERENCE-2024
-**Version** : 1.0.0
+**Version** : 1.0.1
 **Date** : 2026-05-27
 **ISO 42001 §6** : AI management system model documentation
 **ISO 42005** : AI system impact assessment
 **ISO 23894** : Risk management AI (linked to R-ALI-06)
+
+> **v1.0.1 (2026-05-27)** : I-1 lineage clarity — renamed
+> `artifact_sha256` → `estimator_bytes_sha256` field. Section 7 now
+> distinguishes inner-estimator-bytes SHA (used for determinism check
+> across save/load roundtrips) from on-disk-file SHA (used by ops to
+> verify file integrity). The two WILL differ because the dataclass
+> wrapper adds metadata around the inner estimator.
 
 ---
 
@@ -33,6 +40,9 @@
 - **Final train size** : 81,843 rows.
 - **Input SHA-256** : `a888b29df48afbc5a6eb4607319cd44c76bec8ba962dca5dd18683bdac8ff313`
   (computed by `PreferenceModel._sha256_dataframe` over feature subset).
+- **Estimator bytes SHA-256** : `db096d354f215829c655171b5c6e7287f5d100bb7c95337be6b9035a0ce82836`
+  (computed by `PreferenceModel._sha256_estimator` over inner sklearn estimator
+  joblib bytes ONLY ; the on-disk artifact file SHA differs — see §7).
 - **Schema validation** : ISO 5259 via `pandera.DataFrameModel` (see
   `tests/services/ali/test_preference_model.py::EchiquiersSchema`).
 - **Class distribution** :
@@ -127,9 +137,20 @@ Plan 3 T9 via stratified evaluation.
 | Stage | Hash | Producer |
 |---|---|---|
 | Input (echiquiers.parquet filtered) | `a888b29df48afbc5a6eb4607319cd44c76bec8ba962dca5dd18683bdac8ff313` | `PreferenceModel._sha256_dataframe` |
-| Artifact (joblib bytes) | `db096d354f215829c655171b5c6e7287f5d100bb7c95337be6b9035a0ce82836` | `PreferenceModel._sha256_estimator` |
+| Estimator bytes (inner, **not** file SHA) | `db096d354f215829c655171b5c6e7287f5d100bb7c95337be6b9035a0ce82836` | `PreferenceModel._sha256_estimator` |
+| On-disk artifact file (joblib dump full dataclass) | `3637b1ba231ad52d761bac0c7b992de2eee14f1ff61ede5e9771071f926673df` | `sha256sum models/preference_model_2024.joblib` |
 | Pandera schema validation | `EchiquiersSchema` | `tests/services/ali/test_preference_model.py::TestSchema` |
 | Artifact path | `models/preference_model_2024.joblib` | `scripts/train_preference_model.py` |
+
+**Why two SHAs ?** `estimator_bytes_sha256` hashes only the inner sklearn
+estimator bytes (via `io.BytesIO + joblib.dump(estimator, buf)`), and travels
+inside the `PreferenceModelArtifact` dataclass for determinism parity across
+save/load roundtrips. The on-disk file SHA (row 3) hashes the FULL joblib
+dump of the entire dataclass (estimator + metadata fields : `feature_names`,
+`classes_`, `n_teams_max`, `saison`, `input_sha256`, `train_size`,
+`laplace_alpha`, `seed`, `bias_gate_skipped`, plus the inner
+`estimator_bytes_sha256` itself). Ops engineers verifying file integrity must
+compare against row 3, not row 2.
 
 Reproduce :
 

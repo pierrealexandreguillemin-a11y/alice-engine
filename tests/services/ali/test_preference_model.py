@@ -15,8 +15,8 @@ Tests cover :
  - TestBiasGate (ISO 24027)     : recall gap > 0.10 -> BiasViolationError.
 
 Document ID: ALICE-TEST-ALI-PREFERENCE-MODEL
-Version: 1.0.0
-Count: 12 test cases
+Version: 1.0.1
+Count: 13 test cases
 """
 
 from __future__ import annotations
@@ -65,7 +65,12 @@ class EchiquiersSchema(pa.DataFrameModel):
 # Synthetic fixtures
 # ---------------------------------------------------------------------------
 def _synthetic_df(n_players: int = 200, saison: int = 2024) -> pd.DataFrame:
-    """Synthetic echiquiers-shaped df : higher Elo -> lower team_rank."""
+    """Synthetic echiquiers-shaped df : higher Elo -> lower team_rank.
+
+    `ronde` varies as `(i % 10) + 1` across rows to exercise the
+    `recency_decay` code path with non-constant values (regression
+    guard added in I-2 fix 2026-05-27).
+    """
     rng = np.random.default_rng(42)
     rows = []
     for i in range(n_players):
@@ -74,7 +79,7 @@ def _synthetic_df(n_players: int = 200, saison: int = 2024) -> pd.DataFrame:
         rows.append(
             {
                 "saison": saison,
-                "ronde": 5,
+                "ronde": (i % 10) + 1,
                 "echiquier": (i % 8) + 1,
                 "blanc_equipe": f"Team{team_rank}",
                 "blanc_elo": max(elo, 100),
@@ -174,6 +179,10 @@ class TestFitDeterminism:
         artifact = model.fit(df, saison=2024)
         assert artifact.train_size > 0
         assert artifact.n_teams_max >= 1
+        # ISO 29119 regression guard (I-2 fix 2026-05-27) :
+        # recency_decay must take non-constant values across rounds.
+        df_built = model._build_features(df, saison=2024)
+        assert df_built["recency_decay"].nunique() > 1, "recency_decay degenerate"
         # High Elo -> team_rank 0
         feats_high = [
             PreferenceFeatures("P00001", "T0", 2400, 0.5, 1, 0, 0),
@@ -183,7 +192,8 @@ class TestFitDeterminism:
 
     def test_fit_synthetic_low_elo_higher_rank(self) -> None:
         df = _synthetic_df()
-        model = PreferenceModel(seed=42).fit_with_self_return(df, 2024)
+        model = PreferenceModel(seed=42)
+        model.fit(df, 2024)
         feats_low = [PreferenceFeatures("P00200", "T9", 1500, 0.1, 1, 0, 5)]
         proba_low = model.predict_proba(feats_low)
         # Lowest Elo : argmax should NOT be rank 0
@@ -193,7 +203,7 @@ class TestFitDeterminism:
         df = _synthetic_df()
         a1 = PreferenceModel(seed=42).fit(df, 2024)
         a2 = PreferenceModel(seed=42).fit(df, 2024)
-        assert a1.artifact_sha256 == a2.artifact_sha256
+        assert a1.estimator_bytes_sha256 == a2.estimator_bytes_sha256
         assert a1.input_sha256 == a2.input_sha256
 
     def test_predict_before_fit_raises(self) -> None:
@@ -215,7 +225,7 @@ class TestSerialization:
         p = tmp_path / "pref.joblib"
         save_artifact(a, p)
         loaded = load_artifact(p)
-        assert loaded.artifact_sha256 == a.artifact_sha256
+        assert loaded.estimator_bytes_sha256 == a.estimator_bytes_sha256
         assert loaded.train_size == a.train_size
         assert loaded.input_sha256 == a.input_sha256
 
@@ -275,3 +285,34 @@ class TestBiasGate:
         # Should NOT raise (no sexe column)
         artifact = model.fit(df, 2024)
         assert artifact.bias_gate_skipped is True
+
+    def test_bias_gate_passes_when_gap_within_threshold(self) -> None:
+        """ISO 24027 positive path : sexe present with balanced groups.
+
+        Both M and F see the SAME Elo->team_rank mapping (identical signal
+        across genders). Recall gap should be ~0 << 0.10, so fit completes
+        and `bias_gate_skipped=False` (gate evaluated, not skipped).
+        """
+        rng = np.random.default_rng(42)
+        rows = []
+        for sex in ("M", "F"):
+            for i in range(80):  # 80 players per sex, balanced
+                team_rank = i // 8
+                # Low noise (rng.normal sigma=10) ensures gap < 0.10 deterministically
+                elo = 2400 - i * 5 + int(rng.normal(0, 10))
+                rows.append(
+                    {
+                        "saison": 2024,
+                        "ronde": (i % 10) + 1,
+                        "echiquier": (i % 8) + 1,
+                        "blanc_equipe": f"Team{team_rank}",
+                        "blanc_elo": max(elo, 100),
+                        "sexe": sex,
+                    }
+                )
+        df = pd.DataFrame(rows)
+        model = PreferenceModel(laplace_alpha=1.0, seed=42)
+        artifact = model.fit(df, saison=2024)
+        # Gate evaluated (sexe present + 2 groups) and PASSED (gap <= 0.10)
+        assert artifact.bias_gate_skipped is False, "Gate should be active (sexe present)"
+        # Implicit : fit() did not raise BiasViolationError
