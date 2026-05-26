@@ -1,0 +1,38 @@
+{
+  "document_id": "ALICE-MLP-CHAMPION",
+  "version": "1.0.0",
+  "fit_timestamp_utc": "2026-04-28T20:26:16Z",
+  "arch": [
+    32,
+    16
+  ],
+  "alpha": 0.0001,
+  "max_iter": 500,
+  "validation_fraction": 0.1,
+  "random_state": 42,
+  "n_iter_actual": 39,
+  "feature_count": 18,
+  "feature_pipeline": "scripts.serving.meta_features.build_meta_features",
+  "temperature_T": 1.0215807925945215,
+  "metrics_test": {
+    "log_loss_test_raw": 0.5531441640790948,
+    "log_loss_test_calibrated": 0.5530274496166737,
+    "ece_draw_test_raw": 0.0024505125229881135,
+    "ece_draw_test_calibrated": 0.0016482054115163948,
+    "temperature_T": 1.0215807925945215
+  },
+  "sha256": {
+    "mlp": "7583f541731c2719f32433571c6abc9eecb13e97a458ef3d5eedc7b3a03a0a48",
+    "temperature": "1b8094a1304fa042efc14b1e0815c3d52be33878e7e21635c0d6fd7d68497694"
+  },
+  "iso_compliance": [
+    "ISO/IEC 42001:2023 Annex A.6",
+    "ISO/IEC 25059:2023"
+  ],
+  "sources": {
+    "sweep": "results/meta_learner_sweep/sweep_results.csv (best config)",
+    "guo2017": "Guo C. et al. ICML 2017 \u2014 temperature scaling",
+    "mitchell2019": "Mitchell M. et al. FAccT 2019 \u2014 model card \u00a71"
+  },
+  "debt_resolved": "D-P3-13 (MLP champion artifact missing \u2192 fallback)"
+}
