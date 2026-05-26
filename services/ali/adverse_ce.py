@@ -18,6 +18,22 @@ priority + best Elos), pool drains, then team_2, ... per official FFE A02
 Document ID: ALICE-ALI-ADVERSE-CE
 Version: 1.0.0
 Count: 1 per (saison, opponent_club_id, ronde_date, target_team) call
+
+Scope (A02 constraints handled at this layer):
+  - §3.6.e (ordre Elo descendant per board) : enforced via CP-SAT.
+  - §3.7.b (top-down team ordering) : enforced via _solve_top_down.
+  - §3.7.f (noyau >= 50%) : enforced via CP-SAT when historical_noyau non-empty.
+
+Upstream filtering responsibilities (NOT in this solver):
+  - §3.7.c (joueur brule) : filtered by pool_loader.py before pool is constructed.
+  - §3.7.d (same group constraint) : filtered upstream.
+  - §3.7.h (foreign quota 50%) : filtered upstream by pool_loader.
+  - §3.7.i (FR gender quota) : filtered upstream by pool_loader.
+  - §3.7.j (mute quota) : filtered upstream by pool_loader.
+
+Rationale: this module is a SELF-CONTAINED CP-SAT solver (Phase 4a Q1 anti-premature-abstraction).
+Player eligibility filtering is the responsibility of the upstream pool loader to keep this
+solver focused on SRP (ISO 5055): constraint satisfaction over a pre-filtered pool.
 """
 
 from __future__ import annotations
@@ -196,8 +212,7 @@ class AdverseCESolver:
         Top-down loop : team_1 solved first (best Elos), assigned players
         excluded from pool for team_2, ... per A02 §3.7.b.
         """
-        validated = AdverseCEInput.model_validate(payload.model_dump())
-        return self._solve_top_down(validated)
+        return self._solve_top_down(payload)
 
     def _solve_top_down(self, payload: AdverseCEInput) -> list[AdverseCESolution]:
         """Top-down ancestral sampling : assigned players drain the pool."""
@@ -234,6 +249,7 @@ class AdverseCESolver:
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = max_time_sec
         solver.parameters.random_seed = seed
+        solver.parameters.num_search_workers = 1  # ISO 42001 cross-platform determinism
         start = time.perf_counter()
         status = solver.solve(model)
         wall_ms = int((time.perf_counter() - start) * 1000)
