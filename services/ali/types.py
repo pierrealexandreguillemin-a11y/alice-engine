@@ -101,3 +101,42 @@ class RuleViolation:
     rule_article: str
     message: str
     severity: Literal["error", "warning"]
+
+
+@dataclass(frozen=True)
+class TeamSpec:
+    """A team specification for multi-team CE-adverse simulation (Phase 4a).
+
+    Used by AdverseCESolver to model the N teams of an opponent club
+    fielding on the same weekend. `target_team=True` marks the team
+    whose composition the ML pipeline is predicting downstream.
+
+    Document ID: ALICE-ALI-TEAMSPEC
+    Version: 1.0.0
+    Count: N teams per club
+    """
+
+    team_name: str
+    division: str
+    board_count: int
+    target_team: bool = False
+
+
+@dataclass(frozen=True)
+class AdverseCESolution:
+    """Result of CE-adverse OR-Tools solve for one team (Phase 4a).
+
+    Returned by AdverseCESolver._solve_one_team per A02 §3.7.b top-down
+    iteration. `assignments` is a tuple of `(player_nr_ffe, board_idx)`
+    pairs (frozen for hashability + ISO 5055 SRP).
+
+    Document ID: ALICE-ALI-ADVERSE-CE-SOLUTION
+    Version: 1.0.0
+    Count: 1 per team
+    """
+
+    team_name: str
+    assignments: tuple[tuple[str, int], ...]
+    solver_status: str
+    wall_time_ms: int
+    objective_value: float
