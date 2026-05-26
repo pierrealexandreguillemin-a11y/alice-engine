@@ -1,50 +1,42 @@
 """AdverseCESolver - OR-Tools CP-SAT solver mirror for Phase 4a multi-team adverse CE.
 
-ISO 5055 : SRP strict (one solver per call, no I/O).
-ISO 27034 : Pydantic input validation (AdverseCEInput).
-ISO 29119 : Deterministic via seed propagation (random_seed).
-ISO 42001 : Lineage hash SHA-256 traceable (compute_lineage_hash).
-ISO 42010 : Reference ADR-016 ALI conditioned multi-team adverse CE mirror.
+ISO 5055 SRP strict + <=300L. ISO 27034 Pydantic. ISO 29119 deterministic seed.
+ISO 42001 lineage hash (helpers). ISO 42010 ADR-016 mirror.
 
-Self-contained per Phase 4a brainstorming Q1 (anti-premature-abstraction
-Sandi Metz Squint Test). Mirrors A02 §3.6.e (ordre Elo descendant),
-§3.7.b (top-down team ordering), §3.7.c (joueur brule via pool filtering),
-§3.7.d (same group via pool filtering), §3.7.f (noyau >= 50%).
+Self-contained per Phase 4a Q1 (Sandi Metz Squint Test). Mirrors A02 §3.6.e
+(ordre Elo descendant), §3.7.b (top-down team ordering), §3.7.f (noyau >=50%),
+§3.7.h/i/j (foreign/gender/mute via TeamConstraints, NEW v1.1).
+Top-down ancestral sampling Bayesien (Pearl 1988) : team_1 d'abord, pool drains.
 
-Top-down ancestral sampling Bayesien (Pearl 1988) : team_1 d'abord (highest
-priority + best Elos), pool drains, then team_2, ... per official FFE A02
-§3.7.b text "equipe N degre 1 d'abord, puis 2, ...".
+Upstream filtering : §3.7.c brule + §3.7.d same_group + licence_active = pool_loader.
 
 Document ID: ALICE-ALI-ADVERSE-CE
-Version: 1.0.0
+Version: 1.1.0
 Count: 1 per (saison, opponent_club_id, ronde_date, target_team) call
-
-Scope (A02 constraints handled at this layer):
-  - §3.6.e (ordre Elo descendant per board) : enforced via CP-SAT.
-  - §3.7.b (top-down team ordering) : enforced via _solve_top_down.
-  - §3.7.f (noyau >= 50%) : enforced via CP-SAT when historical_noyau non-empty.
-
-Upstream filtering responsibilities (NOT in this solver):
-  - §3.7.c (joueur brule) : filtered by pool_loader.py before pool is constructed.
-  - §3.7.d (same group constraint) : filtered upstream.
-  - §3.7.h (foreign quota 50%) : filtered upstream by pool_loader.
-  - §3.7.i (FR gender quota) : filtered upstream by pool_loader.
-  - §3.7.j (mute quota) : filtered upstream by pool_loader.
-
-Rationale: this module is a SELF-CONTAINED CP-SAT solver (Phase 4a Q1 anti-premature-abstraction).
-Player eligibility filtering is the responsibility of the upstream pool loader to keep this
-solver focused on SRP (ISO 5055): constraint satisfaction over a pre-filtered pool.
 """
 
 from __future__ import annotations
 
-import hashlib
 import time
 
 from ortools.sat.python import cp_model
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.ali.adverse_ce_helpers import (
+    TeamConstraints,
+    add_extended_constraints,
+    add_symmetry_breaking,
+    compute_greedy_hint,
+    compute_lineage_hash,
+)
 from services.ali.types import AdverseCESolution, PlayerCandidate, TeamSpec
+
+__all__ = [
+    "AdverseCEInput",
+    "AdverseCESolver",
+    "TeamConstraints",
+    "compute_lineage_hash",
+]
 
 
 class AdverseCEInput(BaseModel):
@@ -54,6 +46,7 @@ class AdverseCEInput(BaseModel):
     eligibility per A02 §3.7.c brule + §3.7.d same_group upstream).
     `teams` : ordered TeamSpec list (index 0 = team_1, top priority).
     `historical_noyau` : team_name -> set of nr_ffe in noyau (A02 §3.7.f).
+    `team_constraints` : team_name -> TeamConstraints (A02 §3.7.h/i/j) NEW v1.1.
     `max_time_sec` : per-team CP-SAT time budget (default 2.0s).
     `seed` : deterministic search seed (ISO 29119).
     """
@@ -63,6 +56,7 @@ class AdverseCEInput(BaseModel):
     pool: list[PlayerCandidate] = Field(..., min_length=1)
     teams: list[TeamSpec] = Field(..., min_length=1)
     historical_noyau: dict[str, set[str]] = Field(default_factory=dict)
+    team_constraints: dict[str, TeamConstraints] = Field(default_factory=dict)
     max_time_sec: float = Field(default=2.0, gt=0, le=30.0)
     seed: int = Field(default=42, ge=0)
 
@@ -167,8 +161,9 @@ def _build_model(
     team: TeamSpec,
     pool: list[PlayerCandidate],
     noyau: set[str],
+    constraints: TeamConstraints | None,
 ) -> tuple[cp_model.CpModel, dict[tuple[int, int], cp_model.IntVar]]:
-    """Build CP-SAT model for one team with A02 constraints.
+    """Build CP-SAT model for one team with A02 constraints C1-C7 + symmetry.
 
     Returns (model, assign_vars_dict). Pure constructor : no solve here.
     Delegates each constraint to a helper for ISO 5055 SRP + radon <= B.
@@ -180,8 +175,23 @@ def _build_model(
     _add_assignment_constraints(model, assign, n_players, n_boards)
     _add_elo_descending_constraint(model, assign, pool, n_boards)
     _add_noyau_constraint(model, assign, pool, n_boards, noyau)
+    if constraints is not None:
+        add_extended_constraints(model, assign, pool, n_boards, constraints)
+    add_symmetry_breaking(model, assign, pool, n_boards)
     _set_max_elo_objective(model, assign, pool, n_boards)
     return model, assign
+
+
+def _apply_warm_start(
+    model: cp_model.CpModel,
+    assign: dict[tuple[int, int], cp_model.IntVar],
+    pool: list[PlayerCandidate],
+    team: TeamSpec,
+) -> None:
+    """Inject greedy Elo-descending hint into CP-SAT model (Perron 2024)."""
+    hint = compute_greedy_hint(pool, team)
+    for (p_idx, b_idx), value in hint.items():
+        model.add_hint(assign[(p_idx, b_idx)], value)
 
 
 def _extract_assignments(
@@ -200,7 +210,7 @@ def _extract_assignments(
 
 
 class AdverseCESolver:
-    """OR-Tools CP-SAT mirror solver per A02 §3.6.e/§3.7.b/c/d/f, top-down ordering.
+    """OR-Tools CP-SAT mirror solver per A02 §3.6.e/§3.7.b/c/d/f/h/i/j, top-down ordering.
 
     Stateless across calls : `solve()` reconstructs model each invocation
     (no shared state, ISO 5055 SRP).
@@ -224,6 +234,7 @@ class AdverseCESolver:
                 team=team,
                 pool=pool_available,
                 historical_noyau=payload.historical_noyau,
+                team_constraints=payload.team_constraints,
                 max_time_sec=payload.max_time_sec,
                 seed=payload.seed,
             )
@@ -236,15 +247,18 @@ class AdverseCESolver:
         team: TeamSpec,
         pool: list[PlayerCandidate],
         historical_noyau: dict[str, set[str]],
+        team_constraints: dict[str, TeamConstraints],
         max_time_sec: float,
         seed: int,
     ) -> AdverseCESolution:
-        """OR-Tools CP-SAT solve for ONE team. A02 §3.6.e/§3.7.b/c/d/f constraints."""
+        """OR-Tools CP-SAT solve for ONE team. A02 §3.6.e/§3.7.b/c/d/f/h/i/j constraints."""
         if len(pool) < team.board_count:
             return _infeasible_solution(team.team_name)
 
         noyau = historical_noyau.get(team.team_name, set())
-        model, assign = _build_model(team, pool, noyau)
+        constraints = team_constraints.get(team.team_name)
+        model, assign = _build_model(team, pool, noyau, constraints)
+        _apply_warm_start(model, assign, pool, team)
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = max_time_sec
@@ -273,15 +287,3 @@ class AdverseCESolver:
             wall_time_ms=wall_ms,
             objective_value=solver.objective_value,
         )
-
-
-def compute_lineage_hash(payload: AdverseCEInput) -> str:
-    """SHA-256 lineage hash for ISO 5259/42001 traceability.
-
-    Hash inputs : sorted pool (nr_ffe, elo) + ordered teams (name, division,
-    board_count) + seed. Stable across calls with identical payload.
-    """
-    parts: list[str] = [f"{p.nr_ffe}:{p.elo}" for p in sorted(payload.pool, key=lambda x: x.nr_ffe)]
-    parts.extend(f"{t.team_name}:{t.division}:{t.board_count}" for t in payload.teams)
-    parts.append(f"seed:{payload.seed}")
-    return hashlib.sha256("|".join(parts).encode()).hexdigest()
