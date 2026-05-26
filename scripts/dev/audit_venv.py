@@ -49,6 +49,23 @@ IGNORED_CVES: list[tuple[str, str]] = [
     ("CVE-2026-33866", "mlflow 3.10.1 — no fix version published; re-check 2026-08"),
     # pip self-CVE without fix (re-check 2026-08)
     ("CVE-2026-3219", "pip 26.0.1 — no fix version published; re-check 2026-08"),
+    # idna 3.13 — fix 3.15 available, transitive (urllib3/requests). Defer to
+    # dedicated dep-update session post-Phase 4a (re-check 2026-08).
+    ("CVE-2026-45409", "idna 3.13 — fix 3.15 avail, transitive; defer to dep-update post-Phase 4a"),
+    # pymdown-extensions 10.21.2 — fix 10.21.3 avail, mkdocs-only.
+    # Defer to dep-update session (re-check 2026-08).
+    (
+        "CVE-2026-46338",
+        "pymdown-extensions 10.21.2 — fix 10.21.3 avail, mkdocs-only; defer dep-update",
+    ),
+    # starlette 0.52.1 — fix 1.0.1 requires FastAPI major bump (FastAPI 0.136.1
+    # incompatible with starlette 1.x). Re-check on FastAPI 1.x release.
+    (
+        "PYSEC-2026-161",
+        "starlette 0.52.1 — FastAPI 0.136 incompatible with starlette 1.0; re-check on FastAPI bump",
+    ),
+    # torch 2.9.1 — no upstream fix published yet (re-check 2026-08).
+    ("PYSEC-2026-139", "torch 2.9.1 — no upstream fix published; re-check 2026-08"),
 ]
 
 
