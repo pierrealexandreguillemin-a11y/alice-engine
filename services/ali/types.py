@@ -140,3 +140,25 @@ class AdverseCESolution:
     solver_status: str
     wall_time_ms: int
     objective_value: float
+
+
+@dataclass(frozen=True)
+class PreferenceFeatures:
+    """Features per (player, team) pair for PreferenceModel (Phase 4a T2).
+
+    Consumed by `services.ali.preference_model.PreferenceModel.predict_proba`
+    to score `P(player -> team_rank | Elo, recency F2, streak F3, brule, hist)`.
+    Frozen for hashability and ISO 29119 deterministic test invariants.
+
+    Document ID: ALICE-ALI-PREF-FEATURES
+    Version: 1.0.0
+    Count: 1 per (player, team) observation
+    """
+
+    player_nr_ffe: str
+    team_name: str
+    elo: int
+    recency_decay: float  # F2 recency (decay_lambda=0.9 over rounds)
+    streak_count: int  # F3 consecutive participations (MVP placeholder)
+    brule_count: int  # A02 §3.7.c history count higher teams (MVP placeholder)
+    historical_team_rank: int  # Observed team_rank for this player in saison
