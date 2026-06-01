@@ -72,7 +72,7 @@ Pour chaque équipe cible `target_team` d'un club adverse :
 | Q | Décision | Justification SOTA |
 |---|----------|-------------------|
 | Q1 | OR-Tools location = **self-contained `services/ali/adverse_ce.py`** | Anti-premature-abstraction (Sandi Metz Squint Test + Beck Rule of Three). Phase 4b CE-user pas encore brainstormé → shared primitives Phase 4a contraindrait design 4b. Refactor extract primitives @ Phase 4b kickoff (~3-5j). |
-| Q2 | CE-adverse objective = **MAP + diversified preference data SOTA** | User explicit "go sota or go fuck yourself" doctrine. Fit `P(player → team_rank \| Elo, history)` sur echiquiers.parquet. Diversification Hamming/K-best Yannakakis 1990. |
+| Q2 | CE-adverse objective = **MAP + diversified preference data SOTA** | User explicit "go sota or go fuck yourself" doctrine. Fit `P(player → team_rank \| Elo, history)` sur echiquiers.parquet. Diversification Hamming/K-best (greedy max-min diversity, Hebrard et al. 2005 AAAI). |
 | Q3 | §3.7.f noyau côté adverse = **data DIRECTE depuis echiquiers.parquet** | REGLES_FFE_ALICE.md §2.5+§5.1 : noyau = joueurs ayant DÉJÀ JOUÉ pour équipe cette saison. `get_noyau()` existant. Pas de proxy. |
 | Q4 | Multi-team detection = **Hybrid JSON vendored + Makefile refresh** | Pattern ADR-013 strict (chess-app source canonique). `config/clubs_teams_<season>.json` vendored. `make sync-clubs-teams` target appelle chess-app REST + update JSON + recompute SHA + commit. Reproducibility ISO 5259/42001. Kaggle internet OK mais reproducibilité prime. |
 | Q5 | Sim ordering = **Top-down ancestral sampling** (A02 §3.7.b mirror) | Échantillonnage hiérarchique Bayésien (Pearl 1988). Match A02 §3.7.b texte. Fits SLA /compose <2s. APPROXIMATION assumant top-down (majorité clubs), strategic sacrifice patterns minoritaires testés empirique D8. **@TODO post-MVP** : Option B joint OR-Tools si A.recall < 0.65 (Phase 4c contingency). |
@@ -124,7 +124,7 @@ POST /compose {                                │  app/api/routes.py   │
                                               ┌──────────▼────────────┐
                                               │ diversification.py    │
                                               │ Hamming K-best        │
-                                              │ Yannakakis 1990       │
+                                              │ Hebrard 2005          │
                                               │ (Q2 diversification)  │
                                               └──────────┬────────────┘
                                                          │
@@ -146,7 +146,7 @@ POST /compose {                                │  app/api/routes.py   │
 **NEW fichiers** (5) :
 - `services/ali/adverse_ce.py` — OR-Tools CP-SAT solveur miroir self-contained
 - `services/ali/preference_model.py` — MAP P(player→team_rank | Elo, history)
-- `services/ali/diversification.py` — Hamming K-best Yannakakis 1990
+- `services/ali/diversification.py` — Hamming K-best (Hebrard et al. 2005)
 - `services/ali/ce_adverse_cache.py` — SQLite TTL 7j cache
 - `scripts/sync_clubs_teams.py` — Makefile target sync chess-app → vendored JSON
 
@@ -258,15 +258,15 @@ serialization, 2j), T2.c (Model Card writing, 1j), T2.d (tests + bias check, 1j)
 
 ### T3 — `services/ali/diversification.py` Hamming K-best (2-3j)
 
-**Goal** : NEW post-MAP diversification via Hamming distance K-best (Yannakakis
-1990 OR-Tools K-best paths) ou Hahn-Murray 2024 diversified solutions CSP. Output :
+**Goal** : NEW post-MAP diversification via greedy max-min Hamming diversity
+(dispersion heuristic, Hebrard et al. 2005 AAAI). Output :
 10 scénarios distincts par équipe avec Hamming distance ≥ 3 entre tout pair.
 
 **DoD** :
 - [ ] `services/ali/diversification.py` ≤ 200 lignes
 - [ ] Tests ≥ 8 cas : 3 trivial diversity, 3 hamming threshold edge, 2 determinism
 - [ ] Coverage ≥ 90%
-- [ ] Documented algorithm ref (Yannakakis 1990 ou Hahn-Murray 2024 citée)
+- [ ] Documented algorithm ref (Hebrard et al. 2005 AAAI greedy max-min diversity citée)
 
 **Quality gates** : F1, F2, T1, T7
 
@@ -609,8 +609,10 @@ Si Phase 4a déployé en prod et metrics dégradées (recall, Jaccard, Brier) :
   interclubs)
 - **Pearl 1988** : "Probabilistic Reasoning in Intelligent Systems" — ancestral
   sampling Bayesian hierarchical
-- **Yannakakis 1990** : K-best paths / diversified solutions CSP
-- **Hahn & Murray 2024** : "Diversified solutions for constraint satisfaction"
+- **Hebrard, Hnich, O'Sullivan & Walsh 2005** : "Finding Diverse and Similar
+  Solutions in Constraint Programming" (AAAI'05, pp. 372-377) — greedy max-min
+  Hamming diversity / dispersion (replaces earlier inaccurate Yannakakis 1990 +
+  unverifiable Hahn-Murray 2024 citations, corrected T3 review 2026-06-01)
 - **Bradley & Terry 1952 / Hunter 2004** : Preference learning MAP
 - **Sculley et al. 2015** : "Hidden Technical Debt in Machine Learning Systems"
   (NeurIPS) — ML deployment patterns

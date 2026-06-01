@@ -4,7 +4,7 @@
 
 **Goal:** Build the 4 new self-contained components for Phase 4a ALI joint conditional multi-team adverse CE mirror : OR-Tools CP-SAT solver, MAP preference model, K-best diversification, chess-app clubs/teams sync.
 
-**Architecture:** Self-contained `services/ali/adverse_ce.py` solveur OR-Tools CP-SAT top-down per A02 §3.7.b mirror, fed by `preference_model.py` (Bradley-Terry-Luce MAP fit on echiquiers.parquet historical), output diversified via `diversification.py` Hamming K-best (Yannakakis 1990). Vendored clubs/teams mapping via `config/clubs_teams_2024.json` synced from chess-app MongoDB through Makefile target (ADR-013 pattern).
+**Architecture:** Self-contained `services/ali/adverse_ce.py` solveur OR-Tools CP-SAT top-down per A02 §3.7.b mirror, fed by `preference_model.py` (Bradley-Terry-Luce MAP fit on echiquiers.parquet historical), output diversified via `diversification.py` Hamming K-best (greedy max-min diversity, Hebrard et al. 2005 AAAI). Vendored clubs/teams mapping via `config/clubs_teams_2024.json` synced from chess-app MongoDB through Makefile target (ADR-013 pattern).
 
 **Tech Stack:** Python 3.13, OR-Tools CP-SAT (`ortools.sat.python.cp_model`), scikit-learn for MAP, joblib for artifact serialization, Pandera for parquet schema validation, pytest+coverage for tests, mypy strict, ruff, radon.
 
@@ -21,7 +21,7 @@
 |---|---|---|---|
 | `services/ali/adverse_ce.py` | CREATE | OR-Tools CP-SAT solver self-contained, A02 §3.7.b/c/d/f constraints | 300 lines |
 | `services/ali/preference_model.py` | CREATE | Bradley-Terry-Luce MAP fit P(player→team_rank \| Elo, history) | 300 lines |
-| `services/ali/diversification.py` | CREATE | Hamming K-best Yannakakis 1990 post-MAP | 200 lines |
+| `services/ali/diversification.py` | CREATE | Hamming K-best (Hebrard et al. 2005) post-MAP | 200 lines |
 | `services/ali/types.py` | MODIFY | NEW dataclasses `TeamSpec`, `AdverseCESolution`, `PreferenceFeatures` | +50 lines |
 | `scripts/sync_clubs_teams.py` | CREATE | Sync chess-app REST → vendored JSON + SHA-256 | 200 lines |
 | `scripts/train_preference_model.py` | CREATE | Training entry point for preference model | 200 lines |
@@ -942,7 +942,7 @@ EOF
 - Create: `services/ali/diversification.py`
 - Create: `tests/services/ali/test_diversification.py`
 
-**DoD (from spec §4.T3)**: ≤200 lines, ≥8 test cases, coverage ≥90%, algorithm reference Yannakakis 1990 documented, no infinite loop on degenerate input.
+**DoD (from spec §4.T3)**: ≤200 lines, ≥8 test cases, coverage ≥90%, algorithm reference Hebrard et al. 2005 (AAAI greedy max-min diversity) documented, no infinite loop on degenerate input.
 
 ### T3.1 — diversification.py module
 
@@ -951,10 +951,10 @@ EOF
 ```python
 """Diversification — Hamming K-best post-MAP for Phase 4a.
 
-Source : Yannakakis 1990 "The complexity of the partial order dimension problem"
-extended by Hahn-Murray 2024 "Diversified solutions for constraint satisfaction".
+Reference : Hebrard, Hnich, O'Sullivan & Walsh (2005), "Finding Diverse and
+Similar Solutions in Constraint Programming", Proc. AAAI'05, pp. 372-377.
 
-Algorithm : greedy K-best with Hamming distance ≥ min_hamming constraint.
+Algorithm : greedy max-min Hamming-diversity (dispersion) with distance ≥ min_hamming constraint.
 For each candidate solution from MAP TopK, add to result iff min Hamming to
 already-selected ≥ threshold.
 
@@ -1112,12 +1112,12 @@ Expected: ≤200L, ≤B, 0 mypy, 0 ruff, all PASS, coverage ≥90%.
 ```bash
 git add services/ali/diversification.py tests/services/ali/test_diversification.py
 git commit -m "$(cat <<'EOF'
-feat(ali): T3 diversification.py Hamming K-best Yannakakis 1990 Phase 4a
+feat(ali): T3 diversification.py Hamming K-best Hebrard 2005 Phase 4a
 
 Greedy K-best post-MAP with Hamming distance ≥ min_hamming constraint.
 10 tests: equal/diff hamming, threshold filter, edge cases (empty, k=0, k>cands).
 
-Source : Yannakakis 1990 extended Hahn-Murray 2024 diversified CSP solutions.
+Source : Hebrard/Hnich/O'Sullivan/Walsh 2005 AAAI greedy max-min diversity.
 
 ISO 5055 (≤200L), 24029 (diversity stress), 29119 (tests).
 
