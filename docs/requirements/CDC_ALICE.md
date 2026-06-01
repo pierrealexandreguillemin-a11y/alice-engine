@@ -296,6 +296,14 @@ SENTRY_DSN=xxx
 
 ## 4. Intégration avec chess-app
 
+> ⚠️ **SUPERSEDED PARTIEL par ADR-023 (2026-06-01)** — `docs/architecture/adr/ADR-023-...md`.
+> Le **REST trigger** (§4.1, chess-app appelle ALICE) reste valide. En revanche la dimension
+> **"ALICE lit MongoDB chess-app en lecture seule"** (§4.3 ligne "Données joueurs") est
+> **ABANDONNÉE** : évaluée contre les standards industrie, c'est le *shared-database
+> anti-pattern* avec un risque d'**isolation multi-tenant (ISO 27001)**. Décision retenue :
+> **API composition** — chess-app envoie TOUTES les données du match dans le payload `/compose` ;
+> ALICE est stateless et n'accède jamais à la base de chess-app. Voir ADR-023 §3.3 + §7.
+
 ### 4.1 Principe de Découplage
 
 ```
@@ -351,11 +359,11 @@ export async function getAlicePrediction(clubId, opponentClubId, roundNumber, av
 
 | Aspect | Responsabilité chess-app | Responsabilité ALICE |
 |--------|--------------------------|-------------------------------|
-| Données joueurs | Scraping FFE, stockage MongoDB | Lecture seule MongoDB |
+| Données joueurs (live) | Scraping FFE + assemblage du **payload** (roster tenant + roster adverse via `/opponent/:clubId`) | **Reçues dans la requête** (~~lecture MongoDB~~ — ABANDONNÉ ADR-023) |
 | Règles FFE | Moteur Flat-Six complet (73 règles) | Contraintes simplifiées en entrée |
-| Authentification | JWT utilisateur, gestion clubId | Validation clubId reçu |
+| Authentification | JWT utilisateur, gestion clubId, **envoie données autorisées** | Validation clubId reçu (isolation imposée à la source, ISO 27001) |
 | UI | Bouton "Demander à Alice", affichage | Aucune |
-| Historique matchs | Stockage via scraping | Utilisation pour entraînement |
+| Historique matchs | Stockage via scraping | **Offline store ALICE** (parquet HuggingFace) pour features ML d'entraînement |
 
 ---
 

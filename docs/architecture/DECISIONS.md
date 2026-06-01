@@ -632,23 +632,34 @@ des matches eux-mêmes (`echiquiers.parquet`).
 **Statut**: Accepté (décision déléguée par owner, harnais ISO 42010 + SOTA-ML)
 **Detail**: `docs/architecture/adr/ADR-023-alice-chessapp-responsibility-boundary-live-data-contract.md`
 
-### Décision principale
+### Décision principale (V2 — réécrite après exploration des 2 codebases)
 
-Frontière par **cycle de vie de la donnée** : chess-app = source de vérité
-**opérationnelle live** (scraping FFE, rosters/calendrier/équipes engagés, multiTeam,
-composition tenant) ; ALICE = **cerveau ML + offline feature store historique**
-(entraînement + backtest). ALICE est un **service d'inférence stateless** : chess-app
-lui envoie une **requête auto-suffisante** (roster FFE-ids + Elo + `simultaneous_teams`
-+ contexte match) ; ALICE enrichit par clé d'entité depuis son store historique et
-répond. **ALICE ne scrape jamais, ne lit jamais la base chess-app, ne rappelle jamais.**
+> ⚠️ **V1 (`f46094a`) prématurée** : affirmait "pas de base partagée" sans avoir lu le
+> contrat pré-existant `CDC_ALICE.md §4`. Owner a exigé une évaluation contre standards
+> industrie ("ce n'est pas parce que c'est prévu que c'est adapté"). V2 = résultat.
 
-Évite le shared-database anti-pattern (microservices.io) + le training-serving skew
-(AWS ML Lens MLREL-07). Re-scope T4 : `build_clubs_teams.py` offline (parquet ALICE),
-pas `sync_clubs_teams.py` (REST chess-app). N'impacte pas ADR-013 (règles statiques).
+**Intégration par API composition** : chess-app (orchestrateur, owner données live)
+rassemble les données opérationnelles du match (available_players tenant + roster adverse
+via son scraper `/opponent/:clubId` + `simultaneous_teams` + contexte) et les envoie dans
+l'appel REST `/compose`. ALICE = **service d'inférence ML stateless** : enrichit par clé
+FFE-id depuis son **offline store historique** (parquet, features ML) et répond. **ALICE
+ne lit JAMAIS la base de chess-app, ne scrape jamais, ne rappelle jamais.**
 
-Dette tracée (Phase 5 intégration) : `D-2026-06-01-live-data-integration-contract`
-(le "tuyau" live n'existe pas encore — ALICE ne lit que les parquets figés aujourd'hui ;
-disponibilité roster adverse chez chess-app non vérifiée) + `D-2026-06-01-historical-store-refresh`.
+**Déviation explicite vs CDC_ALICE.md §4.3** (qui prévoyait "ALICE lit MongoDB chess-app en
+lecture seule") — rejetée pour 3 raisons : (1) 🔴 isolation multi-tenant ISO 27001 (lecture
+directe court-circuite le scoping clubId → risque fuite inter-clients), (2) couplage de
+schéma ISO 25010 (shared-DB anti-pattern), (3) double source de vérité. CDC a raison sur le
+REST trigger, tort sur la lecture base partagée. KISS préservé (API composition ≠
+over-engineering : chess-app assemble déjà ces données pour son UI).
+
+**Supersedes** CDC_ALICE.md §4.3 (annoté). **N'impacte pas** ADR-013 (règles statiques).
+Re-scope T4 : `build_clubs_teams.py` offline (parquet), pas sync REST chess-app.
+
+**Trous d'implémentation des 2 côtés** (design figé, implémentation Phase 5) : chess-app =
+`getAlicePrediction()` client + route `/_predict-opponent` (TODO P2 Match.ts) + assemblage
+payload ; ALICE = `ComposeRequest` étendu + enrichissement pool_loader par FFE-id + NE PAS
+brancher DataLoader Mongo dans l'inférence. Debts `D-2026-06-01-live-data-integration-contract`
++ `D-2026-06-01-historical-store-refresh`. Voir ADR §7 (questions à re-poser par fresh-Claude).
 
 ---
 
