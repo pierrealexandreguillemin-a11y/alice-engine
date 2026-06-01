@@ -616,7 +616,7 @@ class PreferenceModelArtifact:
     n_teams_max: int
     saison: int
     input_sha256: str
-    artifact_sha256: str
+    estimator_bytes_sha256: str
     train_size: int
     laplace_alpha: float
 
@@ -646,8 +646,7 @@ class PreferenceModel:
         estimator.fit(X, y)
 
         input_sha = self._sha256_dataframe(df_train)
-        artifact_bytes = joblib.numpy_pickle.dumps(estimator)
-        artifact_sha = hashlib.sha256(artifact_bytes).hexdigest()
+        estimator_bytes_sha = self._sha256_estimator(estimator)
 
         artifact = PreferenceModelArtifact(
             estimator=estimator,
@@ -655,7 +654,7 @@ class PreferenceModel:
             n_teams_max=n_teams_max,
             saison=saison,
             input_sha256=input_sha,
-            artifact_sha256=artifact_sha,
+            estimator_bytes_sha256=estimator_bytes_sha,
             train_size=len(df_train),
             laplace_alpha=self._alpha,
         )
@@ -746,7 +745,7 @@ def test_determinism_same_seed_same_artifact():
     a1 = m1.fit(df, 2024)
     m2 = PreferenceModel(seed=42)
     a2 = m2.fit(df, 2024)
-    assert a1.artifact_sha256 == a2.artifact_sha256
+    assert a1.estimator_bytes_sha256 == a2.estimator_bytes_sha256
 ```
 
 - [ ] **Step 7: Run fit tests**
@@ -769,7 +768,7 @@ def test_serialization_roundtrip(tmp_path):
     p = tmp_path / "pref.joblib"
     save_artifact(a, p)
     loaded = load_artifact(p)
-    assert loaded.artifact_sha256 == a.artifact_sha256
+    assert loaded.estimator_bytes_sha256 == a.estimator_bytes_sha256
     assert loaded.train_size == a.train_size
 
 def test_inference_batch_under_100ms():
@@ -824,7 +823,7 @@ def main() -> None:
     save_artifact(artifact, args.output)
     print(f"Saved artifact to {args.output}")
     print(f"  Input SHA  : {artifact.input_sha256}")
-    print(f"  Artifact SHA : {artifact.artifact_sha256}")
+    print(f"  Estimator bytes SHA : {artifact.estimator_bytes_sha256}")
     print(f"  Train size : {artifact.train_size}")
 
 
