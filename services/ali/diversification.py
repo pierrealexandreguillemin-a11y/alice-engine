@@ -1,9 +1,13 @@
 """Diversification - Hamming K-best post-MAP for Phase 4a.
 
-Source : Yannakakis 1990 "The complexity of the partial order dimension problem"
-extended by Hahn-Murray 2024 "Diversified solutions for constraint satisfaction".
+Algorithm : greedy max-min Hamming-diversity (dispersion) heuristic. Iterate
+candidates in descending score order; select a candidate iff its minimum Hamming
+distance to every already-selected solution is >= min_hamming. This is the
+greedy MaxMin-dispersion approach applied to diverse constraint solutions.
 
-Algorithm : greedy K-best with Hamming distance >= min_hamming constraint.
+Reference : Hebrard, Hnich, O'Sullivan & Walsh (2005), "Finding Diverse and
+Similar Solutions in Constraint Programming", Proc. AAAI'05, pp. 372-377.
+
 For each candidate solution from MAP TopK, add to result iff min Hamming to
 already-selected >= threshold. Degenerate inputs (pool size < K, empty list,
 k=0) are handled gracefully without infinite loops.
@@ -13,7 +17,7 @@ ISO 24029 : Diversity stress test against single-mode solutions.
 ISO 29119 : Deterministic ordering by score; testable pure functions.
 
 Document ID: ALICE-ALI-DIVERSIFICATION
-Version: 1.0.0
+Version: 1.0.1
 Count: K solutions per team per call
 """
 
@@ -21,10 +25,14 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["hamming_distance", "k_best_diversified"]
+__all__ = ["SolutionTuple", "hamming_distance", "k_best_diversified"]
+
+SolutionTuple = tuple[Any, ...]
+"""A board-assignment solution tuple. Element type intentionally unparameterized
+(heterogeneous: player ids or NR-FFE codes)."""
 
 
-def hamming_distance(a: tuple[Any, ...], b: tuple[Any, ...]) -> int:
+def hamming_distance(a: SolutionTuple, b: SolutionTuple) -> int:
     """Hamming distance between two tuples (count of unequal positions).
 
     Args:
@@ -47,10 +55,10 @@ def hamming_distance(a: tuple[Any, ...], b: tuple[Any, ...]) -> int:
 
 
 def k_best_diversified(
-    candidates: list[tuple[tuple[Any, ...], float]],
+    candidates: list[tuple[SolutionTuple, float]],
     k: int,
     min_hamming: int = 3,
-) -> list[tuple[tuple[Any, ...], float]]:
+) -> list[tuple[SolutionTuple, float]]:
     """Select K diversified solutions via greedy Hamming distance filter.
 
     Iterates through candidates in descending score order.  The highest-scoring
@@ -78,7 +86,7 @@ def k_best_diversified(
         return []
 
     sorted_cands = sorted(candidates, key=lambda x: -x[1])
-    selected: list[tuple[tuple[Any, ...], float]] = [sorted_cands[0]]
+    selected: list[tuple[SolutionTuple, float]] = [sorted_cands[0]]
 
     for cand_sol, cand_score in sorted_cands[1:]:
         if len(selected) >= k:

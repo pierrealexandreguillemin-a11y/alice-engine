@@ -11,7 +11,7 @@ Tests cover:
 
 Document ID: ALICE-TEST-ALI-DIVERSIFICATION
 Version: 1.0.0
-Count: 10 test cases
+Count: 15 test cases
 """
 
 from __future__ import annotations
@@ -136,3 +136,12 @@ class TestKBestDiversified:
         ]
         result = k_best_diversified(cands, k=2, min_hamming=0)
         assert len(result) == 2
+
+    def test_k_one_returns_highest_score_only(self) -> None:
+        cands: list[tuple[tuple[int, ...], float]] = [
+            ((1, 2, 3), 0.5),
+            ((4, 5, 6), 0.9),
+        ]
+        result = k_best_diversified(cands, k=1, min_hamming=5)
+        assert len(result) == 1
+        assert result[0][1] == 0.9
