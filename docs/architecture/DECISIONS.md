@@ -626,6 +626,32 @@ des matches eux-mêmes (`echiquiers.parquet`).
 
 ---
 
+## ADR-023: Frontière de responsabilité ALICE ↔ chess-app + contrat de données live
+
+**Date**: 1 Juin 2026
+**Statut**: Accepté (décision déléguée par owner, harnais ISO 42010 + SOTA-ML)
+**Detail**: `docs/architecture/adr/ADR-023-alice-chessapp-responsibility-boundary-live-data-contract.md`
+
+### Décision principale
+
+Frontière par **cycle de vie de la donnée** : chess-app = source de vérité
+**opérationnelle live** (scraping FFE, rosters/calendrier/équipes engagés, multiTeam,
+composition tenant) ; ALICE = **cerveau ML + offline feature store historique**
+(entraînement + backtest). ALICE est un **service d'inférence stateless** : chess-app
+lui envoie une **requête auto-suffisante** (roster FFE-ids + Elo + `simultaneous_teams`
++ contexte match) ; ALICE enrichit par clé d'entité depuis son store historique et
+répond. **ALICE ne scrape jamais, ne lit jamais la base chess-app, ne rappelle jamais.**
+
+Évite le shared-database anti-pattern (microservices.io) + le training-serving skew
+(AWS ML Lens MLREL-07). Re-scope T4 : `build_clubs_teams.py` offline (parquet ALICE),
+pas `sync_clubs_teams.py` (REST chess-app). N'impacte pas ADR-013 (règles statiques).
+
+Dette tracée (Phase 5 intégration) : `D-2026-06-01-live-data-integration-contract`
+(le "tuyau" live n'existe pas encore — ALICE ne lit que les parquets figés aujourd'hui ;
+disponibilité roster adverse chez chess-app non vérifiée) + `D-2026-06-01-historical-store-refresh`.
+
+---
+
 ## ADR-022: D8 Phase A acceptance verdict — Phase 4a ALI conditional retained (D-P3-19 empirical confirmation)
 
 **Date**: 16 Mai 2026

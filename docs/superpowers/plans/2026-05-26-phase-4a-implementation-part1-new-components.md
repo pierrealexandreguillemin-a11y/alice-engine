@@ -4,7 +4,7 @@
 
 **Goal:** Build the 4 new self-contained components for Phase 4a ALI joint conditional multi-team adverse CE mirror : OR-Tools CP-SAT solver, MAP preference model, K-best diversification, chess-app clubs/teams sync.
 
-**Architecture:** Self-contained `services/ali/adverse_ce.py` solveur OR-Tools CP-SAT top-down per A02 §3.7.b mirror, fed by `preference_model.py` (Bradley-Terry-Luce MAP fit on echiquiers.parquet historical), output diversified via `diversification.py` Hamming K-best (greedy max-min diversity, Hebrard et al. 2005 AAAI). Vendored clubs/teams mapping via `config/clubs_teams_2024.json` synced from chess-app MongoDB through Makefile target (ADR-013 pattern).
+**Architecture:** Self-contained `services/ali/adverse_ce.py` solveur OR-Tools CP-SAT top-down per A02 §3.7.b mirror, fed by `preference_model.py` (Bradley-Terry-Luce MAP fit on echiquiers.parquet historical), output diversified via `diversification.py` Hamming K-best (greedy max-min diversity, Hebrard et al. 2005 AAAI). Clubs/teams : PROD = `simultaneous_teams` reçu dans le payload `/compose` (chess-app) ; OFFLINE = dérivé de `data/echiquiers.parquet` via `build_clubs_teams.py` (RÉVISÉ ADR-023 ; ~~sync chess-app MongoDB~~ abandonné).
 
 **Tech Stack:** Python 3.13, OR-Tools CP-SAT (`ortools.sat.python.cp_model`), scikit-learn for MAP, joblib for artifact serialization, Pandera for parquet schema validation, pytest+coverage for tests, mypy strict, ruff, radon.
 
@@ -1130,16 +1130,38 @@ EOF
 
 ---
 
-## Task T4 — `config/clubs_teams_2024.json` vendored + `make sync-clubs-teams` (2-3j)
+## Task T4 — `scripts/build_clubs_teams.py` fixture offline depuis parquet ALICE (RE-SCOPÉ ADR-023)
 
-**Files:**
+> ⚠️ **RE-SCOPE 2026-06-01 (ADR-023)** : le pseudocode ci-dessous (sync REST chess-app)
+> est OBSOLÈTE et sera RÉÉCRIT à l'implémentation. chess-app est tenant-scoped (pas de
+> référentiel FFE global) + ALICE n'a aucun scraping. **Nouveau T4** : `build_clubs_teams.py`
+> dérive les équipes simultanées historiques depuis `data/echiquiers.parquet` (offline,
+> backtest only). En PROD, `simultaneous_teams` arrive dans le payload `/compose` (T7).
+> Voir spec §T4 RÉVISÉ + `docs/architecture/adr/ADR-023-...md`. Le contrat de données live
+> = debt `D-2026-06-01-live-data-integration-contract` (Phase 5). NE PAS implémenter le
+> pseudocode ci-dessous tel quel.
+
+**Files (RÉVISÉ ADR-023):**
+- Create: `scripts/build_clubs_teams.py` (lit `data/echiquiers.parquet`, pas de réseau)
+- Create: `config/clubs_teams_<saison>.json` (dérivé du parquet, SHA-256 lineage)
+- Create: `tests/scripts/test_build_clubs_teams.py`
+- Modify: `Makefile` (add `build-clubs-teams` target)
+- Modify: `config/README.md` (document procedure offline + note ADR-023)
+
+**DoD (from spec §4.T4 RÉVISÉ)**: dérivé parquet (zéro réseau), idempotent, ≥6 tests, métrique parsing-accuracy reportée, zéro dépendance chess-app.
+
+---
+
+<details><summary>⚠️ Pseudocode OBSOLÈTE (sync chess-app, conservé pour historique — ADR-023 l'abandonne)</summary>
+
+**Files (OBSOLÈTE):**
 - Create: `scripts/sync_clubs_teams.py`
 - Create: `config/clubs_teams_2024.json` (output of script)
 - Create: `tests/scripts/test_sync_clubs_teams.py`
 - Modify: `Makefile` (add `sync-clubs-teams` target)
 - Modify: `config/README.md` (document procedure)
 
-**DoD (from spec §4.T4)**: ≥200 clubs in JSON, idempotent run, CI staleness check, ≥6 tests, fail-fast on chess-app down.
+**DoD (OBSOLÈTE)**: ≥200 clubs in JSON, idempotent run, CI staleness check, ≥6 tests, fail-fast on chess-app down.
 
 ### T4.1 — sync_clubs_teams.py script
 
@@ -1456,6 +1478,11 @@ After Plan 1 ships + CI green + user OK :
 - Invoke `superpowers:writing-plans` skill to create Part 2 (T5-T8 refactors + cache)
 - Reference this Plan 1 in Part 2 prereqs
 
+</details>
+
+> **T4 re-scopé (ADR-023)** : le pseudocode T4 ci-dessus est OBSOLÈTE. Le vrai T4
+> (`build_clubs_teams.py` offline depuis parquet) sera planifié/implémenté séparément.
+
 ---
 
 ## Plan self-review (pre-handoff)
@@ -1464,7 +1491,7 @@ After Plan 1 ships + CI green + user OK :
 
 **Placeholder scan**:
 - `MVP placeholder` mentioned in T2 streak_count/brule_count (intentional, traced to Phase 4a+T)
-- `PLACEHOLDER` in T4 step 8 initial JSON (intentional bootstrap, replaced by real sync)
+- `PLACEHOLDER` in T4 (obsolète) — T4 re-scopé ADR-023 (build_clubs_teams.py offline), pseudocode sync archivé
 - No `TBD`, `TODO`, `XXX`, `FIXME` in actionable code/tests
 
 **Type consistency**:

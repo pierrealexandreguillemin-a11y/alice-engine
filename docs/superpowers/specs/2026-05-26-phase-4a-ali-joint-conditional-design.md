@@ -49,7 +49,7 @@ ce conditionnement → biais structurel recall.
 ### 1.3 Cible Phase 4a
 
 Pour chaque équipe cible `target_team` d'un club adverse :
-1. Détecter les équipes simultanées du même club via canonical mapping chess-app.
+1. Détecter les équipes simultanées du même club (PROD : reçues dans le payload depuis chess-app ; OFFLINE : dérivées du parquet historique ALICE — ADR-023).
 2. Solveur OR-Tools CP-SAT miroir Top-Down (Q5) sample allocation team_1 → team_N
    sous contraintes A02 §3.7.b/c/d/f.
 3. Échantillonnage ancestral Bayésien hiérarchique (Pearl 1988) : pool target_team
@@ -74,7 +74,7 @@ Pour chaque équipe cible `target_team` d'un club adverse :
 | Q1 | OR-Tools location = **self-contained `services/ali/adverse_ce.py`** | Anti-premature-abstraction (Sandi Metz Squint Test + Beck Rule of Three). Phase 4b CE-user pas encore brainstormé → shared primitives Phase 4a contraindrait design 4b. Refactor extract primitives @ Phase 4b kickoff (~3-5j). |
 | Q2 | CE-adverse objective = **MAP + diversified preference data SOTA** | User explicit "go sota or go fuck yourself" doctrine. Fit `P(player → team_rank \| Elo, history)` sur echiquiers.parquet. Diversification Hamming/K-best (greedy max-min diversity, Hebrard et al. 2005 AAAI). |
 | Q3 | §3.7.f noyau côté adverse = **data DIRECTE depuis echiquiers.parquet** | REGLES_FFE_ALICE.md §2.5+§5.1 : noyau = joueurs ayant DÉJÀ JOUÉ pour équipe cette saison. `get_noyau()` existant. Pas de proxy. |
-| Q4 | Multi-team detection = **Hybrid JSON vendored + Makefile refresh** | Pattern ADR-013 strict (chess-app source canonique). `config/clubs_teams_<season>.json` vendored. `make sync-clubs-teams` target appelle chess-app REST + update JSON + recompute SHA + commit. Reproducibility ISO 5259/42001. Kaggle internet OK mais reproducibilité prime. |
+| Q4 | Multi-team detection = **PROD : payload `/compose` (chess-app) ; OFFLINE : dérivé parquet ALICE** (RÉVISÉ ADR-023, 2026-06-01) | ~~Pattern ADR-013 sync REST chess-app~~ INVALIDE : chess-app tenant-scoped (pas de référentiel FFE global) + ALICE sans scraping. En prod `simultaneous_teams` arrive dans la requête (chess-app a la feature multiTeam + calendrier). En offline/backtest, ALICE dérive de son `echiquiers.parquet`. Contrat live = ADR-023 (Phase 5). Détail : `docs/architecture/adr/ADR-023-...md`. |
 | Q5 | Sim ordering = **Top-down ancestral sampling** (A02 §3.7.b mirror) | Échantillonnage hiérarchique Bayésien (Pearl 1988). Match A02 §3.7.b texte. Fits SLA /compose <2s. APPROXIMATION assumant top-down (majorité clubs), strategic sacrifice patterns minoritaires testés empirique D8. **@TODO post-MVP** : Option B joint OR-Tools si A.recall < 0.65 (Phase 4c contingency). |
 | Q6 | Cache CE-adverse = **SQLite TTL 7j + Redis Phase 5 migration** | Phase 4a MVP : SQLite stdlib zero-deps `data/cache/ce_adverse.sqlite` key=`(saison, opponent_club_id, ronde_date, target_team, CODE_SHA)`. Phase 5 SaaS multi-tenant → migration Redis. CODE_SHA invalidation auto deploy. |
 | Q7 | Fallback infeasible = **complete_or_nothing strict** | UNSAT → RuntimeError /compose 500 (data integrity diagnostic). TIMEOUT → RuntimeError /compose 503 (capacity). Aucune régression silencieuse Phase 3. Aligne `feedback_complete_or_nothing.md` CRITIQUE. |
@@ -148,7 +148,7 @@ POST /compose {                                │  app/api/routes.py   │
 - `services/ali/preference_model.py` — MAP P(player→team_rank | Elo, history)
 - `services/ali/diversification.py` — Hamming K-best (Hebrard et al. 2005)
 - `services/ali/ce_adverse_cache.py` — SQLite TTL 7j cache
-- `scripts/sync_clubs_teams.py` — Makefile target sync chess-app → vendored JSON
+- `scripts/build_clubs_teams.py` — fixture offline dérivé du parquet ALICE (RÉVISÉ ADR-023 ; ~~sync chess-app~~ abandonné)
 
 **MODIFIED fichiers** (4) :
 - `services/ali/generator.py` — ajout `simultaneous_teams`, `target_team` params + BC
@@ -157,7 +157,7 @@ POST /compose {                                │  app/api/routes.py   │
 - `app/api/schemas.py` — ComposeRequest schema extension
 
 **VENDORED config** (1) :
-- `config/clubs_teams_2024.json` — chess-app teams snapshot (ADR-013 pattern)
+- `config/clubs_teams_2024.json` — fixture offline dérivé du parquet ALICE (RÉVISÉ ADR-023 ; ~~chess-app snapshot~~). Usage backtest uniquement, pas le path prod.
 
 ---
 
@@ -279,28 +279,40 @@ serialization, 2j), T2.c (Model Card writing, 1j), T2.d (tests + bias check, 1j)
 
 ---
 
-### T4 — `config/clubs_teams_2024.json` vendored + `make sync-clubs-teams` (2-3j)
+### T4 — `scripts/build_clubs_teams.py` fixture offline depuis parquet ALICE (RE-SCOPÉ ADR-023)
 
-**Goal** : ADR-013 pattern hybrid JSON vendored + Makefile refresh target.
-chess-app REST API call → JSON dump → SHA-256 → commit.
+> **RE-SCOPE 2026-06-01 (ADR-023)** : la version initiale "sync REST chess-app → JSON
+> vendoré" est ABANDONNÉE. chess-app est tenant-scoped (ne possède pas le référentiel
+> FFE global) et ALICE n'a aucun scraping. En PROD, `simultaneous_teams` arrive dans le
+> payload `/compose` (T7, consommé par `adverse_ce.py::team.board_count`) — ALICE
+> n'acquiert RIEN. T4 ne sert donc qu'au **path OFFLINE (backtest/Kaggle/tests)** : ALICE
+> dérive les équipes simultanées historiques depuis **son propre parquet** (autonome).
+
+**Goal** : `scripts/build_clubs_teams.py` lit `data/echiquiers.parquet`, dérive
+`(saison, club, ronde) → équipes simultanées` (groupage équipe→club par normalisation de
+nom + division→board_count). Sortie = fixture offline pour le harnais backtest. Offline,
+déterministe, zéro réseau, zéro dépendance chess-app.
 
 **DoD** :
-- [ ] `config/clubs_teams_2024.json` ≥ 200 clubs avec teams arrays
-- [ ] `scripts/sync_clubs_teams.py` ≤ 200 lignes
-- [ ] `Makefile` target `sync-clubs-teams` : `python scripts/sync_clubs_teams.py && git diff --stat`
-- [ ] CI staleness check : age JSON > 30j → warning
-- [ ] Tests ≥ 6 cas : schema validation, idempotence, error handling chess-app down
-- [ ] README section in `config/README.md` documenting refresh procedure
+- [ ] `scripts/build_clubs_teams.py` ≤ 200 lignes, lit `data/echiquiers.parquet` (pas de réseau)
+- [ ] Sortie `config/clubs_teams_<saison>.json` dérivée du parquet (vendored, SHA-256 lineage ISO 5259)
+- [ ] Groupage équipe→club documenté + métrique de qualité du parsing mesurée (taux regroupement) ; résidu tracé en dette si < seuil
+- [ ] `Makefile` target `build-clubs-teams` : `python scripts/build_clubs_teams.py --saison <N> && git diff --stat`
+- [ ] Idempotence : 2 runs → JSON identique
+- [ ] Tests ≥ 6 cas : schéma, idempotence, club multi-équipes, saison absente, parsing edge-cases
+- [ ] README `config/README.md` : procédure + note ADR-023 (offline-only, pas de chess-app)
 
-**Quality gates** : F1, T1, T7, T9 (CI check)
+**Quality gates** : F1, T1, T7
 
 **Self-review checkpoint** :
 - [ ] DoD checklist
-- [ ] Run `make sync-clubs-teams` twice → JSON unchanged (idempotence)
-- [ ] Verify chess-app down → script exits with clear error (no silent fail)
-- [ ] Verify SHA-256 of JSON logged at sync time
+- [ ] Run `make build-clubs-teams` twice → JSON unchanged (idempotence)
+- [ ] Aucune dépendance réseau / chess-app (grep imports : pas de requests/httpx vers chess-app)
+- [ ] SHA-256 du JSON loggé + métrique parsing-accuracy reportée (no silent cap)
 
-**ISO normes** : 5055, 5259 (data versioning), 15289 (lifecycle)
+**ISO normes** : 5055, 5259 (data versioning + lineage parquet→JSON), 15289 (lifecycle)
+
+**NB** : le contrat de données LIVE (prod) = ADR-023 + debt `D-2026-06-01-live-data-integration-contract` (Phase 5). T4 ne le couvre PAS.
 
 ---
 
@@ -583,7 +595,8 @@ ADRs + close debt.
 | Phase 4a A.recall < 0.65 (strategic sacrifice patterns) | Moyenne | Haute | Pilot N=70 N3 early gate (T9). Si FAIL → diagnose avant Kaggle. Contingency Phase 4c escalate B. |
 | OR-Tools UNSAT clubs faible volume | Faible | Moyenne | complete_or_nothing strict (Q7). Diagnostic log. |
 | SQLite cache concurrent access bug | Faible | Moyenne | Tests concurrent T8. Migration Redis Phase 5 si problème. |
-| chess-app schema drift (clubs/teams) | Moyenne | Haute | Makefile sync target + CI staleness check (T4). |
+| ~~chess-app schema drift (clubs/teams)~~ RETIRÉ ADR-023 | — | — | N/A : ALICE ne sync plus chess-app (clubs/teams = payload prod ou parquet offline). |
+| Contrat live non implémenté (ALICE lit parquets figés) | Haute | Haute | ADR-023 + debt `D-2026-06-01-live-data-integration-contract` (Phase 5). Backtest historique OK aujourd'hui ; prod saison courante = Phase 5. |
 | Lineage hash propagation broken | Faible | Critique | Tests determinism T1/T2/T5. |
 | /compose SLA <2s violation | Moyenne | Moyenne | Bench load test pre-acceptance. Cache T8 mitigation. |
 | Phase 3 BC path rot (D-2026-05-26-deprecate) | Faible | Faible | 14j prod observation gate avant cleanup. |
