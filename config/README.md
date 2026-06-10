@@ -17,8 +17,12 @@ make build-clubs-teams SAISON=2024
 Derives `(saison, club, ronde) -> simultaneous teams` (team→club grouping via
 trailing team-number normalization with corpus corroboration, plus empirical
 modal `board_count` per division). Entries are compact arrays ordered per the
-top-level `entry_columns` key — `[team_name, division, board_count, date]`,
-mapping onto `services/ali/types.py::TeamSpec`.
+top-level `entry_columns` key — `[team_name, division, board_count, date]`:
+the first 3 columns (`team_name`, `division`, `board_count`) map onto
+`services/ali/types.py::TeamSpec` fields; `date` is a filtering field
+(ISO-8601 string or null) — NOT a TeamSpec member — consumers MUST filter
+simultaneous teams by matching `date`, not by ronde alone
+(date_coherence_rate ≈ 0.40).
 
 Properties:
 

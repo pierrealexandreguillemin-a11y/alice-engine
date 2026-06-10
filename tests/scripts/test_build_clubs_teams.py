@@ -4,8 +4,8 @@ Unit tests use SYNTHETIC parquet fixtures (no 35 MB real parquet load);
 one optional integration test against the real parquet is marked slow.
 
 Document ID: ALICE-TEST-BUILD-CLUBS-TEAMS
-Version: 1.0.0
-Count: 16 tests (schema, idempotence, grouping, filter contract, board_count, edge cases)
+Version: 1.1.0
+Count: 21 tests (schema, idempotence, grouping, filter contract, board_count, edge cases)
 """
 
 from __future__ import annotations
@@ -60,6 +60,13 @@ class TestSplitTeamSuffix:
     def test_roman_suffix(self) -> None:
         assert split_team_suffix("Vandoeuvre-Echecs IV") == ("Vandoeuvre-Echecs", 4)
 
+    def test_roman_one_suffix(self) -> None:
+        assert split_team_suffix("Vendome I") == ("Vendome", 1)
+
+    def test_roman_two_not_parsed_as_one_plus_garbage(self) -> None:
+        # Anchored regex + longest-first alternation: "II" must not match as "I".
+        assert split_team_suffix("Vendome II") == ("Vendome", 2)
+
     def test_no_suffix(self) -> None:
         assert split_team_suffix("Clichy") is None
 
@@ -79,6 +86,12 @@ class TestBuildClubIndex:
         index, _ = build_club_index({"Palamede Echecs IV", "Palamede Echecs V"})
         assert index["Palamede Echecs IV"] == "Palamede Echecs"
         assert index["Palamede Echecs V"] == "Palamede Echecs"
+
+    def test_roman_one_and_two_grouped_same_club(self) -> None:
+        # "I" is a valid team-1 suffix; corroborated by the "II" sibling.
+        index, _ = build_club_index({"Vendome I", "Vendome II"})
+        assert index["Vendome I"] == "Vendome"
+        assert index["Vendome II"] == "Vendome"
 
     def test_uncorroborated_suffix_stays_own_club(self) -> None:
         # "Pau Henri IV" = club name ending in a roman numeral, no sibling/base.
@@ -155,6 +168,24 @@ class TestBuildPayload:
         entries = payload["clubs"]["Lyon"]["rondes"]["1"]
         assert [e[2] for e in entries] == [8, 8]  # board_count column
 
+    def test_all_nan_echiquier_division_fails_fast(self, tmp_path: Path) -> None:
+        # All-NaN echiquier would yield modal board_count=0 (downstream CE would
+        # treat every pool as feasible): must fail LOUDLY, never serialize 0.
+        nan_match = {"equipe_dom": "Rouen", "equipe_ext": "Caen", "echiquier": None}
+        rows = _match_rows("Clichy", "Lille") + [{**nan_match, "division": "Nationale 3"}]
+        parquet = _make_parquet(tmp_path, rows)
+        with pytest.raises(SystemExit, match="Nationale 3"):
+            build_payload(parquet, 2024, ("national",))
+
+    def test_nan_ronde_rows_skipped_and_counted(self, tmp_path: Path) -> None:
+        rows = _match_rows("Clichy", "Lille") + _match_rows(
+            "Rouen", "Caen", division="Nationale 3", ronde=None
+        )
+        parquet = _make_parquet(tmp_path, rows)
+        payload = build_payload(parquet, 2024, ("national",))
+        assert payload["metrics"]["n_rows_ronde_nan"] == 2
+        assert payload["metrics"]["n_team_entries_total"] == 2  # Clichy + Lille only
+
     def test_absent_saison_raises(self, tmp_path: Path) -> None:
         parquet = _make_parquet(tmp_path, _match_rows("Clichy", "Lille"))
         with pytest.raises(SystemExit, match="saison=1999"):
@@ -193,7 +224,7 @@ class TestCli:
         captured = capsys.readouterr()
         assert "sha256=" in captured.out and "METRICS:" in captured.out
         parsed = json.loads(first.decode("utf-8"))
-        assert parsed["schema_version"] == "1.1.0"
+        assert parsed["schema_version"] == "1.2.0"
         assert b"\r" not in first  # LF-only canonical bytes (OS-independent SHA)
 
 

@@ -1,32 +1,27 @@
 r"""Build offline clubs-teams fixture from ALICE parquet (Phase 4a T4, ADR-023).
 
 Derives ``(saison, club, ronde) -> simultaneous teams`` from
-``data/echiquiers.parquet`` ONLY: offline, deterministic, zero network,
-zero chess-app dependency (ADR-023 re-scope: in PROD ``simultaneous_teams``
-arrives in the ``/compose`` payload; this fixture = backtest/Kaggle/tests).
-
-Derivations (data-driven, no hardcoded tables):
-- **board_count**: empirical modal count of distinct ``echiquier`` per
-  match, per division-saison (no central FFE mapping exists in the repo).
+``data/echiquiers.parquet`` ONLY: offline, deterministic, zero network (in
+PROD ``simultaneous_teams`` arrives in the ``/compose`` payload; this
+fixture serves backtest/Kaggle/tests). Data-driven derivations:
+- **board_count**: empirical modal distinct ``echiquier`` per match per
+  division-saison; zero counts (all-NaN echiquier) are dropped and a
+  division left without data fails fast — NEVER a silent board_count=0.
 - **Team->club grouping**: trailing team-number token ("Clichy 2", roman
-  "Vandoeuvre-Echecs IV"; no suffix = team 1), stripped ONLY if corpus-
-  corroborated (bare base exists OR >= 2 siblings share the base) —
-  protects club names merely ending in a numeral ("Pau Henri IV").
-  Residuals stay their own club key (counted in grouping-rate metric).
-- **Simultaneity key** = (saison, club, ronde) per spec. CAVEAT: rondes
-  may not align calendar-wise across divisions; each entry carries its
-  match ``date`` + a date-coherence metric so the consumer can filter.
-- **Size contract** (explicit, no silent cap — ISO 27001 pre-commit gate
-  caps files at 1000 KB): only >= 2-team (club, ronde) groups are written
-  (lookup miss => single-team ronde); entries = compact arrays ordered per
-  top-level ``entry_columns`` (maps onto TeamSpec); quality metrics are
-  computed on the FULL corpus before this write-filter.
+  "Vandoeuvre IV"), stripped ONLY if corpus-corroborated (bare base OR
+  >= 2 siblings; protects "Pau Henri IV"); residuals stay own club key.
+- ``date`` in each entry = filtering field, NOT a TeamSpec member: rondes
+  do NOT align calendar-wise across divisions (date_coherence_rate ~ 0.40)
+  so consumers MUST filter simultaneous teams by ``date``, not ronde alone.
+- **Size contract** (no silent cap; ISO 27001 pre-commit caps 1000 KB): only
+  >= 2-team (club, ronde) groups written (lookup miss => single-team ronde);
+  entries = compact arrays ordered per top-level ``entry_columns`` (first 3
+  map onto TeamSpec); quality metrics = FULL corpus before this write-filter.
 
-ISO 5259 lineage: source parquet SHA-256 embedded in JSON; output JSON
-SHA-256 logged. Usage: ``python scripts/build_clubs_teams.py --saison 2024``.
+ISO 5259: parquet SHA-256 embedded, output SHA-256 logged. CLI: ``--saison 2024``.
 
 Document ID: ALICE-SCRIPT-BUILD-CLUBS-TEAMS
-Version: 1.1.0
+Version: 1.2.0
 """
 
 from __future__ import annotations
@@ -44,13 +39,13 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).parent.parent
 DEFAULT_PARQUET = REPO_ROOT / "data" / "echiquiers.parquet"
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 ENTRY_COLUMNS = ["team_name", "division", "board_count", "date"]
 # 'national' + 'regional' (lower teams; bucket also tags youth divisions — debt D3).
 DEFAULT_TYPES = ("national", "regional")
 GROUPING_RATE_THRESHOLD = 0.95
-_ROMAN = {"II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10}
-_SUFFIX_RE = re.compile(r"^(?P<base>.*\S)\s+(?P<num>\d{1,2}|II|III|IV|V|VI|VII|VIII|IX|X)$")
+_ROMAN = {r: i for i, r in enumerate("I II III IV V VI VII VIII IX X".split(), 1)}
+_SUFFIX_RE = re.compile(r"^(?P<base>.*\S)\s+(?P<num>\d{1,2}|II|III|IV|V|VI|VII|VIII|IX|X|I)$")
 _MATCH_KEY = ["division", "ronde", "equipe_dom", "equipe_ext"]
 _COLUMNS = ["saison", "type_competition", "echiquier", "date", *_MATCH_KEY]
 
@@ -89,28 +84,33 @@ def build_club_index(team_names: set[str]) -> tuple[dict[str, str], Counter[str]
 
 def load_team_rounds(
     parquet: Path, saison: int, types: tuple[str, ...]
-) -> tuple[pd.DataFrame, dict[str, int], int]:
-    """Return (teams_df, board_count_by_division, n_dropped_empty); SystemExit if saison absent."""
+) -> tuple[pd.DataFrame, dict[str, int], dict[str, int]]:
+    """Return (teams_df, board_count_by_division, skip_counts); SystemExit on bad data."""
     df = pd.read_parquet(parquet, columns=_COLUMNS)
     df = df[(df["saison"] == saison) & (df["type_competition"].isin(types))]
     if df.empty:
         raise SystemExit(f"ERROR: no rows saison={saison} types={list(types)} in {parquet}")
-    boards = df.groupby(_MATCH_KEY)["echiquier"].nunique()
-    board_count = {div: int(s.mode().iloc[0]) for div, s in boards.groupby("division")}
+    boards = df.groupby(_MATCH_KEY)["echiquier"].nunique()  # all-NaN echiquier => count 0
+    board_count = {d: int(s.mode().iloc[0]) for d, s in boards[boards > 0].groupby("division")}
     keep = ["division", "ronde", "date"]
     frames = [df[[*keep, c]].rename(columns={c: "team"}) for c in ("equipe_dom", "equipe_ext")]
     teams = pd.concat(frames, ignore_index=True).drop_duplicates(
         subset=["division", "ronde", "team"]
     )
-    n_total = len(teams)
-    teams = teams[teams["team"].astype(str).str.strip() != ""]
-    return teams, board_count, n_total - len(teams)
+    named = teams[teams["team"].astype(str).str.strip() != ""]
+    kept = named[named["ronde"].notna()]
+    missing = sorted(set(kept["division"]) - set(board_count))
+    if missing:
+        raise SystemExit(f"ERROR: no usable echiquier data (board_count) for divisions {missing}")
+    skips = {"n_dropped_empty_names": len(teams) - len(named)}
+    skips["n_rows_ronde_nan"] = len(named) - len(kept)
+    return kept, board_count, skips
 
 
 def build_clubs(
     teams: pd.DataFrame, index: dict[str, str], board_count: dict[str, int]
 ) -> dict[str, Any]:
-    """Group team-round entries under club keys: {club: {'rondes': {ronde: [entries]}}}."""
+    """Group entries under club keys; precondition: `index` covers all team names in `teams`."""
     clubs: dict[str, Any] = {}
     for row in teams.itertuples(index=False):
         entry = {
@@ -145,7 +145,7 @@ def filter_simultaneous(clubs: dict[str, Any]) -> tuple[dict[str, Any], int, int
 
 def build_payload(parquet: Path, saison: int, types: tuple[str, ...]) -> dict[str, Any]:
     """Assemble the canonical fixture payload (deterministic, no timestamps)."""
-    teams, board_count, n_empty = load_team_rounds(parquet, saison, types)
+    teams, board_count, skips = load_team_rounds(parquet, saison, types)
     index, stats = build_club_index(set(teams["team"]))
     clubs_full = build_clubs(teams, index, board_count)
     clubs_out, coherent, multi = filter_simultaneous(clubs_full)
@@ -162,14 +162,14 @@ def build_payload(parquet: Path, saison: int, types: tuple[str, ...]) -> dict[st
         "metrics": {
             "grouping_rate": round(grouping_rate, 4),
             "n_uncorroborated_suffixes": stats["uncorroborated"],
-            "n_dropped_empty_names": n_empty,
+            **skips,
             "date_coherence_rate": round(coherent / multi, 4) if multi else None,
             "n_multi_team_club_rondes": multi,
             "n_clubs_total": len(clubs_full),
             "n_clubs_written": len(clubs_out),
             "n_team_entries_total": int(len(teams)),
             "n_team_entries_written": sum(
-                len(e) for c in clubs_out.values() for e in c["rondes"].values()
+                len(entries) for c in clubs_out.values() for entries in c["rondes"].values()
             ),
         },
         "clubs": clubs_out,
