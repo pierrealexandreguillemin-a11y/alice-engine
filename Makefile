@@ -6,7 +6,7 @@
 .PHONY: complexity quality graphs iso-docs architecture all dev clean
 .PHONY: iso-audit train evaluate ensemble features parse-data
 .PHONY: model-card drift-report data-lineage ml-pipeline all-iso validate-iso
-.PHONY: sync refresh-data
+.PHONY: sync refresh-data build-clubs-teams
 
 # Variables — use venv if available, else system Python
 VENV := .venv
@@ -217,6 +217,13 @@ sync:                              ## Sync data from ffe_scrapper
 	$(PYTHON) -m scripts.sync_data
 	@echo ""
 	@echo "Sync complete"
+
+SAISON ?= 2024
+
+build-clubs-teams:                 ## Build offline clubs-teams fixture (Phase 4a T4, ADR-023)
+	@echo "Building clubs-teams fixture saison $(SAISON) (ISO 5259)..."
+	$(PYTHON) scripts/build_clubs_teams.py --saison $(SAISON)
+	git diff --stat config/clubs_teams_$(SAISON).json
 
 refresh-data: sync parse-data features  ## Full data refresh: sync + parse + features
 	@echo ""
