@@ -109,7 +109,7 @@ pip-audit>=2.6.0           # Audit dependances
 # These minimums prevent installing vulnerable transitive versions in CI.
 # Re-audit quarterly. Ignore-list authoritative source: scripts/dev/audit_venv.py
 # ============================================
-aiohttp>=3.13.4            # CVE-2026-22815/34514/34518/34519/34520/34525
+aiohttp>=3.14.0            # CVE-2026-22815/34514/34518/34519/34520/34525 + CVE-2026-34993/47265
 cryptography>=46.0.7       # CVE-2026-34073, CVE-2026-39892
 gdown>=5.2.2               # CVE-2026-40491
 gitpython>=3.1.50          # CVE-2026-42215/42284/44244 + GHSA-mv93-w799-cj2w
