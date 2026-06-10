@@ -46,7 +46,7 @@ REPO_ROOT = Path(__file__).parent.parent
 DEFAULT_PARQUET = REPO_ROOT / "data" / "echiquiers.parquet"
 SCHEMA_VERSION = "1.1.0"
 ENTRY_COLUMNS = ["team_name", "division", "board_count", "date"]
-# A02 adult interclubs: 'national' (backtest doctrine) + 'regional' (club lower teams).
+# 'national' + 'regional' (lower teams; bucket also tags youth divisions — debt D3).
 DEFAULT_TYPES = ("national", "regional")
 GROUPING_RATE_THRESHOLD = 0.95
 _ROMAN = {"II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10}
