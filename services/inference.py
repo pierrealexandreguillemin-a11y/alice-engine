@@ -158,7 +158,7 @@ class StackingInferenceService:
 
 
 # ---------------------------------------------------------------------------
-# Legacy ALI lineup prediction service (backward compat — Phase 3 TODO)
+# Legacy ALI lineup prediction stub (frozen backward-compat — superseded)
 # ---------------------------------------------------------------------------
 
 
@@ -175,15 +175,16 @@ class PlayerProbability:
 
 
 class InferenceService:
-    """Service ALI (Adversarial Lineup Inference) — legacy stub.
+    """Service ALI (Adversarial Lineup Inference) — frozen legacy stub.
 
-    Responsabilite: Predire la composition adverse probable.
-    Phase 3 will replace this stub with real ML predictions.
+    Responsabilite: Predire la composition adverse probable (fallback Elo).
+    Phase 3 ALI a ete livree AILLEURS (services/ali/ ScenarioGenerator +
+    Monte Carlo hybride + StackingInferenceService), PAS via ce stub, qui
+    n'est conserve que pour compat ascendante (tests + service registry).
 
     Methodes:
-        - predict_lineup: Predit les joueurs qui vont jouer
-        - generate_scenarios: Genere N scenarios possibles
-        - get_player_probability: Probabilite pour un joueur specifique
+        - predict_lineup: ordre Elo (fallback ; aucun modele charge en pratique)
+        - generate_scenarios: retourne [] (jamais branche en prod)
     """
 
     def __init__(self, model_path: str | None = None) -> None:
@@ -205,10 +206,8 @@ class InferenceService:
             return False
 
         try:
-            # TODO: Charger le modele CatBoost ou XGBoost
-            # from catboost import CatBoostClassifier
-            # self.model = CatBoostClassifier()
-            # self.model.load_model(self.model_path)
+            # No-op: real model loading lives in scripts/serving/model_loader.py
+            # (ModelBundle). This legacy stub never loads a model in practice.
             logger.info("Modele charge depuis %s", self.model_path)
             self.is_loaded = True
             return True
@@ -238,12 +237,8 @@ class InferenceService:
             logger.warning("Modele non charge, utilisation fallback")
             return self._fallback_prediction(opponent_players, team_size)
 
-        # TODO: Implementer la prediction ML (Phase 3)
-        # 1. Preparer les features pour chaque joueur
-        # 2. compute_differentials(df_features)  # FTI anti-skew (same as FE pipeline)
-        # 3. Appeler model.predict_proba() with init_scores (residual learning)
-        # 4. Trier par probabilite et assigner aux echiquiers
-
+        # Real ALI prediction is served by services/ali/ (ScenarioGenerator +
+        # Monte Carlo hybride) + StackingInferenceService, not this stub.
         return self._fallback_prediction(opponent_players, team_size)
 
     def generate_scenarios(
@@ -258,7 +253,7 @@ class InferenceService:
 
         @returns: Liste de scenarios avec probabilites
         """
-        # TODO: Implementer generation de scenarios (Phase 3)
+        # Superseded by services/ali/ScenarioGenerator; stub returns [].
         return []
 
     def _fallback_prediction(
