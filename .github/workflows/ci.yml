@@ -171,6 +171,8 @@ jobs:
             --ignore-vuln CVE-2026-33231 \
             --ignore-vuln CVE-2026-25990 \
             --ignore-vuln CVE-2026-4539 \
+            --ignore-vuln CVE-2025-3000 \
+            --ignore-vuln CVE-2025-3001 \
             -f json -o audit-report.json || true
 
       - name: Upload Audit Report

@@ -66,6 +66,17 @@ IGNORED_CVES: list[tuple[str, str]] = [
     ),
     # torch 2.9.1 — no upstream fix published yet (re-check 2026-08).
     ("PYSEC-2026-139", "torch 2.9.1 — no upstream fix published; re-check 2026-08"),
+    # torch 2.9.1 — MEDIUM (CVSS 5.3) local-only crashes in torch APIs ALICE
+    # never imports (transitive via TabPFN, autogluon path eliminated ADR-011).
+    # Proper fix = drop torch/TabPFN with autogluon dead code (debt, dep-cleanup).
+    (
+        "CVE-2025-3000",
+        "torch 2.9.1 — MEDIUM local DoS in torch.jit.script, no fix; not imported (TabPFN/AG-elim); re-check 2026-08",
+    ),
+    (
+        "CVE-2025-3001",
+        "torch 2.9.1 — MEDIUM local mem-corruption in torch.lstm_cell, fix 2.10.0; not imported (TabPFN/AG-elim); re-check 2026-08",
+    ),
 ]
 
 
