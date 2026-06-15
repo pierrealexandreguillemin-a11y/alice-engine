@@ -923,12 +923,13 @@ Un NN base model (Phase 5+) augmenterait la diversite.
 ## Mise a jour
 
 Ce fichier est mis a jour a chaque nouveau resultat empirique.
-Derniere mise a jour : 2026-04-16.
-- **CHAMPION SELECTED : LGB V9 + Dirichlet calibration (0.5541, ECE_draw 0.0042)**
+Derniere mise a jour : 2026-06-15 (changelog footer corrige — voir §"Stacking meta-learner" l.824-883, source de verite).
+- **CHAMPION : MLP(32,16) 18f stacking + temperature scaling (log_loss 0.5530, ECE_draw 0.0016)** — selectionne par le sweep 2026-04-16, refit OOF 2026-04-28 (D-P3-13 resorbee).
+- LGB + Dirichlet (0.5541, ECE_draw 0.0042) = **FALLBACK** (`fallback_mode`, `services/inference.py`), PAS le champion. [l'ancienne ligne "CHAMPION SELECTED LGB+Dirichlet" datee 2026-04-16 etait erronee — contredite par le sweep du meme jour.]
 - V9 Training Final v4 : 3 modeles T1-T12 ALL PASS (LGB 0.5619, XGB 0.5622, CB 0.5708)
 - OOF Stack : XGB+LGB 5-fold COMPLETE, CB 5-fold COMPLETE
-- Stacking LogReg ELIMINE (degrade). Simple average = baseline. Dirichlet = winner.
+- Stacking LogReg ELIMINE (degrade). Simple average = baseline. MLP meta-learner = winner ; Dirichlet = calibrateur de fallback.
 - ~~AutoGluon V9 benchmark~~ — ELIMINE (ADR-011)
 - Architecture production : batch ML hebdo + CE on-demand <2s
-- SOTA calibration : Dirichlet (Kull 2019) CHAMPION. Temperature scaling = insuffisant.
+- SOTA calibration : temperature scaling (Guo 2017) = calibration CHAMPION (ECE_draw 0.0016) ; Dirichlet (Kull 2019) = calibrateur du modele fallback.
 - Roadmap recherche : DFL Phase 5+, Conformal/Copules Phase 4
