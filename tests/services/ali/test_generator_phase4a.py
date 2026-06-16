@@ -158,3 +158,46 @@ def test_phase4a_missing_target_raises(monkeypatch: pytest.MonkeyPatch) -> None:
             simultaneous_teams=_teams(),
             target_team=None,
         )
+
+
+class _FakeEngineSig:
+    """Stub engine exposing only lineage_hash for _compute_lineage tests."""
+
+    def lineage_hash(self) -> str:
+        return "ENGINE_SIG"
+
+
+class _FakeCacheSig:
+    """Stub cache exposing only the parquet signature attributes."""
+
+    parquet_sig_joueurs = "JSIG"
+    parquet_sig_echiquiers = "ESIG"
+
+
+def _gen_for_lineage() -> ScenarioGenerator:
+    gen = ScenarioGenerator.__new__(ScenarioGenerator)
+    gen._decay_lambda = 0.9  # type: ignore[attr-defined]
+    gen._engine = _FakeEngineSig()  # type: ignore[attr-defined]
+    gen._cache = _FakeCacheSig()  # type: ignore[attr-defined]
+    return gen
+
+
+def test_lineage_hash_distinguishes_target_team() -> None:
+    """ISO 5259: two Phase 4a calls differing only in target_team -> distinct hash."""
+    gen = _gen_for_lineage()
+    ctx, teams = _ctx(), _teams()
+    h2 = gen._compute_lineage("CLUB", "2024-11-15", ctx, 2024, 5, 11, 10, 5, 42, "CLUB 2", teams)
+    h3 = gen._compute_lineage("CLUB", "2024-11-15", ctx, 2024, 5, 11, 10, 5, 42, "CLUB 3", teams)
+    assert h2 != h3
+    assert len(h2) == len(h3) == 64
+
+
+def test_lineage_hash_phase3_bc_unchanged_by_none() -> None:
+    """BC: None target_team/simultaneous_teams add no bytes -> Phase 3 hash stable."""
+    gen = _gen_for_lineage()
+    ctx = _ctx()
+    h_implicit = gen._compute_lineage("CLUB", "2024-11-15", ctx, 2024, 5, 11, 10, 5, 42)
+    h_explicit_none = gen._compute_lineage(
+        "CLUB", "2024-11-15", ctx, 2024, 5, 11, 10, 5, 42, None, None
+    )
+    assert h_implicit == h_explicit_none
