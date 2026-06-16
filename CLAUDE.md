@@ -183,7 +183,7 @@ Dette ouverte après Phase 2 — détail et plan de résorption : `memory/projec
 | ~~D5~~ | ~~`services/composer.py` legacy mort-vivant~~ | ~~Phase 2~~ | **RESOLUE Plan 3 T23** (suppression 293L, commit cdf6a7c, 2026-04-28) |
 | D6 | DVC / versioning artefacts ML | Historique | **PARTIAL T24** (dvc.yaml 2 stages refit MLP + backtest, DAG opérationnel) — remote DVC + training Kaggle = Phase 5 |
 | D7 | Pas de lien commit git ↔ version Kaggle dataset ↔ version kernel | Historique | **Phase 5** (non couvert par T24) |
-| D8 | ALI fairness/robustness breakdown (genre, taille club, niveau) + stress Elo | Phase 3 (scope) | **Phase 3.5 STRICT** (bloquant Phase 4) |
+| D8 | ALI fairness/robustness breakdown (genre, taille club, niveau) + stress Elo | Phase 3 (scope) | **RE-SCOPÉ 2026-05-16 (ADR-022, NON bloquant Phase 4a)** — validation exécutée (D8 Phase A, 6/19 PASS) ; 11/13 FAIL = D-P3-19 → **Phase 4a** ; 3 résidus mineurs → Phase 3.5b. Détail : `memory/project_debt_current.md` §D8 |
 | D9 | Adaptive Importance Sampling + drift monitoring prod (ratio TopK:MC dynamique) | Phase 3 (brainstorm finding) | **Phase 5+** (après volume data prod) |
 | ~~D-P2-02~~ | ~~VerifiabilityClassifier injecté mais pas consommé~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 2 (commit 0656fdf, 2026-04-19) — partition_rules wired** |
 | ~~D-P2-03~~ | ~~`_EXPECTED_SCENARIOS=20` hardcodé~~ | ~~Plan 2 peer review~~ | **RESOLUE Plan 3 T23** (invariant ADR-014 + error message clarifié, commit cdf6a7c) |
