@@ -16,11 +16,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import pandas as pd
 
+from services.ali.generator_helpers import merge_and_pad, normalize_history, renormalize
+from services.ali.joint_conditional import compute_adverse_exclusions
 from services.ali.joint_sampler import CopulaJointSampler
 from services.ali.monte_carlo import MonteCarloSampler
-from services.ali.scenario import Scenario, ScenarioSet
+from services.ali.scenario import ScenarioSet
 from services.ali.topk import TopKEnumerator
 from services.ffe.rule_engine import RuleEngine
 
@@ -28,11 +29,8 @@ if TYPE_CHECKING:
     from services.ali.cache import ALIDataCache
     from services.ali.history import HistoryEnricher
     from services.ali.pool_loader import PlayerPoolLoader
-    from services.ali.types import CompetitionContext, PlayerCandidate
+    from services.ali.types import CompetitionContext, PlayerCandidate, TeamSpec
     from services.ali.verifiability import VerifiabilityClassifier
-
-
-_EXPECTED_TOTAL = 20
 
 
 class ScenarioGenerator:
@@ -67,15 +65,65 @@ class ScenarioGenerator:
         n_topk: int = 10,
         n_mc_pairs: int = 5,
         seed: int = 42,
+        simultaneous_teams: list[TeamSpec] | None = None,
+        target_team: str | None = None,
     ) -> ScenarioSet:
-        """Generate ScenarioSet (10 TopK + 10 MC = 20 scenarios)."""
-        # 1. Load pool (F7 implicit via membership)
-        pool = self._pool_loader.load_pool(opponent_club_id, round_date, overrides)
+        """Generate a ScenarioSet (10 TopK + 10 MC = 20 scenarios).
+
+        Phase 3 (`simultaneous_teams is None`): sample the target club's full
+        pool. Phase 4a (`simultaneous_teams` provided): exclude players consumed
+        by the club's superior teams (A02 §3.7.b top-down) via the CE-adverse
+        mirror, then run the same Phase 3 pipeline over the residual pool
+        (D-P3-19 fix).
+        """
+        exclude_players: set[str] = set()
+        if simultaneous_teams is not None:
+            if target_team is None:
+                raise ValueError("target_team required when simultaneous_teams is set")
+            full_pool = self._pool_loader.load_pool(opponent_club_id, round_date, overrides)
+            exclude_players = compute_adverse_exclusions(
+                pool=full_pool,
+                teams=simultaneous_teams,
+                target_team=target_team,
+                seed=seed,
+            )
+
+        # 1. Load pool (F7 implicit via membership; Phase 4a drains superior teams)
+        pool = self._pool_loader.load_pool(
+            opponent_club_id, round_date, overrides, exclude_players=exclude_players
+        )
         if len(pool) < context.team_size:
             raise ValueError(
                 f"pool too small for {opponent_club_id}: {len(pool)} < {context.team_size}",
             )
+        return self._run_phase3(
+            pool,
+            context=context,
+            saison=saison,
+            current_round=current_round,
+            nb_rondes_total=nb_rondes_total,
+            n_topk=n_topk,
+            n_mc_pairs=n_mc_pairs,
+            seed=seed,
+            opponent_club_id=opponent_club_id,
+            round_date=round_date,
+        )
 
+    def _run_phase3(  # noqa: PLR0913
+        self,
+        pool: list[PlayerCandidate],
+        *,
+        context: CompetitionContext,
+        saison: int,
+        current_round: int,
+        nb_rondes_total: int,
+        n_topk: int,
+        n_mc_pairs: int,
+        seed: int,
+        opponent_club_id: str,
+        round_date: str,
+    ) -> ScenarioSet:
+        """Phase 3 pipeline over a (possibly reduced) pool: enrich -> copula -> TopK + MC."""
         # 2. Enrich features (F2 recency + F3 streak)
         enriched = self._history_enricher.enrich(
             pool,
@@ -109,7 +157,7 @@ class ScenarioGenerator:
         mc_scenarios = mc.sample(enriched, context, n_pairs=n_mc_pairs, rng=rng)
 
         # 7. Merge + dedup distinct (T20)
-        merged = self._merge_and_pad(
+        merged = merge_and_pad(
             list(topk_scenarios),
             list(mc_scenarios),
             mc,
@@ -119,7 +167,7 @@ class ScenarioGenerator:
         )
 
         # 8. Renormalize weights so sum = 1.0
-        merged = self._renormalize(merged)
+        merged = renormalize(merged)
 
         # 9. Build ScenarioSet with lineage_hash
         lineage = self._compute_lineage(
@@ -154,7 +202,7 @@ class ScenarioGenerator:
         copula = CopulaJointSampler(decay_lambda=self._decay_lambda)
         names = [f"{c.nom} {c.prenom}".strip() for c in enriched]
         history = self._cache.lookup_history(names)
-        history_normalized = self._normalize_history(history)
+        history_normalized = normalize_history(history)
         copula.fit(
             history=history_normalized,
             player_names=names,
@@ -163,109 +211,6 @@ class ScenarioGenerator:
             current_round=current_round,
         )
         return copula
-
-    def _merge_and_pad(  # noqa: PLR0913
-        self,
-        topk: list[Scenario],
-        mc: list[Scenario],
-        mc_sampler: MonteCarloSampler,
-        pool: list[PlayerCandidate],
-        context: CompetitionContext,
-        rng: np.random.Generator,
-    ) -> list[Scenario]:
-        """Dedup + pad to _EXPECTED_TOTAL (retries up to 5 rounds best-effort)."""
-        merged = self._dedup_distinct(topk + mc)
-        existing_sigs = {_signature(s) for s in merged}
-        max_rounds = 5
-        for _ in range(max_rounds):
-            missing = _EXPECTED_TOTAL - len(merged)
-            if missing <= 0:
-                break
-            extras = self._pad_with_mc(mc_sampler, pool, context, missing, rng)
-            progressed = False
-            for e in extras:
-                sig = _signature(e)
-                if sig not in existing_sigs:
-                    merged.append(e)
-                    existing_sigs.add(sig)
-                    progressed = True
-                if len(merged) >= _EXPECTED_TOTAL:
-                    break
-            if not progressed:
-                break  # pool trop petit pour generer 20 lineups distincts
-        return merged[:_EXPECTED_TOTAL]
-
-    @staticmethod
-    def _dedup_distinct(scenarios: list[Scenario]) -> list[Scenario]:
-        """Garde scenarios distincts par signature (player nr_ffe x board)."""
-        seen: set[tuple[tuple[str, int], ...]] = set()
-        out: list[Scenario] = []
-        for s in scenarios:
-            sig = _signature(s)
-            if sig not in seen:
-                seen.add(sig)
-                out.append(s)
-        return out
-
-    @staticmethod
-    def _pad_with_mc(
-        mc: MonteCarloSampler,
-        pool: list[PlayerCandidate],
-        context: CompetitionContext,
-        n_extra: int,
-        rng: np.random.Generator,
-    ) -> list[Scenario]:
-        """Best-effort pad with extra MC samples if dedup left us short.
-
-        Double the request to increase diversity (LHS + antithetic produces
-        many duplicates when the dominant lineup has very high joint_prob).
-        """
-        if n_extra <= 0:
-            return []
-        n_pairs = max(2, n_extra)  # oversample to improve diversity
-        extra = mc.sample(pool, context, n_pairs=n_pairs, rng=rng)
-        return list(extra)
-
-    @staticmethod
-    def _renormalize(scenarios: list[Scenario]) -> list[Scenario]:
-        """Normalize weights so sum = 1.0 across the final set."""
-        total = sum(s.joint_prob for s in scenarios)
-        if total <= 0:
-            uniform = 1.0 / len(scenarios) if scenarios else 0.0
-            return [
-                Scenario(
-                    lineup=s.lineup,
-                    joint_prob=s.joint_prob,
-                    weight=uniform,
-                    source=s.source,
-                )
-                for s in scenarios
-            ]
-        return [
-            Scenario(
-                lineup=s.lineup,
-                joint_prob=s.joint_prob,
-                weight=s.joint_prob / total,
-                source=s.source,
-            )
-            for s in scenarios
-        ]
-
-    @staticmethod
-    def _normalize_history(df: pd.DataFrame) -> pd.DataFrame:
-        """Echiquiers raw -> joueur_nom long format (reuse pattern history.py)."""
-        parts: list[pd.DataFrame] = []
-        for col in ("blanc_nom", "noir_nom"):
-            if col in df.columns:
-                sub = df[[col, "saison", "ronde", "echiquier"]].copy()
-                sub = sub.rename(columns={col: "joueur_nom"})
-                parts.append(sub)
-        if not parts:
-            return pd.DataFrame(
-                columns=["joueur_nom", "saison", "ronde", "echiquier"],
-            )
-        out = pd.concat(parts, ignore_index=True)
-        return out.drop_duplicates(subset=["joueur_nom", "saison", "ronde"])
 
     def _compute_lineage(  # noqa: PLR0913
         self,
@@ -293,8 +238,3 @@ class ScenarioGenerator:
         m.update(f"j_sig={self._cache.parquet_sig_joueurs}|".encode())
         m.update(f"e_sig={self._cache.parquet_sig_echiquiers}|".encode())
         return m.hexdigest()
-
-
-def _signature(s: Scenario) -> tuple[tuple[str, int], ...]:
-    """Canonical signature (nr_ffe x board) for dedup."""
-    return tuple((a.player.nr_ffe, a.board) for a in s.lineup.assignments)
