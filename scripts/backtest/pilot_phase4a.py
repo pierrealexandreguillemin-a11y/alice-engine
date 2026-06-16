@@ -8,6 +8,11 @@ also runs the Phase 3 path (no sim teams) on the SAME match for a paired
 McNemar/Wilcoxon comparison. Non-viable matches are counted + logged, never
 silently dropped.
 
+Run from the repo root as a MODULE (not a file path — the module-level
+``from scripts.backtest...`` imports need the repo root on sys.path):
+
+    python -m scripts.backtest.pilot_phase4a
+
 Document ID: ALICE-BACKTEST-PILOT-PHASE4A
 Version: 1.0.0
 """

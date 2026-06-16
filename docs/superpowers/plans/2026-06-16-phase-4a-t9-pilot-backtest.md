@@ -702,8 +702,8 @@ git commit -m "feat(backtest): Phase 4a pilot orchestration + early-gate report 
 
 - [ ] **Step 1: Run the pilot end-to-end**
 
-Run: `.\.venv\Scripts\python.exe scripts/backtest/pilot_phase4a.py`
-Expected: prints the early-gate decision; writes `reports/pilot_phase4a.md`. Wall time ~1-2h CPU (spec §Q9) — run in background if needed.
+Run (as a MODULE from repo root — NOT a file path, else `ModuleNotFoundError: No module named 'scripts.backtest'`): `.\.venv\Scripts\python.exe -m scripts.backtest.pilot_phase4a`
+Expected: prints the early-gate decision; writes `reports/pilot_phase4a.md`. Wall time ~1-2h CPU (the paired Phase-3 baseline doubles per-match cost; T9.5 review Issue 2) — run in background. NOTE: the run loads the champion MLP under sklearn 1.8.0 while it was pickled under 1.7.2 (`InconsistentVersionWarning`) — the paired Phase4a-vs-Phase3 comparison cancels this (same model both sides), but absolute recall is approximate; pre-existing model-versioning gap (D6/D7).
 
 - [ ] **Step 2: Rename the report with the date**
 
