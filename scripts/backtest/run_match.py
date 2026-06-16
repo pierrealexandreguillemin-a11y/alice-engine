@@ -18,7 +18,7 @@ from services.ali.aggregation import (
     ScenarioAggregationCtx,
     aggregate_from_scenarios,
 )
-from services.ali.types import CompetitionContext
+from services.ali.types import CompetitionContext, TeamSpec
 
 if TYPE_CHECKING:
     from services.ali.generator import ScenarioGenerator
@@ -55,6 +55,9 @@ def run_backtest_match(  # noqa: PLR0913
     inference: StackingInferenceService,
     feature_store: Any,
     seed: int = 42,
+    round_date: str | None = None,
+    simultaneous_teams: list[TeamSpec] | None = None,
+    target_team: str | None = None,
     strict: bool = True,
 ) -> BacktestMatchResult:
     """Run un match backtest. Strict=True (ISO 42001 fail-fast).
@@ -75,12 +78,14 @@ def run_backtest_match(  # noqa: PLR0913
 
     scenario_set = scenario_generator.generate(
         opponent_club_id=opponent_club_id,
-        round_date=f"{saison}-09-01",
+        round_date=round_date or f"{saison}-09-01",
         context=context,
         saison=saison,
         current_round=ronde,
         nb_rondes_total=nb_rondes_total,
         seed=seed,
+        simultaneous_teams=simultaneous_teams,
+        target_team=target_team,
     )
 
     agg_ctx = ScenarioAggregationCtx(
