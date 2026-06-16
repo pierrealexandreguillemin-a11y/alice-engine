@@ -96,7 +96,12 @@ def _summary_lines(summary: dict[str, Any]) -> list[str]:
         f"- Mean recall (Phase 3 baseline): {_fmt(summary['mean_baseline_recall'])} "
         f"(reference ~{_BASELINE_REFERENCE:.2f})",
         f"- Skipped: non_viable={skipped['non_viable']}, "
-        f"no_observed={skipped['no_observed']}, error={skipped['error']}",
+        f"no_observed={skipped['no_observed']}, "
+        f"thin_residual={skipped['thin_residual']}, error={skipped['error']}",
+        "",
+        "> `thin_residual` = matches where draining the opponent's superior teams left too few"
+        " players for 20 distinct lineups (ADR-014). A HIGH count is itself a Phase 4a finding"
+        " (over-draining), not an error.",
         f"- **Wilcoxon (decisive):** p={_fmt(summary['wilcoxon_p'])}, "
         f"significant={summary['wilcoxon_significant']}",
         "",

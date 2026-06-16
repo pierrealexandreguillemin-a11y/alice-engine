@@ -37,6 +37,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 EARLY_GATE_RECALL = 0.50
+
+# ADR-014 validate message fragment used to classify thin-residual skips.
+_THIN_RESIDUAL_MSG = "must contain 20 scenarios"
+
+
+def is_thin_residual(exc: Exception) -> bool:
+    """Return True when *exc* is the ADR-014 ScenarioSet validation error.
+
+    A thin-residual skip means the joint-conditional path drained the opponent's
+    superior teams leaving too few players to generate 20 distinct lineups.  It
+    is an EXPECTED Phase 4a fidelity signal, NOT a code error.
+    """
+    return _THIN_RESIDUAL_MSG in str(exc)
+
+
 MAX_VIABLE = 70  # collect this many viable (target-present + >=1-superior) matches
 _FIXTURE = Path("config/clubs_teams_2024.json")
 
@@ -161,7 +176,7 @@ def run_pilot(out_dir: Path = Path("reports")) -> dict[str, Any]:
     candidates = enumerate_candidates(harness.cache, cfg)
 
     rows: list[dict[str, Any]] = []
-    skipped = {"non_viable": 0, "no_observed": 0, "error": 0}
+    skipped = {"non_viable": 0, "no_observed": 0, "thin_residual": 0, "error": 0}
     for cand in candidates:
         if len(rows) >= MAX_VIABLE:
             break
@@ -171,6 +186,25 @@ def run_pilot(out_dir: Path = Path("reports")) -> dict[str, Any]:
             continue
         try:
             result, baseline, observed = _run_pair(harness, cfg, cand, sim)
+        except ValueError as exc:
+            if is_thin_residual(exc):
+                logger.info(
+                    "pilot match skipped (thin residual pool): ronde=%s opp=%s date=%s",
+                    cand.ronde,
+                    cand.opp_team,
+                    cand.date,
+                )
+                skipped["thin_residual"] += 1
+                continue
+            logger.exception(
+                "pilot match failed: ronde=%s opp=%s date=%s club=%s",
+                cand.ronde,
+                cand.opp_team,
+                cand.date,
+                cand.opp_club,
+            )
+            skipped["error"] += 1
+            continue
         except Exception:  # noqa: BLE001  intentional: one bad match must not kill the pilot
             logger.exception(
                 "pilot match failed: ronde=%s opp=%s date=%s club=%s",

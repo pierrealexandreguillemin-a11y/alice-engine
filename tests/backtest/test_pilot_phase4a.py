@@ -1,13 +1,14 @@
-"""Tests for scripts/backtest/pilot_phase4a.py + helpers (Phase 4a T9.5).
+"""Tests for scripts/backtest/pilot_phase4a.py + helpers (Phase 4a T9.5 + T9.6).
 
 Pure-function unit tests ONLY : no harness setup, no ML model load, no real
 pilot run. Covers the early-gate decision boundary, the viable/non-viable
-candidate trio (target-present + >=1-superior), and the paired statistics
-aggregation (empty-guard + populated case).
+candidate trio (target-present + >=1-superior), the paired statistics
+aggregation (empty-guard + populated case), and the thin-residual bucket
+classification helper (T9.6 smoke finding).
 
 Document ID: ALICE-BACKTEST-PILOT-PHASE4A-TEST
-Version: 1.0.0
-Count: 9 unit tests — pure-function, inline payloads only.
+Version: 1.1.0
+Count: 12 unit tests — pure-function, inline payloads only.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from scripts.backtest.pilot_phase4a import (
     EARLY_GATE_RECALL,
     _viable_sim,
     early_gate_decision,
+    is_thin_residual,
     names_index,
 )
 from scripts.backtest.pilot_phase4a_helpers import aggregate_stats
@@ -118,3 +120,25 @@ def test_aggregate_stats_all_concordant_mcnemar_guarded() -> None:
     assert out["mcnemar_p"] is None
     # Wilcoxon still computable (continuous diffs may be all-zero -> p=1.0).
     assert "wilcoxon_p" in out
+
+
+# --- Thin-residual bucket classification (T9.6 smoke finding) -------------
+
+
+def test_thin_residual_true_for_adr014_message() -> None:
+    """ADR-014 ScenarioSet validate message is classified as thin_residual."""
+    exc = ValueError(
+        "ScenarioSet must contain 20 scenarios (10 TopK + 10 MC by design ADR-014),"
+        " got 17. Most common cause : pool too small for distinct dedup ... Skip this match."
+    )
+    assert is_thin_residual(exc) is True
+
+
+def test_thin_residual_false_for_other_value_error() -> None:
+    """A ValueError with unrelated message is NOT a thin-residual skip."""
+    assert is_thin_residual(ValueError("invalid literal for int")) is False
+
+
+def test_thin_residual_false_for_non_value_error() -> None:
+    """Non-ValueError exceptions are never thin-residual (wrong exc type)."""
+    assert is_thin_residual(KeyError("x")) is False
