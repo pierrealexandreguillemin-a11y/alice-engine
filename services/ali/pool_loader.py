@@ -32,8 +32,15 @@ class PlayerPoolLoader:
         club_id: str,
         round_date: str,  # noqa: ARG002 (reserve usage futur J02)
         overrides: list[dict[str, Any]] | None = None,
+        exclude_players: set[str] | None = None,
     ) -> list[PlayerCandidate]:
-        """Return eligible candidates. F7 survivor filter applied."""
+        """Return eligible candidates. F7 survivor filter applied.
+
+        `exclude_players` (Phase 4a D-P3-19): nr_ffe already consumed by the
+        opponent club's superior teams (A02 §3.7.b top-down). Applied LAST,
+        after overrides, so an injected override cannot re-introduce an
+        excluded player.
+        """
         df = self._cache.lookup_club(club_id)
         if df.empty and not overrides:
             return []
@@ -50,7 +57,8 @@ class PlayerPoolLoader:
                 c = _override_to_candidate(raw)
                 candidates[c.nr_ffe] = c
 
-        return list(candidates.values())
+        exclude = exclude_players or set()
+        return [c for c in candidates.values() if c.nr_ffe not in exclude]
 
 
 def _row_to_candidate(row: Any) -> PlayerCandidate:
