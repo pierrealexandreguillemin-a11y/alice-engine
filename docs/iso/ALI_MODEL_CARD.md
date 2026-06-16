@@ -549,17 +549,33 @@ justification.
    Performance may degrade if FFE rules change significantly post-2025
    (e.g. team_size adjustments per division) — no automatic retraining
    pipeline yet (D6/D7 deferred Phase 5).
+9. **Phase 4a adverse CE mirror — FFE constraint coverage (M1, 2026-06-16)**.
+   The opponent multi-team top-down mirror (`services/ali/joint_conditional.py`,
+   ADR-016) enforces C1-C3 (ordre Elo descendant §3.6.e / §3.7.b) and **C5
+   (mutés ≤ 3, §3.7.g — exact N1-N3 ; lower divisions diverge, conservative
+   approximation per debt)**. It does **NOT** enforce **C6 (quota étrangers
+   FR/UE ≥ 5, §3.7.h)** nor the FR component of **C7 (≥ 1 joueuse française,
+   §3.7.i)** : *nationality is absent from the FFE dataset* — `joueurs.parquet`
+   carries `genre` but no nationality/federation column, and the legacy
+   `Joueur.nationalite` field is never populated by any pipeline. **C4 noyau
+   (§3.7.f)** is deferred (historical derivation, debt
+   `D-2026-06-16-adverse-noyau-wiring`). *Impact* : the adverse exclusion may
+   field a lineup a real opponent could not (too many foreign players, no
+   mandated female), slightly mis-stating which players superior teams consume.
+   Quantified at T9/T10 acceptance ; tracked `D-2026-06-16-adverse-ffe-
+   constraints-inert`. Resolving C6/C7-FR requires sourcing nationality
+   (Phase 5 data refresh, `D-2026-06-01-historical-store-refresh`).
 
 ### 9.4 Operational Limitations
 
-9. **Latency** : `~ 1.0 s` p50 measured locally on laptop with warm cache.
+10. **Latency** : `~ 1.0 s` p50 measured locally on laptop with warm cache.
    Production deploy on Oracle VM ARM 24 GB (Phase 5) may differ ; capacity
    benchmark and SLO documented in `docs/operations/ALI_SLO.md` (Phase 5).
-10. **Single-instance deployment** : no horizontal scaling design Phase 3.
+11. **Single-instance deployment** : no horizontal scaling design Phase 3.
     Multi-tenant SaaS scope Phase 5+ (rate limiting per `user_club_id`,
     audit log MongoDB partitioned by `tenant_id` — crochets en place,
     plein wiring Phase 5).
-11. **Drift monitoring absent in production** : Adaptive Importance Sampling
+12. **Drift monitoring absent in production** : Adaptive Importance Sampling
     + drift dashboard deferred Phase 5+ (D9). Currently static λ=0.9 and
     static `n_topk=10, n_mc_pairs=5` — calibrated on backtest 2021-2024,
     not adaptive to season 2025+ shifts.

@@ -62,6 +62,7 @@ class PlayerPoolLoader:
 
 
 def _row_to_candidate(row: Any) -> PlayerCandidate:
+    genre = str(row.get("genre", "M"))
     return PlayerCandidate(
         nr_ffe=str(row["nr_ffe"]),
         nom=str(row.get("nom", "")),
@@ -69,11 +70,12 @@ def _row_to_candidate(row: Any) -> PlayerCandidate:
         elo=int(row.get("elo") or 1500),
         club=str(row.get("club", "")),
         mute=bool(row.get("mute", False)),
-        genre=str(row.get("genre", "M")),
+        genre=genre,
         categorie=str(row.get("categorie", "SE")),
         licence_active=_row_licence_active(row),
         age_min=_to_int_or_none(row.get("age_min")),
         age_max=_to_int_or_none(row.get("age_max")),
+        sexe=genre,  # M1: derive sexe from genre (C7 §3.7.i reads .sexe)
     )
 
 
@@ -94,6 +96,7 @@ def _row_licence_active(row: Any) -> bool:  # noqa: ARG001
 
 
 def _override_to_candidate(raw: dict[str, Any]) -> PlayerCandidate:
+    genre = str(raw.get("genre", "M"))
     return PlayerCandidate(
         nr_ffe=str(raw["nr_ffe"]),
         nom=str(raw.get("nom", "")),
@@ -101,11 +104,12 @@ def _override_to_candidate(raw: dict[str, Any]) -> PlayerCandidate:
         elo=int(raw.get("elo", 1500)),
         club=str(raw.get("club", "")),
         mute=bool(raw.get("mute", False)),
-        genre=str(raw.get("genre", "M")),
+        genre=genre,
         categorie=str(raw.get("categorie", "SE")),
         licence_active=bool(raw.get("licence_active", True)),
         age_min=_to_int_or_none(raw.get("age_min")),
         age_max=_to_int_or_none(raw.get("age_max")),
+        sexe=genre,  # M1: derive sexe from genre (C7 §3.7.i reads .sexe)
     )
 
 

@@ -93,3 +93,53 @@ def test_compute_exclusions_deterministic() -> None:
     a = compute_adverse_exclusions(pool=_pool(24), teams=_teams(), target_team="CLUB 2", seed=42)
     b = compute_adverse_exclusions(pool=_pool(24), teams=_teams(), target_team="CLUB 2", seed=42)
     assert a == b
+
+
+def _mute_player(nr: str, elo: int, *, mute: bool) -> PlayerCandidate:
+    return PlayerCandidate(
+        nr_ffe=nr,
+        nom=nr,
+        prenom="X",
+        elo=elo,
+        club="CLUB",
+        mute=mute,
+        genre="M",
+        categorie="SE",
+        licence_active=True,
+    )
+
+
+def test_compute_exclusions_enforces_mute_quota_c5() -> None:
+    # Superior team (4 boards) over a pool whose top-4 Elo are all mute.
+    # Without C5 (A02 §3.7.j max 3 mutes) the max-Elo solve fields the 4
+    # mutes; with C5 it must field at most 3 mutes + the non-mute P004.
+    pool = [
+        _mute_player("P000", 2000, mute=True),
+        _mute_player("P001", 1980, mute=True),
+        _mute_player("P002", 1960, mute=True),
+        _mute_player("P003", 1940, mute=True),
+        _mute_player("P004", 1920, mute=False),
+    ]
+    teams = [
+        TeamSpec(team_name="CLUB 1", division="N1", board_count=4),
+        TeamSpec(team_name="CLUB 2", division="N3", board_count=4, target_team=True),
+    ]
+    excl = compute_adverse_exclusions(pool=pool, teams=teams, target_team="CLUB 2", seed=42)
+    assert len(excl) == 4  # one superior team x 4 boards
+    mutes_excluded = sum(1 for p in pool if p.nr_ffe in excl and p.mute)
+    assert mutes_excluded <= 3  # C5 mute quota enforced on the adverse mirror
+    # the only non-mute is forced in (otherwise a 4th mute would be needed)
+    assert "P004" in excl
+
+
+def test_compute_exclusions_c5_infeasible_when_only_mutes() -> None:
+    # 4 boards, 4 players ALL mute, no non-mute substitute -> the only reason
+    # this is INFEASIBLE is the C5 quota (max 3 mutes). Proves C5 is load-bearing:
+    # without C5 the solver would happily field 4 mutes (FEASIBLE).
+    pool = [_mute_player(f"M{i:03d}", 2000 - i * 20, mute=True) for i in range(4)]
+    teams = [
+        TeamSpec(team_name="CLUB 1", division="N1", board_count=4),
+        TeamSpec(team_name="CLUB 2", division="N3", board_count=4, target_team=True),
+    ]
+    with pytest.raises(RuntimeError, match="infeasible|INFEASIBLE"):
+        compute_adverse_exclusions(pool=pool, teams=teams, target_team="CLUB 2", seed=42)
