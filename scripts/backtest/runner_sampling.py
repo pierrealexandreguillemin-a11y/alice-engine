@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pandas as pd
+
 from scripts.backtest.runner_types import MatchCandidate, RunnerConfig
 from scripts.backtest.stratified_sampler import (
     StratifiedSamplerConfig,
@@ -89,7 +91,7 @@ def enumerate_candidates(cache: ALIDataCache, config: RunnerConfig) -> list[Matc
         if len(user_pool) < config.team_size or len(opp_pool) < config.team_size:
             continue
         date_raw = row.get("date") if "date" in sub.columns else None
-        match_date = str(date_raw)[:10] if date_raw is not None and str(date_raw) != "nan" else ""
+        match_date = str(date_raw)[:10] if date_raw is not None and pd.notna(date_raw) else ""
         out.append(
             MatchCandidate(
                 saison=config.saison,
