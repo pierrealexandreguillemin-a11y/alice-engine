@@ -6,6 +6,14 @@
 
 **Architecture:** The existing backtest harness (`harness.py` → `run_match.py::run_backtest_match` → `generator.generate`) does NOT thread `simultaneous_teams` / `target_team` / the real match `date`. This plan adds that threading (backward-compatible: `None` → Phase 3 path byte-identical), a date-filtered fixture loader for `config/clubs_teams_2024.json`, and a thin orchestration script `pilot_phase4a.py`. All metric / ground-truth / statistical / sampling code is reused unchanged.
 
+> ## Diagnostic Addendum (2026-06-16 PM — controller, BEFORE dispatch)
+>
+> Empirical verification against the real data **corrected two assumptions in the original draft** of T9.2/T9.5:
+>
+> 1. **Fixture lookup MUST key by `team_name`, NOT by `club`.** The fixture's club KEY is derived from the team name by stripping the trailing number token (`"Clichy 2"` → `"Clichy"`; `build_clubs_teams.py::build_club_index`). But `ALIDataCache.team_to_club` maps team → **`joueurs.club`** (`"Clichy"` → `"Clichy-Echecs-92"`). Keying the lookup by `cand.opp_club` (joueurs.club) matches only **75/937 clubs (~8%)** → a near-empty pilot. Keying by the opponent's exact `team_name` (which IS the fixture's stored team label) resolves **77% of N3 teams**. → T9.2 builds a `team_name → club_key` reverse index from the payload; T9.5 looks up by `cand.opp_team`.
+> 2. **Viable-N is measured, not assumed.** Of **720** N3 2024 distinct matches: **206 VIABLE** (target present on same date + ≥1 superior team: 163 with 1 superior, 43 with 2), 280 no-superior (Phase4a≡Phase3, skip), 163 club-not-in-fixture (single-team clubs), 71 target-dropped-by-date-filter (D-2026-06-10 residual). 206 ≫ 70 → the pilot is statistically viable. → T9.5 enumerates ALL candidates and keeps the first **70 VIABLE** ones (target present + ≥1 superior), NOT the first 70 candidates (only ~29% of candidates are viable, so 70 candidates ≈ 20 viable = too thin for McNemar).
+> 3. **Target-present guard.** Because date-coherence is 0.3972, a target's own fixture entry may carry a date ≠ the echiquiers match date and get filtered out (71 cases). The pilot MUST skip (and count) any match where `cand.opp_team not in [t.team_name for t in sim]` — otherwise `superior_teams()` raises `ValueError`. Force-order default `99` (jeunes/régionale/unknown) is correct for an N3 target: only Top16/N1/N2 (rank < 3) are treated as superior.
+
 **Tech Stack:** Python 3.12, pytest, pandas, existing `scripts/backtest/*` infra, `services/ali/generator.py` (Phase 4a path shipped in T5/T6), OR-Tools CP-SAT (via `joint_conditional`).
 
 ---
@@ -28,7 +36,7 @@
 - **Modify** `scripts/backtest/runner_sampling.py:91-100` — populate `date` from the echiquiers row in `enumerate_candidates`.
 - **Modify** `scripts/backtest/run_match.py:44-84` — add `round_date`, `simultaneous_teams`, `target_team` params to `run_backtest_match`; thread to `generate`.
 - **Modify** `scripts/backtest/harness.py:95-129` — add `round_date`, `simultaneous_teams`, `target_team` to `BacktestHarness.run_match`; forward them.
-- **Create** `scripts/backtest/clubs_teams_fixture.py` — `load_simultaneous_teams(payload, club, match_date)` date-filtered loader + force ordering (~80 lines, SRP).
+- **Create** `scripts/backtest/clubs_teams_fixture.py` — `build_team_to_club_index(payload)` + `load_simultaneous_teams(payload, *, team_name, ronde, match_date, team_index=None)` team-name-keyed date-filtered loader + force ordering (~90 lines, SRP).
 - **Create** `scripts/backtest/pilot_phase4a.py` — orchestration + report (≤ 250 lines).
 - **Test** `tests/backtest/test_clubs_teams_fixture.py`, `tests/backtest/test_run_match_phase4a.py`, `tests/backtest/test_pilot_phase4a.py`.
 
@@ -137,7 +145,7 @@ git commit -m "feat(backtest): carry real match date on MatchCandidate (Phase 4a
 - Create: `scripts/backtest/clubs_teams_fixture.py`
 - Test: `tests/backtest/test_clubs_teams_fixture.py`
 
-**Fixture shape (verified):** `payload["clubs"][club]["rondes"][str(ronde)]` is a list of `[team_name, division, board_count, date]`. The loader takes the *club* + *match_date* and returns the `TeamSpec` list for that date, ordered top-down by division force.
+**Fixture shape (verified):** `payload["clubs"][club_key]["rondes"][str(ronde)]` is a list of `[team_name, division, board_count, date]`. The `club_key` is the team name stripped of its trailing number token (`"Clichy 2"` → `"Clichy"`), which is NOT `ALIDataCache.team_to_club` (joueurs.club). So the loader keys by **`team_name`** (resolves the club via a `team_name → club_key` reverse index built from the payload) and returns the `TeamSpec` list for that date, ordered top-down by division force. See Diagnostic Addendum.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -145,9 +153,10 @@ git commit -m "feat(backtest): carry real match date on MatchCandidate (Phase 4a
 # tests/backtest/test_clubs_teams_fixture.py
 from __future__ import annotations
 
-import pytest
-
-from scripts.backtest.clubs_teams_fixture import load_simultaneous_teams
+from scripts.backtest.clubs_teams_fixture import (
+    build_team_to_club_index,
+    load_simultaneous_teams,
+)
 
 _PAYLOAD = {
     "clubs": {
@@ -165,25 +174,39 @@ _PAYLOAD = {
 }
 
 
-def test_returns_teams_for_date_ordered_top_down() -> None:
-    teams = load_simultaneous_teams(_PAYLOAD, club="Mulhouse", ronde=3, match_date="2024-11-17")
-    # date filter drops "Mulhouse 4" (2024-11-10); force order N1 > N2 > N3
+def test_resolves_club_by_team_name_and_orders_top_down() -> None:
+    teams = load_simultaneous_teams(
+        _PAYLOAD, team_name="Mulhouse 3", ronde=3, match_date="2024-11-17"
+    )
+    # club resolved from "Mulhouse 3"; date filter drops "Mulhouse 4"; force N1 > N2 > N3
     assert [t.team_name for t in teams] == ["Mulhouse 1", "Mulhouse 2", "Mulhouse 3"]
     assert teams[0].division == "Nationale 1"
 
 
-def test_empty_when_club_absent() -> None:
-    assert load_simultaneous_teams(_PAYLOAD, club="Ghost", ronde=3, match_date="2024-11-17") == []
+def test_target_team_present_in_result() -> None:
+    # superior_teams() requires the target to be in the list (else ValueError).
+    teams = load_simultaneous_teams(
+        _PAYLOAD, team_name="Mulhouse 3", ronde=3, match_date="2024-11-17"
+    )
+    assert "Mulhouse 3" in [t.team_name for t in teams]
+
+
+def test_empty_when_team_absent() -> None:
+    assert load_simultaneous_teams(
+        _PAYLOAD, team_name="Ghost 1", ronde=3, match_date="2024-11-17"
+    ) == []
 
 
 def test_empty_when_no_entry_matches_date() -> None:
-    assert load_simultaneous_teams(_PAYLOAD, club="Mulhouse", ronde=3, match_date="2024-12-01") == []
+    assert load_simultaneous_teams(
+        _PAYLOAD, team_name="Mulhouse 3", ronde=3, match_date="2024-12-01"
+    ) == []
 
 
-def test_single_team_returned_as_is() -> None:
-    payload = {"clubs": {"Solo": {"rondes": {"1": [["Solo 1", "Nationale 4", 8, "2024-09-15"]]}}}}
-    teams = load_simultaneous_teams(payload, club="Solo", ronde=1, match_date="2024-09-15")
-    assert len(teams) == 1 and teams[0].team_name == "Solo 1"
+def test_reverse_index_maps_every_team_to_its_club() -> None:
+    idx = build_team_to_club_index(_PAYLOAD)
+    assert idx["Mulhouse 1"] == "Mulhouse"
+    assert idx["Mulhouse 4"] == "Mulhouse"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -195,18 +218,26 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'scripts.backtest.clubs
 
 ```python
 # scripts/backtest/clubs_teams_fixture.py
-"""Date-filtered loader for config/clubs_teams_2024.json (Phase 4a T9).
+"""Team-name-keyed loader for config/clubs_teams_2024.json (Phase 4a T9).
 
-Maps (club, ronde, match_date) -> ordered list[TeamSpec] of the simultaneous
-teams the club fields on that date. Ordering is top-down by division force
-(A02 §3.7.b) so joint_conditional.superior_teams() correctly identifies the
-teams ranked above a target.
+Maps an echiquiers team_name (e.g. "Mulhouse 3") + ronde + match_date -> the
+ordered list[TeamSpec] of the SIMULTANEOUS teams its club fields on that date,
+top-down by division force (A02 §3.7.b) so joint_conditional.superior_teams()
+correctly identifies the teams ranked above the target.
+
+WHY team-name keying (controller diagnostic 2026-06-16): the fixture club KEY is
+derived from the team name by stripping the trailing number token ("Clichy 2" ->
+"Clichy"), whereas ALIDataCache.team_to_club maps team -> joueurs.club
+("Clichy" -> "Clichy-Echecs-92"). Keying by joueurs.club matches ~8% of clubs;
+keying by team_name (the fixture's stored team label) resolves 77% of N3 teams.
+So we build a team_name -> club_key reverse index from the payload and resolve
+via the opponent's exact team name.
 
 CRITICAL (debt D-2026-06-10): filter by `date`, NOT `ronde` alone
 (date_coherence_rate ~= 0.40 across divisions).
 
 Document ID: ALICE-BACKTEST-CLUBS-TEAMS-FIXTURE
-Version: 1.0.0
+Version: 2.0.0
 """
 
 from __future__ import annotations
@@ -215,31 +246,50 @@ from typing import Any
 
 from services.ali.types import TeamSpec
 
-# Descending force rank (A02 §3.7.b). Lower index = stronger.
+# Descending force rank (A02 §3.7.b). Lower index = stronger. Jeunes/régionale/
+# départemental/unknown -> _FORCE_DEFAULT (weakest); correct for an N3 target
+# since only Top16/N1/N2 (rank < 3) are then treated as superior.
 _FORCE_ORDER: dict[str, int] = {
     "Top 16": 0, "Top16": 0,
     "Nationale 1": 1, "Nationale 2": 2, "Nationale 3": 3, "Nationale 4": 4,
 }
-_FORCE_DEFAULT = 99  # régionale / départemental / unknown -> weakest
+_FORCE_DEFAULT = 99
 
 
 def _force_rank(division: str) -> int:
     return _FORCE_ORDER.get(division, _FORCE_DEFAULT)
 
 
+def build_team_to_club_index(payload: dict[str, Any]) -> dict[str, str]:
+    """Reverse index team_name -> club_key (one pass over the payload)."""
+    index: dict[str, str] = {}
+    for club, data in payload.get("clubs", {}).items():
+        for entries in data.get("rondes", {}).values():
+            for entry in entries:
+                index[str(entry[0])] = club
+    return index
+
+
 def load_simultaneous_teams(
     payload: dict[str, Any],
     *,
-    club: str,
+    team_name: str,
     ronde: int,
     match_date: str,
+    team_index: dict[str, str] | None = None,
 ) -> list[TeamSpec]:
-    """Return the club's TeamSpec list for `match_date`, ordered top-down.
+    """Return the club (that fields `team_name`)'s TeamSpec list for `match_date`.
 
-    Empty list if the club, the ronde, or any date-matching entry is absent.
+    Ordered top-down by division force. Empty list if `team_name` is absent
+    from the fixture, the ronde is absent, or no entry matches the date. Pass a
+    precomputed `team_index` (from `build_team_to_club_index`) to avoid rebuilding
+    it per call in a loop.
     """
-    rondes = payload.get("clubs", {}).get(club, {}).get("rondes", {})
-    entries = rondes.get(str(ronde), [])
+    index = team_index if team_index is not None else build_team_to_club_index(payload)
+    club = index.get(team_name)
+    if club is None:
+        return []
+    entries = payload["clubs"][club].get("rondes", {}).get(str(ronde), [])
     matched = [e for e in entries if str(e[3])[:10] == match_date]
     matched.sort(key=lambda e: (_force_rank(str(e[1])), str(e[0])))
     return [
@@ -251,7 +301,7 @@ def load_simultaneous_teams(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `.\.venv\Scripts\python.exe -m pytest tests/backtest/test_clubs_teams_fixture.py -q`
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -428,7 +478,7 @@ git commit -m "feat(backtest): forward Phase 4a args through BacktestHarness.run
 - Create: `scripts/backtest/pilot_phase4a.py` (≤ 250 lines)
 - Test: `tests/backtest/test_pilot_phase4a.py`
 
-The pilot: enumerate N=70 N3 candidates → for each, load `simultaneous_teams` (date-filtered) + `target_team = opp_team` → run via `harness.run_match(...)` in Phase 4a mode → `extract_observed_lineup` → metrics → aggregate (bootstrap CI on recall, McNemar/Wilcoxon vs Phase 3 baseline recall) → write report + early-gate decision (recall ≥ 0.50).
+The pilot: enumerate ALL N3 candidates → for each, look up `simultaneous_teams` by `team_name=cand.opp_team` (date-filtered, force-ordered) → keep only VIABLE matches (target present in the list AND ≥1 superior team) until **70 viable** are collected → run via `harness.run_match(...)` in Phase 4a mode with `target_team = cand.opp_team` → ALSO run the same match in Phase 3 mode (`simultaneous_teams=None`) for the paired baseline → `extract_observed_lineup` → metrics → aggregate (bootstrap CI on recall, McNemar/Wilcoxon on paired Phase4a-vs-Phase3 recall) → write report + early-gate decision (recall ≥ 0.50). Non-viable matches (no superior, club-not-in-fixture, target-dropped-by-date) are counted and logged, never silently dropped.
 
 - [ ] **Step 1: Write the failing test for the pure report-decision helper**
 
@@ -474,16 +524,21 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from scripts.backtest.clubs_teams_fixture import load_simultaneous_teams
+from scripts.backtest.clubs_teams_fixture import (
+    build_team_to_club_index,
+    load_simultaneous_teams,
+)
 from scripts.backtest.ground_truth import extract_observed_lineup
 from scripts.backtest.harness import BacktestHarness
 from scripts.backtest.metrics import brier_presence, jaccard_max, top_k_recall
 from scripts.backtest.runner_sampling import enumerate_candidates
 from scripts.backtest.runner_types import RunnerConfig
+from services.ali.types import TeamSpec
 
 logger = logging.getLogger(__name__)
 
 EARLY_GATE_RECALL = 0.50
+MAX_VIABLE = 70  # collect this many viable (target-present + >=1-superior) matches
 _FIXTURE = Path("config/clubs_teams_2024.json")
 
 
@@ -494,29 +549,58 @@ def early_gate_decision(mean_recall: float) -> str:
 
 
 def _config() -> RunnerConfig:
+    # rondes = all 11 (maximize the viable pool); max_matches high so
+    # enumerate_candidates returns ALL N3 matches (viability is filtered below,
+    # not by max_matches). enumerate_candidates does NOT use max_matches.
     return RunnerConfig(
-        saison=2024, rondes=(1, 3, 5, 7, 9, 11), max_matches=70, team_size=8,
+        saison=2024, rondes=tuple(range(1, 12)), max_matches=10_000, team_size=8,
         division="N3", division_filter="Nationale 3", type_competition="national",
         nb_rondes_total=11, seed=42,
     )
 
 
+def _viable_sim(payload: dict[str, Any], team_index: dict[str, str], cand: Any
+                ) -> list[TeamSpec] | None:
+    """Return the ordered sim list IF the match is viable, else None.
+
+    Viable = the target team is present on its own match date AND has >=1
+    superior team. None covers: club-not-in-fixture, target-dropped-by-date,
+    and no-superior (Phase 4a == Phase 3).
+    """
+    if not cand.date:
+        return None
+    sim = load_simultaneous_teams(
+        payload, team_name=cand.opp_team, ronde=cand.ronde,
+        match_date=cand.date, team_index=team_index,
+    )
+    names = [t.team_name for t in sim]
+    if cand.opp_team not in names:            # club absent or target dropped by date filter
+        return None
+    if names.index(cand.opp_team) == 0:       # target is team_1 -> no superior team
+        return None
+    return sim
+
+
 def run_pilot(out_dir: Path = Path("reports")) -> dict[str, Any]:
     """Run the Phase 4a pilot and write reports/pilot_phase4a_<DATE>.md."""
     payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    team_index = build_team_to_club_index(payload)
     harness = BacktestHarness()
     harness.setup()
     cfg = _config()
-    candidates = enumerate_candidates(harness.cache, cfg)[: cfg.max_matches]
+    candidates = enumerate_candidates(harness.cache, cfg)
 
     rows: list[dict[str, Any]] = []
+    skipped = {"non_viable": 0, "no_observed": 0, "error": 0}
     for cand in candidates:
-        sim = load_simultaneous_teams(
-            payload, club=cand.opp_club, ronde=cand.ronde, match_date=cand.date
-        )
-        if len(sim) < 2:  # no superior team -> Phase 4a == Phase 3 for this match; skip from gate
+        if len(rows) >= MAX_VIABLE:
+            break
+        sim = _viable_sim(payload, team_index, cand)
+        if sim is None:
+            skipped["non_viable"] += 1
             continue
         try:
+            # Phase 4a (joint-conditional) + paired Phase 3 baseline on the SAME match.
             result = harness.run_match(
                 user_club_id=harness.cache.team_to_club[cand.user_team],
                 opponent_club_id=cand.opp_club, saison=cand.saison, ronde=cand.ronde,
@@ -524,28 +608,44 @@ def run_pilot(out_dir: Path = Path("reports")) -> dict[str, Any]:
                 team_size=cfg.team_size, user_lineup=[], seed=cfg.seed, strict=False,
                 round_date=cand.date, simultaneous_teams=sim, target_team=cand.opp_team,
             )
+            baseline = harness.run_match(
+                user_club_id=harness.cache.team_to_club[cand.user_team],
+                opponent_club_id=cand.opp_club, saison=cand.saison, ronde=cand.ronde,
+                nb_rondes_total=cfg.nb_rondes_total, division=cfg.division,
+                team_size=cfg.team_size, user_lineup=[], seed=cfg.seed, strict=False,
+            )  # Phase 3: simultaneous_teams/target_team default None
             observed = extract_observed_lineup(
                 harness.cache, cand.opp_team, cand.saison, cand.ronde,
                 as_domicile=False, groupe=cand.groupe,
             )
         except Exception:
             logger.exception("pilot match failed: ronde=%s opp=%s", cand.ronde, cand.opp_team)
+            skipped["error"] += 1
             continue
         if not observed.players:
+            skipped["no_observed"] += 1
             continue
         rows.append({
             "opp_team": cand.opp_team, "ronde": cand.ronde, "date": cand.date,
-            "n_superior": len(sim) - 1,
+            "n_superior": names_index(sim, cand.opp_team),
             "recall": top_k_recall(observed, result.scenario_set),
+            "recall_baseline": top_k_recall(observed, baseline.scenario_set),
             "jaccard": jaccard_max(observed, result.scenario_set),
             "brier": brier_presence(observed, result.scenario_set),
         })
 
     mean_recall = sum(r["recall"] for r in rows) / len(rows) if rows else 0.0
+    mean_baseline = sum(r["recall_baseline"] for r in rows) / len(rows) if rows else 0.0
     summary = {"n_matches": len(rows), "mean_recall": mean_recall,
+               "mean_baseline_recall": mean_baseline, "skipped": skipped,
                "decision": early_gate_decision(mean_recall)}
     _write_report(out_dir, rows, summary)
     return summary
+
+
+def names_index(sim: list[TeamSpec], target: str) -> int:
+    """Number of teams ranked strictly above `target` (its index in the list)."""
+    return [t.team_name for t in sim].index(target)
 
 
 def _write_report(out_dir: Path, rows: list[dict[str, Any]], summary: dict[str, Any]) -> None:
@@ -573,7 +673,7 @@ if __name__ == "__main__":
     print(run_pilot()["decision"])
 ```
 
-> The implementer MUST confirm the exact `BacktestHarness.run_match` and `extract_observed_lineup` argument names against the real modules (Task 4 read) and adjust. The McNemar/Wilcoxon-vs-baseline comparison (spec §T9 "McNemar n_disc + p-value") requires a paired Phase-3 baseline recall per match — add a second pass calling the Phase 3 path (`simultaneous_teams=None`) on the SAME candidates and feed `mcnemar_paired` / `wilcoxon_paired` from `statistical.py`. Keep the file ≤ 250 lines; if it exceeds, extract `_write_report` + the baseline pass into `pilot_phase4a_helpers.py`.
+> The implementer MUST confirm the exact `BacktestHarness.run_match` and `extract_observed_lineup` argument names against the real modules (Task 4 read) and adjust. The paired Phase-3 baseline recall is already computed inline (the `baseline = harness.run_match(...)` call with `simultaneous_teams` defaulting to None, same match). For the McNemar/Wilcoxon comparison (spec §T9 "McNemar n_disc + p-value"), feed the per-match `recall` (Phase 4a) and `recall_baseline` (Phase 3) pairs into `wilcoxon_paired` (continuous, SOTA per D-P3-18) and `mcnemar_paired` (dichotomize at recall ≥ 0.50) from `statistical.py`, and include both in the report + summary. Keep the file ≤ 250 lines; if it exceeds, extract `_write_report` + the stats aggregation into `pilot_phase4a_helpers.py`. Note `extract_observed_lineup` arg names (`as_domicile`, `groupe`) are a sketch — confirm against `ground_truth.py`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
