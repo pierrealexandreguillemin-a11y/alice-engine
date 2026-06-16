@@ -140,6 +140,7 @@ class MatchCandidate:
     opp_team: str
     opp_club: str
     groupe: str = ""
+    date: str = ""  # real match date "YYYY-MM-DD" (Phase 4a fixture lookup, D-2026-06-10)
 
 
 @dataclass(frozen=True)
