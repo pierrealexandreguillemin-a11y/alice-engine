@@ -172,7 +172,13 @@ def run_pilot(out_dir: Path = Path("reports")) -> dict[str, Any]:
         try:
             result, baseline, observed = _run_pair(harness, cfg, cand, sim)
         except Exception:  # noqa: BLE001  intentional: one bad match must not kill the pilot
-            logger.exception("pilot match failed: ronde=%s opp=%s", cand.ronde, cand.opp_team)
+            logger.exception(
+                "pilot match failed: ronde=%s opp=%s date=%s club=%s",
+                cand.ronde,
+                cand.opp_team,
+                cand.date,
+                cand.opp_club,
+            )
             skipped["error"] += 1
             continue
         if not observed.players:

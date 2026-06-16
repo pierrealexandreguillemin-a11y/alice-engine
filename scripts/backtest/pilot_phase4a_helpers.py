@@ -34,8 +34,9 @@ def aggregate_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ``recall_baseline`` (Phase 3, same match) keys.
     @returns dict with keys ``mcnemar``, ``wilcoxon`` (raw result objects or
         None) plus the flattened ``mcnemar_p``, ``mcnemar_n_disc``,
-        ``wilcoxon_p``, ``wilcoxon_significant``. McNemar fields collapse to
-        None when undefined (empty rows or all-concordant table).
+        ``wilcoxon_p``, ``wilcoxon_significant``. In the all-concordant case
+        ``mcnemar_n_disc`` stays ``0`` (always an int); only ``mcnemar`` and
+        ``mcnemar_p`` collapse to ``None`` (test undefined when n_disc == 0).
     """
     if not rows:
         return {
@@ -96,9 +97,21 @@ def _summary_lines(summary: dict[str, Any]) -> list[str]:
         f"(reference ~{_BASELINE_REFERENCE:.2f})",
         f"- Skipped: non_viable={skipped['non_viable']}, "
         f"no_observed={skipped['no_observed']}, error={skipped['error']}",
-        f"- McNemar: p={_fmt(summary['mcnemar_p'])}, n_discordant={summary['mcnemar_n_disc']}",
-        f"- Wilcoxon: p={_fmt(summary['wilcoxon_p'])}, "
+        f"- **Wilcoxon (decisive):** p={_fmt(summary['wilcoxon_p'])}, "
         f"significant={summary['wilcoxon_significant']}",
+        "",
+        "> **Wilcoxon signed-rank (continuous recall) is the decisive test** (D-P3-18, SOTA)."
+        " McNemar below dichotomizes recall at 0.50 and is a secondary view —"
+        " a near-zero n_discordant means the two models rarely cross the 0.50 line"
+        " on opposite sides, NOT an absence of effect.",
+        "",
+        f"- McNemar (secondary): p={_fmt(summary['mcnemar_p'])},"
+        f" n_discordant={summary['mcnemar_n_disc']}"
+        + (
+            " (not computable — all pairs concordant)"
+            if summary["mcnemar_p"] is None and summary["mcnemar_n_disc"] == 0
+            else ""
+        ),
         "",
         f"### Early-gate decision\n\n**{summary['decision']}**",
         "",
