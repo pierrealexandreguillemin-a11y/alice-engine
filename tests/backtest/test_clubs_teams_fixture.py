@@ -2,7 +2,7 @@
 
 Document ID: ALICE-BACKTEST-CLUBS-TEAMS-FIXTURE-TEST
 Version: 1.0.0
-Count: 5 unit tests — pure-function, no I/O, inline payloads only.
+Count: 7 unit tests — pure-function, no I/O, inline payloads only.
 """
 
 from __future__ import annotations
@@ -63,3 +63,23 @@ def test_reverse_index_maps_every_team_to_its_club() -> None:
     idx = build_team_to_club_index(_PAYLOAD)
     assert idx["Mulhouse 1"] == "Mulhouse"
     assert idx["Mulhouse 4"] == "Mulhouse"
+
+
+def test_empty_when_ronde_absent() -> None:
+    # docstring contract: empty list when the ronde key is absent
+    assert (
+        load_simultaneous_teams(_PAYLOAD, team_name="Mulhouse 3", ronde=99, match_date="2024-11-17")
+        == []
+    )
+
+
+def test_precomputed_index_produces_same_result() -> None:
+    # the team_index fast-path (used in the pilot loop) must match the auto-build path
+    idx = build_team_to_club_index(_PAYLOAD)
+    teams_auto = load_simultaneous_teams(
+        _PAYLOAD, team_name="Mulhouse 3", ronde=3, match_date="2024-11-17"
+    )
+    teams_precomputed = load_simultaneous_teams(
+        _PAYLOAD, team_name="Mulhouse 3", ronde=3, match_date="2024-11-17", team_index=idx
+    )
+    assert teams_auto == teams_precomputed
