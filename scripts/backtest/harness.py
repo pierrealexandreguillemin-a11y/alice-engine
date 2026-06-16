@@ -19,6 +19,7 @@ from services.ali.cache import ALIDataCache
 from services.ali.generator import ScenarioGenerator
 from services.ali.history import HistoryEnricher
 from services.ali.pool_loader import PlayerPoolLoader
+from services.ali.types import TeamSpec
 from services.ali.verifiability import VerifiabilityClassifier
 from services.feature_store import FeatureStore
 from services.ffe.rule_engine import RuleEngine
@@ -104,6 +105,9 @@ class BacktestHarness:
         team_size: int,
         user_lineup: list[dict[str, Any]],
         seed: int = 42,
+        round_date: str | None = None,
+        simultaneous_teams: list[TeamSpec] | None = None,
+        target_team: str | None = None,
         strict: bool = True,
     ) -> BacktestMatchResult:
         """Run a single backtest match (services pre-setup)."""
@@ -125,5 +129,8 @@ class BacktestHarness:
             inference=self.inference,
             feature_store=self.feature_store,
             seed=seed,
+            round_date=round_date,
+            simultaneous_teams=simultaneous_teams,
+            target_team=target_team,
             strict=strict,
         )
