@@ -173,6 +173,11 @@ jobs:
             --ignore-vuln CVE-2026-4539 \
             --ignore-vuln CVE-2025-3000 \
             --ignore-vuln CVE-2025-3001 \
+            --ignore-vuln CVE-2026-48818 \
+            --ignore-vuln CVE-2026-48817 \
+            --ignore-vuln CVE-2026-54283 \
+            --ignore-vuln CVE-2026-54282 \
+            --ignore-vuln GHSA-537c-gmf6-5ccf \
             -f json -o audit-report.json || true
 
       - name: Upload Audit Report

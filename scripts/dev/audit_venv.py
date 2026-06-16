@@ -64,6 +64,31 @@ IGNORED_CVES: list[tuple[str, str]] = [
         "PYSEC-2026-161",
         "starlette 0.52.1 — FastAPI 0.136 incompatible with starlette 1.0; re-check on FastAPI bump",
     ),
+    # starlette 0.52.1 — NEW 2026-06 CVEs. Same block: fix is starlette 1.x, blocked
+    # by FastAPI 0.136 (<1.0 pin). Coordinate FastAPI 1.x bump (dep-hardening). Re-check 2026-09.
+    (
+        "CVE-2026-48818",
+        "starlette 0.52.1 — fix 1.1.0 blocked by FastAPI <1.0 pin; re-check 2026-09",
+    ),
+    (
+        "CVE-2026-48817",
+        "starlette 0.52.1 — fix 1.1.0 blocked by FastAPI <1.0 pin; re-check 2026-09",
+    ),
+    (
+        "CVE-2026-54283",
+        "starlette 0.52.1 — fix 1.3.1 blocked by FastAPI <1.0 pin; re-check 2026-09",
+    ),
+    (
+        "CVE-2026-54282",
+        "starlette 0.52.1 — fix 1.3.0 blocked by FastAPI <1.0 pin; re-check 2026-09",
+    ),
+    # cryptography 46.0.7 — fix 48.0.1 blocked by mlflow 3.12 (<47 cap). mlflow is a
+    # declared+used dep (scripts/serving + scripts/training/mlflow_tracking, ISO 42001).
+    # Proper fix = coordinate mlflow upgrade relaxing the cryptography cap (dep-hardening).
+    (
+        "GHSA-537c-gmf6-5ccf",
+        "cryptography 46.0.7 — fix 48.0.1 blocked by mlflow <47 cap; coordinate mlflow upgrade; re-check 2026-09",
+    ),
     # torch 2.9.1 — no upstream fix published yet (re-check 2026-08).
     ("PYSEC-2026-139", "torch 2.9.1 — no upstream fix published; re-check 2026-08"),
     # torch 2.9.1 — MEDIUM (CVSS 5.3) local-only crashes in torch APIs ALICE
